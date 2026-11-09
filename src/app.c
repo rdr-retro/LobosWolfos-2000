@@ -519,7 +519,7 @@ int clic_panel_derecho(int x, int y, int boton) {
         return 1;
     }
 
-    if (x < g.ancho - panel || y < MENU_BARRA_ALTO) return 0;
+    if (x < g.ancho - panel || y < AREA_SUP_ALTO) return 0;
 
     if (boton == 1) {
         /* Clic derecho sobre una miniatura: confirma el borrado del tile. */
@@ -704,6 +704,43 @@ static void clic_etiqueta_menu(int menu) {
     app_invalidar();
 }
 
+/* ------------------------------------------------------------------ */
+/* Pestanas: entrada                                                   */
+/* ------------------------------------------------------------------ */
+int clic_pestanas(int x, int y, int boton) {
+    int i, idx;
+    if (y < 0 || y >= TAB_BARRA_ALTO) return 0;
+
+    g.menu_abierto = -1;
+    g.textura_menu_abierto = 0;
+
+    /* Rueda/central: cerrar la pestana apuntada. */
+    if (boton == 2) {
+        idx = pestana_en(x, y);
+        if (idx >= 0) pestanas_cerrar(idx);
+        return 1;
+    }
+    if (boton != 0) return 1;
+
+    for (i = 0; i < g.num_pestanas; i++) {
+        if (zona_contiene(pestana_cerrar_zona(i), x, y)) {
+            pestanas_cerrar(i);
+            return 1;
+        }
+    }
+    idx = pestana_en(x, y);
+    if (idx >= 0) {
+        pestanas_activar(idx);
+        return 1;
+    }
+    if (zona_contiene(pestana_nueva_zona(), x, y)) {
+        app_nueva_imagen(LIENZO_INICIAL, LIENZO_INICIAL);
+        return 1;
+    }
+    /* Clic en una zona vacia de la franja: no pasa al resto de la interfaz. */
+    return 1;
+}
+
 void app_pulsar(int x, int y, int boton) {
     g.raton_x = x;
     g.raton_y = y;
@@ -725,6 +762,12 @@ void app_pulsar(int x, int y, int boton) {
         }
     }
 
+    /* La franja de pestanas esta por encima de la barra de menus. */
+    if (y < TAB_BARRA_ALTO) {
+        clic_pestanas(x, y, boton);
+        return;
+    }
+
     /* Menu abierto: tiene prioridad. */
     if (g.menu_abierto >= 0) {
         int op = opcion_menu_en(x, y);
@@ -735,7 +778,7 @@ void app_pulsar(int x, int y, int boton) {
             app_invalidar();
             return;
         }
-        if (y < MENU_BARRA_ALTO) {
+        if (y >= TAB_BARRA_ALTO && y < AREA_SUP_ALTO) {
             int menu = menu_barra_en(x, y);
             if (menu >= 0) {
                 clic_etiqueta_menu(menu);
@@ -751,7 +794,7 @@ void app_pulsar(int x, int y, int boton) {
         return;
     }
 
-    if (y < MENU_BARRA_ALTO) {
+    if (y >= TAB_BARRA_ALTO && y < AREA_SUP_ALTO) {
         int menu = menu_barra_en(x, y);
         if (menu >= 0) clic_etiqueta_menu(menu);
         return;
@@ -767,7 +810,7 @@ void app_pulsar(int x, int y, int boton) {
     }
     if (clic_opciones(x, y)) return;
 
-    if (y >= MENU_BARRA_ALTO && y < MENU_BARRA_ALTO + BARRA_ALTO) {
+    if (y >= AREA_SUP_ALTO && y < AREA_SUP_ALTO + BARRA_ALTO) {
         if (clic_topbar(x, y)) return;
     }
     if (x < SIDEBAR_ANCHO) {
@@ -806,7 +849,7 @@ void app_soltar(int x, int y, int boton) {
         if (g.patron_x + v.ancho > g.ancho) g.patron_x = g.ancho - v.ancho;
         if (g.patron_y + v.alto > g.alto) g.patron_y = g.alto - v.alto;
         if (g.patron_x < 0) g.patron_x = 0;
-        if (g.patron_y < MENU_BARRA_ALTO) g.patron_y = MENU_BARRA_ALTO;
+        if (g.patron_y < AREA_SUP_ALTO) g.patron_y = AREA_SUP_ALTO;
         arrastre = 0;
         app_invalidar();
         return;
@@ -834,6 +877,17 @@ void app_mover(int x, int y, int botones) {
     int i;
     g.raton_x = x;
     g.raton_y = y;
+
+    /* La franja de pestanas solo necesita repintar el hover. */
+    if (y >= 0 && y < TAB_BARRA_ALTO && arrastre == 0 && !g.arrastre_tiles &&
+        g.cubo_arrastre < 0 && g.opcion_arrastrada < 0) {
+        if (g.hover_herramienta >= 0) {
+            g.hover_herramienta = -1;
+            app_actualizar_titulo();
+        }
+        app_invalidar();
+        return;
+    }
 
     /* Los menus no cambian al pasar el raton: solo al pulsar una etiqueta. */
 
@@ -881,7 +935,7 @@ void app_mover(int x, int y, int botones) {
         if (g.patron_x + v.ancho > g.ancho) g.patron_x = g.ancho - v.ancho;
         if (g.patron_y + v.alto > g.alto) g.patron_y = g.alto - v.alto;
         if (g.patron_x < 0) g.patron_x = 0;
-        if (g.patron_y < MENU_BARRA_ALTO) g.patron_y = MENU_BARRA_ALTO;
+        if (g.patron_y < AREA_SUP_ALTO) g.patron_y = AREA_SUP_ALTO;
         app_invalidar();
         return;
     }
@@ -998,6 +1052,14 @@ void app_tecla(int vk, int ctrl, int shift) {
         app_invalidar();
         return;
     }
+    if (ctrl && vk == 'T') { app_nueva_imagen(LIENZO_INICIAL, LIENZO_INICIAL); return; }
+    if (ctrl && vk == 'W') { pestanas_cerrar(g.pestana_activa); return; }
+    if (ctrl && vk == VK_TAB) { pestanas_avanzar(shift ? -1 : 1); return; }
+    if (ctrl && vk >= '1' && vk <= '9') {
+        int indice = vk - '1';
+        if (indice < g.num_pestanas) pestanas_activar(indice);
+        return;
+    }
     if (ctrl && vk == 'N') { dialogo_nuevo(); return; }
     if (ctrl && vk == 'O') { dialogo_abrir_imagen(); return; }
     if (ctrl && vk == 'S') { dialogo_guardar_png(); return; }
@@ -1013,6 +1075,12 @@ void app_caracter(int ch) {
 }
 
 void app_doble_clic(int x, int y) {
+    if (y >= 0 && y < TAB_BARRA_ALTO) {
+        if (pestana_en(x, y) < 0 &&
+            !zona_contiene(pestana_nueva_zona(), x, y))
+            app_nueva_imagen(LIENZO_INICIAL, LIENZO_INICIAL);
+        return;
+    }
     if (g.vista == VISTA_MAPA) return;
     pintura_doble_clic(x, y);
 }

@@ -51,6 +51,22 @@ typedef unsigned char  u8;
 #define MENU_BARRA_HOVER     0x003278E0u
 #define MENU_BARRA_HOVER_TXT 0x00FFFFFFu
 
+/* Pestanas estilo navegador clasico: trapecio con esquinas superiores
+ * redondeadas y curvas concavas en la base. */
+#define TAB_BARRA_FONDO      0x00B9C2CCu
+#define TAB_BARRA_BORDE      0x00808C9Au
+#define TAB_BARRA_LUZ        0x00D8E0E8u
+#define TAB_ACTIVA_FONDO     0x00FFFFFFu
+#define TAB_INACTIVA_FONDO   0x00C3CCD6u
+#define TAB_HOVER_FONDO      0x00D3DCE6u
+#define TAB_ACTIVA_TEXTO     0x00181818u
+#define TAB_INACTIVA_TEXTO   0x00304050u
+#define TAB_CERRAR_HOVER     0x00C94A4Au
+#define TAB_ACTIVA_BORDE     0x00708090u
+#define TAB_INACTIVA_BORDE   0x0090A0B0u
+#define TAB_FAVICON_A        0x00647C94u
+#define TAB_FAVICON_B        0x00DCE6F0u
+
 #define MANGO            0x004090F0u
 #define MANGO_BORDE      0x00205080u
 #define MANGO_ACTIVO     0x00F08030u
@@ -83,6 +99,8 @@ typedef unsigned char  u8;
 #define ALTO_INICIAL      700
 
 #define MENU_BARRA_ALTO   36
+#define TAB_BARRA_ALTO    34
+#define AREA_SUP_ALTO     (TAB_BARRA_ALTO + MENU_BARRA_ALTO)
 #define BARRA_ALTO        60
 #define BARRA_ABAJO_ALTO  32
 
@@ -263,6 +281,17 @@ typedef unsigned char  u8;
 #define MAX_CELDAS        8192
 #define MAX_UNDO          40
 #define MAX_TEXTO         32768
+#define MAX_PESTANAS      12
+
+#define TAB_MARGEN        6
+#define TAB_HUECO         3
+#define TAB_ANCHO_MIN     92
+#define TAB_ANCHO_MAX     230
+#define TAB_CERRAR_LADO   16
+#define TAB_NUEVO_LADO    24
+#define TAB_LADO_INSET    4
+#define TAB_RADIO_SUP     4
+#define TAB_CURVA_BASE    8
 
 /* Herramienta de texto: medidas y margenes. */
 #define TEXTO_MARGEN                 2
@@ -547,6 +576,23 @@ typedef enum {
     VISTA_MAPA
 } Vista;
 
+/* Estado completo de una pestana. La pestana activa mantiene su documento en
+ * `g.doc`, sus pilas en `g.deshacer`/`g.rehacer` y su seleccion en `g.sel`;
+ * las inactivas guardan aqui su propio estado. */
+typedef struct Pestana {
+    char titulo[128];
+    char ruta[MAX_PATH];
+    Documento doc;
+    PilaUndo deshacer, rehacer;
+    Seleccion sel;
+    int zoom_idx;
+    Vista vista;
+    int modo_tiles;
+    int tile_cx, tile_cy;
+    TileDoc tiles_modo[TILES_MODO_MAX];
+    int num_tiles_modo;
+} Pestana;
+
 typedef struct App {
     HWND hwnd;
     int ancho, alto;
@@ -615,6 +661,12 @@ typedef struct App {
     int confirmar_tile;    /* indice del tile a borrar; -1 = ninguno */
 
     Vista vista;
+
+    /* Pestanas: la activa vive en el estado global de arriba. */
+    Pestana pestanas[MAX_PESTANAS];
+    int num_pestanas;
+    int pestana_activa;
+
     int panel_opciones;    /* 1 = ventana visible; 0 = plegada en el sidebar */
     int panel_opciones_x, panel_opciones_y;  /* -1 = posicion automatica */
     int arrastrando_panel;
@@ -947,8 +999,31 @@ void ui_dibujar_tiles_minimizado(void);
 int  tiles_modo_cruzar_trazo(int x, int y);
 
 /* ------------------------------------------------------------------ */
+/* Pestanas                                                            */
+/* ------------------------------------------------------------------ */
+void pestanas_iniciar(void);
+void pestanas_terminar(void);
+int  pestanas_nueva_documento(Documento *nuevo, const char *titulo,
+                              const char *ruta, int zoom_idx);
+int  pestanas_activar(int indice);
+int  pestanas_cerrar(int indice);
+int  pestanas_hay_cambios(void);
+void pestanas_marcar_guardada(const char *ruta);
+void pestanas_avanzar(int delta);
+const char *pestanas_titulo(int indice);
+const char *pestanas_ruta(int indice);
+int  pestanas_esta_modificada(int indice);
+
+/* ------------------------------------------------------------------ */
 /* UI                                                                  */
 /* ------------------------------------------------------------------ */
+Zona pestanas_zona(void);
+Zona pestana_zona(int indice);
+Zona pestana_cerrar_zona(int indice);
+Zona pestana_nueva_zona(void);
+int  pestana_en(int x, int y);
+int  clic_pestanas(int x, int y, int boton);
+void ui_dibujar_pestanas(void);
 void ui_dibujar(void);
 void ui_dibujar_barra_menus(void);
 void ui_dibujar_sidebar(void);

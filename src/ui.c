@@ -64,11 +64,11 @@ static int ancho_util(void) {
 }
 
 Zona menu_barra_zona(void) {
-    return zona_hacer(0, 0, g.ancho, MENU_BARRA_ALTO);
+    return zona_hacer(0, TAB_BARRA_ALTO, g.ancho, MENU_BARRA_ALTO);
 }
 
 Zona barra_zona(void) {
-    return zona_hacer(SIDEBAR_ANCHO, MENU_BARRA_ALTO, ancho_util(), BARRA_ALTO);
+    return zona_hacer(SIDEBAR_ANCHO, AREA_SUP_ALTO, ancho_util(), BARRA_ALTO);
 }
 
 Zona barra_abajo_zona(void) {
@@ -78,7 +78,7 @@ Zona barra_abajo_zona(void) {
 
 Zona zona_trabajo(void) {
     Zona abajo = barra_abajo_zona();
-    int arriba = MENU_BARRA_ALTO + BARRA_ALTO;
+    int arriba = AREA_SUP_ALTO + BARRA_ALTO;
     int alto = abajo.y - arriba;
     if (alto < MIN_LADO) alto = MIN_LADO;
     return zona_hacer(SIDEBAR_ANCHO, arriba, ancho_util(), alto);
@@ -110,7 +110,7 @@ Zona herramienta_zona(int indice) {
         if (indice < inicio + cantidad) {
             int fila = filas_antes + (indice - inicio) / COLUMNAS;
             return zona_hacer(SIDEBAR_MARGEN + columna * (BOTON_LADO + HUECO),
-                              MENU_BARRA_ALTO + SIDEBAR_MARGEN + fila * (BOTON_LADO + HUECO) + hueco,
+                              AREA_SUP_ALTO + SIDEBAR_MARGEN + fila * (BOTON_LADO + HUECO) + hueco,
                               BOTON_LADO, BOTON_LADO);
         }
         inicio += cantidad;
@@ -118,7 +118,7 @@ Zona herramienta_zona(int indice) {
         hueco += SEPARADOR_ALTO;
     }
     return zona_hacer(SIDEBAR_MARGEN + columna * (BOTON_LADO + HUECO),
-                      MENU_BARRA_ALTO + SIDEBAR_MARGEN + filas_antes * (BOTON_LADO + HUECO) + hueco,
+                      AREA_SUP_ALTO + SIDEBAR_MARGEN + filas_antes * (BOTON_LADO + HUECO) + hueco,
                       BOTON_LADO, BOTON_LADO);
 }
 
@@ -284,7 +284,7 @@ Zona opciones_minimizada_zona(void) {
 Zona tile_mini_zona(int indice) {
     int panel = sidebar_derecho_ancho();
     int x0 = g.ancho - panel + SIDEBAR_MARGEN;
-    int y0 = MENU_BARRA_ALTO + TILES_SELECTOR_TITULO_ALTO;
+    int y0 = AREA_SUP_ALTO + TILES_SELECTOR_TITULO_ALTO;
     int columna = indice % TILES_SELECTOR_COLUMNAS;
     int fila = indice / TILES_SELECTOR_COLUMNAS;
     return zona_hacer(x0 + columna * (TILE_MINI_LADO + TILE_MINI_HUECO),
@@ -295,7 +295,7 @@ Zona tile_mini_zona(int indice) {
 Zona capa_fila_zona(int indice) {
     int panel = sidebar_derecho_ancho();
     int x0 = g.ancho - panel + SIDEBAR_MARGEN;
-    int y0 = MENU_BARRA_ALTO + CAPAS_TITULO_ALTO + TILES_SELECTOR_ALTO;
+    int y0 = AREA_SUP_ALTO + CAPAS_TITULO_ALTO + TILES_SELECTOR_ALTO;
     return zona_hacer(x0, y0 + indice * (CAPA_FILA_ALTO + CAPA_FILA_HUECO),
                       panel - SIDEBAR_MARGEN * 2, CAPA_FILA_ALTO);
 }
@@ -316,7 +316,7 @@ int botones_panel_derecho_zona(Zona *mas, Zona *borrar) {
     int y, x;
     if (panel < total + SIDEBAR_MARGEN * 2) return 0;
     y = g.alto - PANEL_DERECHO_MARGEN_INFERIOR - BOTON_LADO;
-    if (y < MENU_BARRA_ALTO) return 0;
+    if (y < AREA_SUP_ALTO) return 0;
     x = g.ancho - panel + (panel - total) / 2;
     if (mas) *mas = zona_hacer(x, y, BOTON_LADO, BOTON_LADO);
     if (borrar) *borrar = zona_hacer(x + BOTON_LADO + HUECO, y, BOTON_LADO, BOTON_LADO);
@@ -354,7 +354,7 @@ Zona menu_capa_panel_zona(Zona *anadir, Zona *quitar) {
     y = g.capa_menu_y;
     if (y + alto_panel > g.alto - 4) y = g.alto - alto_panel - 4;
     if (x < 4) x = 4;
-    if (y < MENU_BARRA_ALTO + 4) y = MENU_BARRA_ALTO + 4;
+    if (y < AREA_SUP_ALTO + 4) y = AREA_SUP_ALTO + 4;
     panel = zona_hacer(x, y, ancho_panel, alto_panel);
     if (anadir) *anadir = zona_hacer(panel.x + MENU_CAPA_MARGEN,
                                      panel.y + MENU_CAPA_MARGEN,
@@ -545,12 +545,12 @@ static Zona menu_etiqueta_zona(int indice, int *x_salida) {
         int ancho = menu_ancho_etiqueta(MENU_ETIQUETAS[i]);
         if (i == indice) {
             if (x_salida) *x_salida = x;
-            return zona_hacer(x, 0, ancho, MENU_BARRA_ALTO);
+            return zona_hacer(x, TAB_BARRA_ALTO, ancho, MENU_BARRA_ALTO);
         }
         x += ancho;
     }
     if (x_salida) *x_salida = x;
-    return zona_hacer(x, 0, 0, MENU_BARRA_ALTO);
+    return zona_hacer(x, TAB_BARRA_ALTO, 0, MENU_BARRA_ALTO);
 }
 
 int menu_barra_en(int x, int y) {
@@ -700,13 +700,243 @@ static void dibujar_fila_menu(Zona z, const char *texto, const char *atajo,
 }
 
 /* ------------------------------------------------------------------ */
+/* Pestanas: geometria y dibujo                                        */
+/* ------------------------------------------------------------------ */
+Zona pestanas_zona(void) {
+    return zona_hacer(0, 0, g.ancho, TAB_BARRA_ALTO);
+}
+
+/* Ancho de una pestana. Se reparte el espacio disponible entre todas para que
+ * nunca tapen el boton de nueva pestana, con un minimo y un maximo. */
+static int pestana_ancho(int indice) {
+    int n = g.num_pestanas > 0 ? g.num_pestanas : 1;
+    int disponible = g.ancho - TAB_MARGEN * 2 - TAB_NUEVO_LADO - 12 -
+                     (n - 1) * TAB_HUECO;
+    int maximo = disponible / n;
+    int ancho;
+    const char *titulo = pestanas_titulo(indice);
+    if (maximo > TAB_ANCHO_MAX) maximo = TAB_ANCHO_MAX;
+    if (maximo < TAB_ANCHO_MIN) maximo = TAB_ANCHO_MIN;
+    /* favicon + margen + texto + punto de modificado + cerrar */
+    ancho = texto_ancho(titulo) + 61;
+    if (ancho < TAB_ANCHO_MIN) ancho = TAB_ANCHO_MIN;
+    if (ancho > maximo) ancho = maximo;
+    return ancho;
+}
+
+static int pestana_x(int indice) {
+    int i, x = TAB_MARGEN;
+    for (i = 0; i < indice; i++) x += pestana_ancho(i) + TAB_HUECO;
+    return x;
+}
+
+Zona pestana_zona(int indice) {
+    int ancho;
+    if (indice < 0 || indice >= g.num_pestanas) return zona_vacia();
+    ancho = pestana_ancho(indice);
+    return zona_hacer(pestana_x(indice), 4, ancho, TAB_BARRA_ALTO - 4);
+}
+
+Zona pestana_cerrar_zona(int indice) {
+    Zona t = pestana_zona(indice);
+    int lado = TAB_CERRAR_LADO;
+    if (t.ancho <= 0) return zona_vacia();
+    return zona_hacer(zona_derecha(t) - lado - 6,
+                      t.y + (t.alto - lado) / 2, lado, lado);
+}
+
+Zona pestana_nueva_zona(void) {
+    int x = TAB_MARGEN;
+    int i;
+    for (i = 0; i < g.num_pestanas; i++) x += pestana_ancho(i) + TAB_HUECO;
+    x += 6;
+    return zona_hacer(x, (TAB_BARRA_ALTO - TAB_NUEVO_LADO) / 2,
+                      TAB_NUEVO_LADO, TAB_NUEVO_LADO);
+}
+
+int pestana_en(int x, int y) {
+    int i;
+    for (i = 0; i < g.num_pestanas; i++) {
+        if (zona_contiene(pestana_zona(i), x, y)) return i;
+    }
+    return -1;
+}
+
+/* Borde izquierdo del trapecio para una fila local. La parte superior se
+ * redondea y la base se abre con una curva concava hasta el ancho completo. */
+static int tab_izquierda(int ancho, int alto, int y) {
+    int s = TAB_LADO_INSET;
+    int r = TAB_RADIO_SUP;
+    int b = TAB_CURVA_BASE;
+    if (ancho <= 0 || alto <= 0) return 0;
+    if (y < 0) y = 0;
+    if (y >= alto) y = alto - 1;
+    if (b > alto / 2) b = alto / 2;
+    if (r > alto / 2) r = alto / 2;
+    if (y < r) {
+        int dy = r - y;
+        int dentro = r * r - dy * dy;
+        int f = (int)(sqrtf((float)dentro) + 0.5f);
+        return s + r - f;
+    }
+    if (y < alto - b) return s;
+    {
+        int k = y - (alto - b);
+        float t = (float)k / (float)(b > 0 ? b : 1);
+        float inv = 1.0f - t;
+        return (int)((float)s * inv * inv + 0.5f);
+    }
+}
+
+/* Rellena el trapecio y dibuja su contorno. La base queda abierta para que la
+ * pestana se funda con la barra inferior. */
+static void dibujar_forma_pestana(Zona t, int activa, u32 fondo) {
+    int y;
+    u32 borde = activa ? TAB_ACTIVA_BORDE : TAB_INACTIVA_BORDE;
+    for (y = 0; y < t.alto; y++) {
+        int xl = tab_izquierda(t.ancho, t.alto, y);
+        int xr = t.ancho - 1 - xl;
+        int py = t.y + y;
+        if (xr <= xl) continue;
+        dibujar_rect(t.x + xl, py, t.x + xr + 1, py + 1, fondo);
+        if (y == 0) {
+            dibujar_rect(t.x + xl, py, t.x + xr + 1, py + 1, borde);
+        } else {
+            dibujar_rect(t.x + xl, py, t.x + xl + 1, py + 1, borde);
+            dibujar_rect(t.x + xr, py, t.x + xr + 1, py + 1, borde);
+            if (!activa && y == 1)
+                dibujar_rect(t.x + xl + 1, py, t.x + xr, py + 1,
+                             TAB_BARRA_LUZ);
+        }
+    }
+}
+
+/* Favicon: pequena muestra de textura a cuadros, como una miniatura del tile. */
+static void dibujar_favicon(int x, int y, int activa) {
+    u32 a = activa ? TAB_FAVICON_A : 0x008C9EAEu;
+    u32 b = activa ? TAB_FAVICON_B : 0x00D6E0EAu;
+    u32 marco = activa ? 0x00788CA0u : 0x0098A8B8u;
+    dibujar_rect(x, y, x + 6, y + 6, a);
+    dibujar_rect(x + 6, y, x + 12, y + 6, b);
+    dibujar_rect(x, y + 6, x + 6, y + 12, b);
+    dibujar_rect(x + 6, y + 6, x + 12, y + 12, a);
+    dibujar_marco(x, y, x + 12, y + 12, marco);
+}
+
+/* Copia el titulo recortandolo con puntos suspensivos si no cabe. */
+static void titulo_pestana_recortado(char *dst, int tam, const char *src,
+                                     int max_ancho) {
+    int n;
+    if (!dst || tam < 1) return;
+    dst[0] = 0;
+    if (!src) return;
+    if (texto_ancho(src) <= max_ancho) {
+        recortar_texto(dst, src, tam);
+        return;
+    }
+    n = (int)strlen(src);
+    if (n > tam - 4) n = tam - 4;
+    while (n > 0) {
+        char prueba[160];
+        n--;
+        if (n > (int)sizeof(prueba) - 4) n = (int)sizeof(prueba) - 4;
+        memcpy(prueba, src, (size_t)n);
+        prueba[n] = 0;
+        strcat(prueba, "...");
+        if (texto_ancho(prueba) <= max_ancho) {
+            recortar_texto(dst, prueba, tam);
+            return;
+        }
+    }
+    recortar_texto(dst, "...", tam);
+}
+
+static void dibujar_cruz(int x, int y, int lado, u32 color) {
+    int m = lado >= 12 ? 4 : 3;
+    dibujar_linea(x + m, y + m, x + lado - m - 1, y + lado - m - 1, color);
+    dibujar_linea(x + lado - m - 1, y + m, x + m, y + lado - m - 1, color);
+}
+
+void ui_dibujar_pestanas(void) {
+    int i;
+    int mouse_x = g.raton_x, mouse_y = g.raton_y;
+    int raton_en_barra = (mouse_y >= 0 && mouse_y < TAB_BARRA_ALTO);
+    int tab_hover = raton_en_barra ? pestana_en(mouse_x, mouse_y) : -1;
+    Zona nueva = pestana_nueva_zona();
+
+    /* Fondo de la franja y linea de union con la barra de menus. */
+    dibujar_rect(0, 0, g.ancho, TAB_BARRA_ALTO, TAB_BARRA_FONDO);
+    dibujar_rect(0, 0, g.ancho, 1, TAB_BARRA_LUZ);
+    dibujar_rect(0, TAB_BARRA_ALTO - 2, g.ancho, TAB_BARRA_ALTO,
+                 TAB_BARRA_BORDE);
+
+    for (i = 0; i < g.num_pestanas; i++) {
+        Zona t = pestana_zona(i);
+        Zona cerrar = pestana_cerrar_zona(i);
+        int activa = (i == g.pestana_activa);
+        int hover = (i == tab_hover);
+        int sobre_cerrar = raton_en_barra &&
+                           zona_contiene(cerrar, mouse_x, mouse_y);
+        int modificada = pestanas_esta_modificada(i);
+        char titulo[160];
+        u32 fondo = activa ? TAB_ACTIVA_FONDO
+                           : (hover ? TAB_HOVER_FONDO : TAB_INACTIVA_FONDO);
+        u32 texto = activa ? TAB_ACTIVA_TEXTO : TAB_INACTIVA_TEXTO;
+        int fav_x, texto_x, texto_max;
+
+        if (t.ancho <= 0 || t.x >= g.ancho) break;
+
+        dibujar_forma_pestana(t, activa, fondo);
+
+        fav_x = t.x + TAB_LADO_INSET + 5;
+        dibujar_favicon(fav_x, t.y + (t.alto - 12) / 2, activa);
+
+        texto_x = fav_x + 12 + 6;
+        texto_max = cerrar.x - texto_x - 6;
+        if (modificada) texto_max -= 9;
+        if (texto_max < 6) texto_max = 6;
+        titulo_pestana_recortado(titulo, sizeof(titulo),
+                                 pestanas_titulo(i), texto_max);
+        dibujar_texto(texto_x, t.y + (t.alto - texto_alto()) / 2,
+                      titulo, texto);
+
+        if (modificada) {
+            int mx = cerrar.x - 8;
+            int my = t.y + t.alto / 2;
+            dibujar_circulo(mx, my, 2, activa ? 0x00507090u : texto, 1);
+        }
+
+        if (sobre_cerrar) {
+            int cx = cerrar.x + cerrar.ancho / 2;
+            int cy = cerrar.y + cerrar.alto / 2;
+            dibujar_circulo(cx, cy, 8, TAB_CERRAR_HOVER, 1);
+        }
+        dibujar_cruz(cerrar.x, cerrar.y, cerrar.ancho,
+                     sobre_cerrar ? 0x00FFFFFFu : texto);
+    }
+
+    /* Boton circular de nueva pestana. */
+    if (zona_derecha(nueva) < g.ancho - 2) {
+        int hover = raton_en_barra && zona_contiene(nueva, mouse_x, mouse_y);
+        int cx = nueva.x + nueva.ancho / 2;
+        int cy = nueva.y + nueva.alto / 2;
+        u32 color = hover ? TAB_ACTIVA_TEXTO : TAB_INACTIVA_TEXTO;
+        dibujar_circulo(cx, cy, 9, hover ? TAB_ACTIVA_BORDE : TAB_BARRA_BORDE, 1);
+        dibujar_circulo(cx, cy, 8,
+                        hover ? TAB_HOVER_FONDO : TAB_BARRA_FONDO, 1);
+        dibujar_rect(cx - 5, cy - 1, cx + 6, cy + 1, color);
+        dibujar_rect(cx - 1, cy - 5, cx + 1, cy + 6, color);
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* Barra de menus: dibujo                                               */
 /* ------------------------------------------------------------------ */
 void ui_dibujar_barra_menus(void) {
     int i;
     int mouse_en = menu_barra_en(g.raton_x, g.raton_y);
 
-    dibujar_rect(0, 0, g.ancho, MENU_BARRA_ALTO, MENU_BARRA_FONDO);
+    dibujar_rect(0, TAB_BARRA_ALTO, g.ancho, AREA_SUP_ALTO, MENU_BARRA_FONDO);
 
     for (i = 0; i < 8; i++) {
         Zona z = menu_etiqueta_zona(i, NULL);
@@ -723,7 +953,7 @@ void ui_dibujar_barra_menus(void) {
                                MENU_ETIQUETAS[i], MENU_BARRA_TEXTO);
         }
     }
-    dibujar_rect(0, MENU_BARRA_ALTO - 1, g.ancho, MENU_BARRA_ALTO, BARRA_BORDE);
+    dibujar_rect(0, AREA_SUP_ALTO - 1, g.ancho, AREA_SUP_ALTO, BARRA_BORDE);
 }
 
 static void nombre_archivo_mapa(char *dst, int maximo) {
@@ -1321,9 +1551,9 @@ void ui_dibujar_sidebar(void) {
     int i, k;
     int grupos[3];
     int filas_antes = 0, hueco = 0, primero = 1;
-    Zona sidebar = zona_hacer(0, MENU_BARRA_ALTO, SIDEBAR_ANCHO, g.alto - MENU_BARRA_ALTO);
+    Zona sidebar = zona_hacer(0, AREA_SUP_ALTO, SIDEBAR_ANCHO, g.alto - AREA_SUP_ALTO);
     dibujar_rect_z(sidebar, SIDEBAR);
-    dibujar_rect(SIDEBAR_ANCHO - 1, MENU_BARRA_ALTO, SIDEBAR_ANCHO, g.alto, SEPARADOR);
+    dibujar_rect(SIDEBAR_ANCHO - 1, AREA_SUP_ALTO, SIDEBAR_ANCHO, g.alto, SEPARADOR);
 
     /* Linea fina en el hueco que separa cada grupo del anterior. */
     grupos_sidebar(H_TOTAL, grupos);
@@ -1331,7 +1561,7 @@ void ui_dibujar_sidebar(void) {
         int cantidad = grupos[k];
         if (cantidad == 0) continue;
         if (!primero) {
-            int arriba = MENU_BARRA_ALTO + SIDEBAR_MARGEN +
+            int arriba = AREA_SUP_ALTO + SIDEBAR_MARGEN +
                          filas_antes * (BOTON_LADO + HUECO) + hueco;
             int y = arriba - HUECO - SEPARADOR_ALTO + SEPARADOR_MARGEN;
             int derecha = SIDEBAR_MARGEN + COLUMNAS * BOTON_LADO +
@@ -1641,9 +1871,9 @@ static void dibujar_tiles_panel_derecho(void) {
     x = g.ancho - panel + SIDEBAR_MARGEN;
     if (g.num_tiles > 0) formatear(titulo, sizeof(titulo), "TILES %d", g.num_tiles);
     else strcpy(titulo, "TILES");
-    fuente_dibujar(x, MENU_BARRA_ALTO + 8, titulo, TEXTO_UI);
+    fuente_dibujar(x, AREA_SUP_ALTO + 8, titulo, TEXTO_UI);
     if (g.num_tiles == 0) {
-        fuente_dibujar(x, MENU_BARRA_ALTO + TILES_SELECTOR_TITULO_ALTO + 8,
+        fuente_dibujar(x, AREA_SUP_ALTO + TILES_SELECTOR_TITULO_ALTO + 8,
                        "SIN TILES", BARRA_BORDE);
         return;
     }
@@ -1658,7 +1888,7 @@ static void dibujar_tiles_panel_derecho(void) {
         }
     }
     if (total > TILES_SELECTOR_VISIBLES) {
-        int y0 = MENU_BARRA_ALTO + TILES_SELECTOR_TITULO_ALTO;
+        int y0 = AREA_SUP_ALTO + TILES_SELECTOR_TITULO_ALTO;
         int track_x = x + TILES_REJILLA_ANCHO + TILES_SCROLL_HUECO;
         int track_w = TILES_SCROLL_ANCHO;
         int track_h = TILES_REJILLA_ALTO;
@@ -1678,7 +1908,7 @@ static void dibujar_tiles_panel_derecho(void) {
     }
     /* Linea que separa el selector de la lista de capas. */
     {
-        int y = MENU_BARRA_ALTO + TILES_SELECTOR_ALTO - 1;
+        int y = AREA_SUP_ALTO + TILES_SELECTOR_ALTO - 1;
         dibujar_rect(x, y, g.ancho - SIDEBAR_MARGEN, y + 1, SEPARADOR);
     }
 }
@@ -1713,17 +1943,17 @@ void ui_dibujar_panel_derecho(void) {
     int panel = sidebar_derecho_ancho();
     int x0 = g.ancho - panel;
     int i;
-    Zona zona = zona_hacer(x0, MENU_BARRA_ALTO, panel, g.alto - MENU_BARRA_ALTO);
+    Zona zona = zona_hacer(x0, AREA_SUP_ALTO, panel, g.alto - AREA_SUP_ALTO);
 
     dibujar_rect_z(zona, SIDEBAR);
-    dibujar_rect(x0, MENU_BARRA_ALTO, x0 + 1, g.alto, SEPARADOR);
+    dibujar_rect(x0, AREA_SUP_ALTO, x0 + 1, g.alto, SEPARADOR);
 
     dibujar_tiles_panel_derecho();
 
     /* Titulo de capas y contador "N DE M". */
     {
         int x = x0 + SIDEBAR_MARGEN;
-        int y = MENU_BARRA_ALTO + 8 + TILES_SELECTOR_ALTO;
+        int y = AREA_SUP_ALTO + 8 + TILES_SELECTOR_ALTO;
         char contador[32];
         int cx;
         if (g.doc.num_capas < 1) { dibujar_botones_panel_derecho(); return; }
@@ -2666,6 +2896,7 @@ void ui_dibujar(void) {
     /* Fondo general. */
     dibujar_rect(0, 0, g.ancho, g.alto, FONDO);
 
+    ui_dibujar_pestanas();
     ui_dibujar_barra_menus();
 
     ui_dibujar_sidebar();

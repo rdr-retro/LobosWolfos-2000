@@ -13,6 +13,8 @@ para cargar y guardar PNG.
 - Selección rectangular y de forma libre, con arrastre y redimensionado.
 - Herramienta de texto con varias fuentes y tamaños.
 - Patrón de textura repetido, visor de mosaico y guardado de tiles en PNG.
+- Pestañas estilo navegador: cada documento conserva su historial, selección,
+  zoom y estado de mosaicos.
 - Apertura y exportación de PNG/BMP y mapas `.mav`.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
 
@@ -44,6 +46,10 @@ Ejecuta `TexturePaint2000.exe`. Los tiles que guardes se almacenan en la carpeta
 |---|---|
 | `Ctrl+Z` | Deshacer |
 | `Ctrl+Y` / `Ctrl+Shift+Z` | Rehacer |
+| `Ctrl+T` | Nueva pestaña |
+| `Ctrl+W` | Cerrar la pestaña activa |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Pestaña siguiente / anterior |
+| `Ctrl+1` … `Ctrl+9` | Ir a una pestaña |
 | `Ctrl+rueda` | Cambiar el zoom |
 | `Esc` | Cancelar la acción en curso |
 | `Enter` | Confirmar la acción en curso |

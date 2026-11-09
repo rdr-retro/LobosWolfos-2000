@@ -640,6 +640,7 @@ int app_iniciar(void) {
     mapa_iniciar();
     tiles_modo_iniciar();
     texto_iniciar();
+    pestanas_iniciar();
 
     crear_fuentes();
     cargar_iconos();
@@ -658,6 +659,7 @@ int app_iniciar(void) {
 
 void app_terminar(void) {
     int i;
+    pestanas_terminar();
     pila_liberar(&g.deshacer);
     pila_liberar(&g.rehacer);
     doc_liberar(&g.doc);
@@ -688,29 +690,17 @@ void app_nueva_imagen(int ancho, int alto) {
         dialogo_error("No hay memoria para crear la imagen.");
         return;
     }
-    pila_guardar(&g.deshacer, &g.doc);
-    pila_limpiar(&g.rehacer);
-    doc_liberar(&g.doc);
-    g.doc = nuevo;
-    doc_componer_todo(&g.doc);
-    seleccion_limpiar(&g.sel);
-    tiles_modo_limpiar();
-    g.modo_tiles = 0;
-    g.tiles_layout_valido = 0;
-    g.tile_cx = 0;
-    g.tile_cy = 0;
-    g.tiles_visible = 0;
-    g.tiles_plegado = 0;
-    g.zoom_idx = zoom_para_caber(g.doc.ancho, g.doc.alto);
-    g.pan_x = g.pan_y = 0;
-    lienzo_actualizar();
-    app_invalidar();
+    doc_componer_todo(&nuevo);
+    if (!pestanas_nueva_documento(&nuevo, NULL, NULL,
+                                  zoom_para_caber(ancho, alto)))
+        doc_liberar(&nuevo);
 }
 
 void app_abrir_imagen(const char *ruta) {
     int w = 0, h = 0;
     u32 *pix = imagen_cargar(ruta, &w, &h);
     Documento nuevo;
+    char titulo[128];
     if (!pix) {
         dialogo_error("No se pudo abrir la imagen.");
         return;
@@ -730,23 +720,13 @@ void app_abrir_imagen(const char *ruta) {
     /* La imagen se coloca en la capa base. */
     copiar_pixeles(nuevo.capas[0].pixeles, pix, w * h);
     free(pix);
-    pila_guardar(&g.deshacer, &g.doc);
-    pila_limpiar(&g.rehacer);
-    doc_liberar(&g.doc);
-    g.doc = nuevo;
-    doc_componer_todo(&g.doc);
-    seleccion_limpiar(&g.sel);
-    tiles_modo_limpiar();
-    g.modo_tiles = 0;
-    g.tiles_layout_valido = 0;
-    g.tile_cx = 0;
-    g.tile_cy = 0;
-    g.tiles_visible = 0;
-    g.tiles_plegado = 0;
-    g.zoom_idx = zoom_para_caber(g.doc.ancho, g.doc.alto);
-    g.pan_x = g.pan_y = 0;
-    lienzo_actualizar();
-    app_invalidar();
+    doc_componer_todo(&nuevo);
+    ruta_nombre(titulo, sizeof(titulo), ruta);
+    if (!pestanas_nueva_documento(&nuevo, titulo, ruta,
+                                  zoom_para_caber(w, h))) {
+        doc_liberar(&nuevo);
+        return;
+    }
     app_estado("Imagen abierta: %dx%d", w, h);
 }
 
@@ -754,7 +734,7 @@ void app_guardar_imagen(const char *ruta, int png) {
     doc_componer_todo(&g.doc);
     if (png ? imagen_guardar_png(ruta, g.doc.compuesto, g.doc.ancho, g.doc.alto)
             : imagen_guardar_bmp(ruta, g.doc.compuesto, g.doc.ancho, g.doc.alto)) {
-        g.doc.modificado = 0;
+        pestanas_marcar_guardada(ruta);
         app_estado("Guardado: %s", ruta);
     } else {
         dialogo_error("No se pudo guardar la imagen.");
@@ -842,10 +822,8 @@ static OPENFILENAMEA preparar_dialogo(char *ruta, const char *filtro, const char
 }
 
 void dialogo_nuevo(void) {
-    if (g.doc.modificado) {
-        if (!dialogo_confirmar("Nuevo lienzo", "El lienzo tiene cambios sin guardar.\n¿Crear uno nuevo de todos modos?"))
-            return;
-    }
+    /* Cada documento vive en su propia pestana: crear uno nuevo no descarta
+     * el actual. */
     app_nueva_imagen(LIENZO_INICIAL, LIENZO_INICIAL);
 }
 
@@ -863,7 +841,9 @@ void dialogo_abrir_imagen(void) {
 void dialogo_guardar_png(void) {
     char ruta[MAX_PATH];
     OPENFILENAMEA ofn;
+    const char *actual = pestanas_ruta(g.pestana_activa);
     ruta[0] = '\0';
+    if (actual && actual[0]) ruta_nombre(ruta, sizeof(ruta), actual);
     ofn = preparar_dialogo(ruta, "Imagen PNG\0*.png\0Todos los archivos\0*.*\0\0", "textura.png");
     ofn.lpstrDefExt = "png";
     ofn.Flags |= OFN_OVERWRITEPROMPT;
@@ -1062,8 +1042,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             break;
         }
         case WM_CLOSE:
-            if (g.doc.modificado) {
-                if (!dialogo_confirmar("Salir", "Hay cambios sin guardar.\n¿Salir de todos modos?"))
+            if (pestanas_hay_cambios()) {
+                if (!dialogo_confirmar("Salir", "Hay cambios sin guardar en una o mas pestanas.\n¿Salir de todos modos?"))
                     return 0;
             }
             DestroyWindow(hwnd);
