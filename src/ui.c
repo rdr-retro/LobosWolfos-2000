@@ -3078,29 +3078,41 @@ static void ui_dibujar_boton_modulos(void) {
                  SEPARADOR);
 }
 
-/* Lista de elementos del lienzo actual, encima de la lista de escenas. */
+/* Lista de elementos del lienzo actual, encima de la lista de escenas. Los
+ * elementos unidos por el iman se muestran indentados bajo su grupo. */
 static void elementos_dibujar_panel(void) {
     int total = g.num_modulos;
     int filas = total;
+    int orden[MODULOS_MAX], hijos[MODULOS_MAX];
     char titulo[32];
     int i;
 
+    elementos_ordenar_lista(orden, hijos);
     if (filas > ELEMENTOS_VISIBLES) filas = ELEMENTOS_VISIBLES;
     formatear(titulo, sizeof(titulo), "ELEMENTOS %d", total);
     fuente_dibujar(SIDEBAR_MARGEN, AREA_SUP_ALTO + 8, titulo, TEXTO_UI);
 
     for (i = 0; i < filas; i++) {
-        int idx = g.elementos_scroll + i;
+        int fila = g.elementos_scroll + i;
+        int idx, activo, tx;
         Zona z;
         char etiqueta[32];
-        int activo;
-        if (idx >= total) break;
+        if (fila >= total) break;
+        idx = orden[fila];
         z = elemento_fila_zona(i);
         activo = (g.modulo_arrastrando == 3 && idx == g.modulo_drag_i);
-        formatear(etiqueta, sizeof(etiqueta), "Elemento %d", idx + 1);
+        formatear(etiqueta, sizeof(etiqueta), "Elemento %d", g.modulos[idx].id);
         dibujar_rect_z(z, activo ? BOTON_SELECCION : BARRA);
         dibujar_marco_z(z, activo ? BOTON_SELECCION : BARRA_BORDE);
-        fuente_dibujar(z.x + 6, z.y + (z.alto - 7) / 2, etiqueta,
+        tx = z.x + 6;
+        if (hijos[fila]) {
+            /* Conexion en arbol: el elemento pertenece al grupo de arriba. */
+            int cy = z.y + z.alto / 2;
+            dibujar_rect(z.x + 8, z.y - 3, z.x + 9, cy + 1, BARRA_BORDE);
+            dibujar_rect(z.x + 8, cy, z.x + 14, cy + 1, BARRA_BORDE);
+            tx = z.x + 18;
+        }
+        fuente_dibujar(tx, z.y + (z.alto - 7) / 2, etiqueta,
                        activo ? 0x00FFFFFFu : TEXTO_UI);
     }
 }

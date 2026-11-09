@@ -597,6 +597,7 @@ typedef struct TileDoc {
 typedef struct ModuloElemento {
     int x, y;
     int ancho, alto;
+    int id; /* orden de creacion, estable al moverlo en el lienzo */
 } ModuloElemento;
 
 /* Escena: configuracion de rectangulos del lienzo, con su vista. */
@@ -736,6 +737,7 @@ typedef struct App {
     int hover_escena;     /* fila de escena bajo el cursor, -1 ninguna */
     int hover_escena_nueva;
     int elementos_scroll; /* primer elemento visible de la lista */
+    int modulo_siguiente_id; /* id del proximo elemento insertado */
 
     /* Modo tiles */
     int modo_tiles;
@@ -1110,6 +1112,7 @@ Zona escena_fila_zona(int indice);
 void modulos_acoplar(int *x, int *y, int ancho, int alto, int ignorar,
                      int *linea_x, int *linea_y);
 void modulos_insertar(int x, int y);
+int  elementos_ordenar_lista(int *orden, int *hijos);
 void escenas_iniciar(void);
 void escenas_nueva(void);
 void escenas_activar(int indice);

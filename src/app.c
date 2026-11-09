@@ -779,12 +779,17 @@ static void escenas_guardar_activa(void) {
 /* Carga en el lienzo la configuracion de la escena activa. */
 static void escenas_cargar_activa(void) {
     Escena *e;
+    int i;
     if (g.escena_activa < 0 || g.escena_activa >= g.num_escenas) return;
     e = &g.escenas[g.escena_activa];
     memcpy(g.modulos, e->elementos, sizeof(ModuloElemento) * e->num_elementos);
     g.num_modulos = e->num_elementos;
     g.pan_x = e->pan_x;
     g.pan_y = e->pan_y;
+    g.modulo_siguiente_id = 1;
+    for (i = 0; i < g.num_modulos; i++)
+        if (g.modulos[i].id >= g.modulo_siguiente_id)
+            g.modulo_siguiente_id = g.modulos[i].id + 1;
 }
 
 /* Reinicia la lista de escenas y crea la primera vacia. */
@@ -796,6 +801,7 @@ void escenas_iniciar(void) {
     g.hover_escena_nueva = 0;
     g.elementos_scroll = 0;
     g.num_modulos = 0;
+    g.modulo_siguiente_id = 1;
     g.pan_x = 0;
     g.pan_y = 0;
     escenas_reset_arrastre();
@@ -812,6 +818,7 @@ void escenas_nueva(void) {
     formatear(e->nombre, sizeof(e->nombre), "Escena %d", g.escena_siguiente++);
     g.escena_activa = g.num_escenas++;
     g.num_modulos = 0;
+    g.modulo_siguiente_id = 1;
     g.pan_x = 0;
     g.pan_y = 0;
     g.hover_escena = -1;
@@ -926,6 +933,85 @@ static void modulos_al_frente(int idx) {
     g.modulos[g.num_modulos - 1] = tmp;
 }
 
+/* Dos elementos estan unidos cuando comparten un lado completo o parcial,
+ * que es como los deja el acople magnetico. */
+static int elementos_unidos(const ModuloElemento *a, const ModuloElemento *b) {
+    int solapan_v = a->y < b->y + b->alto && b->y < a->y + a->alto;
+    int solapan_h = a->x < b->x + b->ancho && b->x < a->x + a->ancho;
+
+    if (solapan_v && (a->x + a->ancho == b->x || b->x + b->ancho == a->x))
+        return 1;
+    if (solapan_h && (a->y + a->alto == b->y || b->y + b->alto == a->y))
+        return 1;
+    return 0;
+}
+
+/* Ordena la lista de elementos por grupos unidos. Dentro de cada grupo manda
+ * el id de creacion: el menor queda como raiz y el resto detras, marcados en
+ * `hijos` para dibujarlos indentados. Devuelve el numero de filas. */
+int elementos_ordenar_lista(int *orden, int *hijos) {
+    int comp[MODULOS_MAX], comp_min[MODULOS_MAX], comp_usado[MODULOS_MAX];
+    int total = g.num_modulos, ncomp = 0, n = 0;
+    int i, j;
+
+    for (i = 0; i < total; i++) comp[i] = -1;
+    for (i = 0; i < total; i++) {
+        int cola[MODULOS_MAX], ini = 0, fin = 0;
+        if (comp[i] >= 0) continue;
+        comp[i] = ncomp;
+        cola[fin++] = i;
+        while (ini < fin) {
+            int a = cola[ini++];
+            for (j = 0; j < total; j++) {
+                if (comp[j] >= 0) continue;
+                if (!elementos_unidos(&g.modulos[a], &g.modulos[j])) continue;
+                comp[j] = ncomp;
+                cola[fin++] = j;
+            }
+        }
+        ncomp++;
+    }
+
+    for (i = 0; i < ncomp; i++) {
+        comp_min[i] = -1;
+        comp_usado[i] = 0;
+    }
+    for (i = 0; i < total; i++) {
+        int c = comp[i];
+        if (comp_min[c] < 0 ||
+            g.modulos[i].id < g.modulos[comp_min[c]].id)
+            comp_min[c] = i;
+    }
+
+    while (n < total) {
+        int mejor = -1, ultimo = -1;
+        for (i = 0; i < ncomp; i++) {
+            if (comp_usado[i]) continue;
+            if (mejor < 0 ||
+                g.modulos[comp_min[i]].id < g.modulos[comp_min[mejor]].id)
+                mejor = i;
+        }
+        if (mejor < 0) break;
+        comp_usado[mejor] = 1;
+        for (;;) {
+            int elegido = -1;
+            for (j = 0; j < total; j++) {
+                if (comp[j] != mejor) continue;
+                if (ultimo >= 0 && g.modulos[j].id <= g.modulos[ultimo].id)
+                    continue;
+                if (elegido < 0 || g.modulos[j].id < g.modulos[elegido].id)
+                    elegido = j;
+            }
+            if (elegido < 0) break;
+            orden[n] = elegido;
+            if (hijos) hijos[n] = (ultimo >= 0);
+            n++;
+            ultimo = elegido;
+        }
+    }
+    return n;
+}
+
 /* Inserta un elemento centrado en un punto de pantalla, con acople. */
 void modulos_insertar(int x, int y) {
     Zona lienzo = modulos_lienzo_zona();
@@ -944,9 +1030,17 @@ void modulos_insertar(int x, int y) {
     e->y = wy;
     e->ancho = MODULOS_ELEMENTO_ANCHO;
     e->alto = MODULOS_ELEMENTO_ALTO;
-    /* La lista muestra el elemento recien anadido. */
-    if (g.num_modulos > ELEMENTOS_VISIBLES)
-        g.elementos_scroll = g.num_modulos - ELEMENTOS_VISIBLES;
+    e->id = g.modulo_siguiente_id++;
+    /* La lista muestra el elemento recien anadido, aunque quede dentro de
+     * un grupo y no al final. */
+    if (g.num_modulos > ELEMENTOS_VISIBLES) {
+        int orden[MODULOS_MAX], hijos[MODULOS_MAX];
+        int fila, total = elementos_ordenar_lista(orden, hijos);
+        for (fila = 0; fila < total; fila++)
+            if (orden[fila] == g.num_modulos - 1) break;
+        if (fila >= ELEMENTOS_VISIBLES)
+            g.elementos_scroll = fila - ELEMENTOS_VISIBLES + 1;
+    }
 }
 
 static void modulos_pulsar(int x, int y, int boton) {
