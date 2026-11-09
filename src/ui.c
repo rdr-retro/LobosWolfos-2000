@@ -84,16 +84,30 @@ Zona zona_trabajo(void) {
     return zona_hacer(SIDEBAR_ANCHO, arriba, ancho_util(), alto);
 }
 
+/* Ancho de los paneles laterales del gestor: ambos iguales al derecho. */
+static int modulos_panel_ancho(void) {
+    return sidebar_derecho_ancho();
+}
+
+/* Barra inferior del gestor: entre los dos paneles laterales. */
+static Zona modulos_abajo_zona(void) {
+    int panel = modulos_panel_ancho();
+    int ancho = g.ancho - panel * 2;
+    int alto = BARRA_ABAJO_ALTO < g.alto ? BARRA_ABAJO_ALTO : g.alto;
+    if (ancho < MIN_LADO) ancho = MIN_LADO;
+    return zona_hacer(panel, g.alto - alto, ancho, alto);
+}
+
 /* Lienzo del gestor de modulos: todo el hueco central entre los paneles
  * laterales, desde la barra de menus hasta la barra inferior. */
 Zona modulos_lienzo_zona(void) {
-    Zona abajo = barra_abajo_zona();
-    int panel = sidebar_derecho_ancho();
-    int ancho = g.ancho - SIDEBAR_ANCHO - panel;
+    Zona abajo = modulos_abajo_zona();
+    int panel = modulos_panel_ancho();
+    int ancho = g.ancho - panel * 2;
     int alto = abajo.y - AREA_SUP_ALTO;
     if (ancho < MIN_LADO) ancho = MIN_LADO;
     if (alto < MIN_LADO) alto = MIN_LADO;
-    return zona_hacer(SIDEBAR_ANCHO, AREA_SUP_ALTO, ancho, alto);
+    return zona_hacer(panel, AREA_SUP_ALTO, ancho, alto);
 }
 
 /* Boton rectangular sin nombre del panel derecho del gestor. */
@@ -3021,20 +3035,18 @@ static void ui_dibujar_boton_modulos(void) {
                  SEPARADOR);
 }
 
-/* Paneles del gestor de modulos: los mismos huecos que en modo normal
- * (izquierdo, derecho e inferior) pero completamente vacios. */
+/* Paneles del gestor de modulos: dos laterales iguales y barra inferior,
+ * completamente vacios. */
 static void ui_dibujar_paneles_vacios(void) {
-    Zona sidebar = zona_hacer(0, AREA_SUP_ALTO, SIDEBAR_ANCHO,
-                              g.alto - AREA_SUP_ALTO);
-    Zona abajo = barra_abajo_zona();
-    int panel = sidebar_derecho_ancho();
+    int panel = modulos_panel_ancho();
+    Zona sidebar = zona_hacer(0, AREA_SUP_ALTO, panel, g.alto - AREA_SUP_ALTO);
+    Zona abajo = modulos_abajo_zona();
     int x0 = g.ancho - panel;
     Zona derecha = zona_hacer(x0, AREA_SUP_ALTO, panel, g.alto - AREA_SUP_ALTO);
 
     /* Barra lateral izquierda. */
     dibujar_rect_z(sidebar, SIDEBAR);
-    dibujar_rect(SIDEBAR_ANCHO - 1, AREA_SUP_ALTO, SIDEBAR_ANCHO, g.alto,
-                 SEPARADOR);
+    dibujar_rect(panel - 1, AREA_SUP_ALTO, panel, g.alto, SEPARADOR);
 
     /* Panel derecho. */
     dibujar_rect_z(derecha, SIDEBAR);

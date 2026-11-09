@@ -52,8 +52,9 @@ El menú **MODO** incluye **Modo pintar**, que cierra el visor de patrón, sale 
 modo tiles o del editor de mapas y vuelve al lienzo normal.
 
 Al pulsar **GESTOR DE MODULOS** en la barra de menús se abre un espacio de
-trabajo con los paneles izquierdo, derecho e inferior vacíos, manteniendo las
-pestañas y la barra de menús. Pulsa de nuevo la etiqueta para volver a Pintar.
+trabajo con los paneles izquierdo, derecho e inferior vacíos (los dos laterales
+del mismo ancho), manteniendo las pestañas y la barra de menús. Pulsa de nuevo
+la etiqueta para volver a Pintar.
 
 Dentro del gestor, el panel derecho contiene un botón rectangular sin nombre:
 arrástralo hasta el lienzo para insertar un elemento. Los elementos ya colocados
