@@ -67,6 +67,10 @@ al pulsar una escena se carga en el lienzo, y el botón **Nueva escena** guarda
 la actual y crea otra vacía. Si hay más de seis elementos, la rueda sobre la
 lista los desplaza.
 
+La opción **Guardar escena .cene** del menú **ARCHIVO** exporta la escena activa
+a un archivo de texto con su nombre, su desplazamiento y cada elemento
+(posición, tamaño, identificador y estado plegado).
+
 Dentro del gestor, el panel derecho contiene un botón rectangular sin nombre:
 arrástralo hasta el lienzo para insertar un elemento. Los elementos ya colocados
 también se pueden arrastrar. Sus lados tienen efecto imán: al acercarlos a otro

@@ -1212,6 +1212,8 @@ void dialogo_guardar_png(void);
 void dialogo_exportar_bmp(void);
 void dialogo_abrir_mapa(void);
 void dialogo_guardar_mapa(void);
+void dialogo_guardar_escena(void);
+int  escena_guardar_archivo(const char *ruta);
 void dialogo_elegir_color(int para_fondo);
 int  dialogo_elegir_color_valor(u32 inicial, u32 *salida);
 int  dialogo_confirmar(const char *titulo, const char *mensaje);

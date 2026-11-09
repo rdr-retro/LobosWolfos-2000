@@ -656,14 +656,14 @@ static const char *SELECCIONAR_ATAJO[3] = {
 };
 
 #define MENU_ARCHIVO_ANCHO  210
-#define MENU_ARCHIVO_ALTO   132
-#define MENU_ARCHIVO_MAPA   196
+#define MENU_ARCHIVO_ALTO   166
+#define MENU_ARCHIVO_MAPA   230
 #define MENU_FILA_ALTO      30
 #define MENU_ARCHIVO_PASO   32
 
 int menu_num_filas(int menu) {
     switch (menu) {
-        case 0: return g.vista == VISTA_MAPA ? 6 : 4;
+        case 0: return g.vista == VISTA_MAPA ? 7 : 5;
         case 1: return 4;
         case 2: return 5;
         case 4: return 3;
@@ -1121,14 +1121,16 @@ void ui_dibujar_menu_desplegable(void) {
                         case 2: texto = "Abrir"; break;
                         case 3: texto = "Borrar todo"; break;
                         case 4: texto = "Exportar a PNG"; break;
-                        default: texto = "Exportar a BMP"; break;
+                        case 5: texto = "Exportar a BMP"; break;
+                        default: texto = "Guardar escena .cene"; break;
                     }
                 } else {
                     switch (i) {
                         case 0: texto = "Abrir"; break;
                         case 1: texto = "Borrar todo"; break;
                         case 2: texto = "Exportar a PNG"; break;
-                        default: texto = "Exportar a BMP"; break;
+                        case 3: texto = "Exportar a BMP"; break;
+                        default: texto = "Guardar escena .cene"; break;
                     }
                 }
                 dibujar_fila_menu(z, texto, NULL, hover, activo, 0x00A0A0A0u);

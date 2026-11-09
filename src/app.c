@@ -68,12 +68,14 @@ static void accion_archivo(int opcion) {
     int modo_mapa = (g.vista == VISTA_MAPA);
     int fila = opcion;
     if (!modo_mapa) {
-        /* Sin editor de mapas las filas son: Abrir, Borrar, PNG, BMP. */
+        /* Sin editor de mapas las filas son: Abrir, Borrar, PNG, BMP y
+         * Guardar escena. */
         switch (fila) {
             case 0: dialogo_abrir_imagen(); return;
             case 1: fila = 3; break;
             case 2: fila = 4; break;
             case 3: fila = 5; break;
+            case 4: fila = 6; break;
             default: return;
         }
     }
@@ -93,6 +95,7 @@ static void accion_archivo(int opcion) {
             break;
         case 4: dialogo_guardar_png(); break;
         case 5: dialogo_exportar_bmp(); break;
+        case 6: dialogo_guardar_escena(); break;
         default: break;
     }
 }
@@ -838,6 +841,70 @@ void escenas_activar(int indice) {
     g.hover_escena_nueva = 0;
     g.elementos_scroll = 0;
     escenas_reset_arrastre();
+}
+
+/* ------------------------------------------------------------------ */
+/* Archivo de escena (.cene)                                           */
+/* ------------------------------------------------------------------ */
+/* Formato de texto, una escena por archivo:
+ *   CENE1
+ *   <nombre>
+ *   <pan_x> <pan_y>
+ *   <num_elementos>
+ *   <x> <y> <ancho> <alto> <id> <plegado>   (una linea por elemento) */
+int escena_guardar_archivo(const char *ruta) {
+    FILE *f;
+    Escena *e;
+    int i;
+
+    escenas_guardar_activa();
+    if (g.escena_activa < 0 || g.escena_activa >= g.num_escenas) return 0;
+    e = &g.escenas[g.escena_activa];
+    f = fopen(ruta, "wb");
+    if (!f) return 0;
+    fprintf(f, "CENE1\n");
+    fprintf(f, "%s\n", e->nombre);
+    fprintf(f, "%d %d\n", e->pan_x, e->pan_y);
+    fprintf(f, "%d\n", e->num_elementos);
+    for (i = 0; i < e->num_elementos; i++) {
+        const ModuloElemento *m = &e->elementos[i];
+        fprintf(f, "%d %d %d %d %d %d\n",
+                m->x, m->y, m->ancho, m->alto, m->id, m->plegado);
+    }
+    fclose(f);
+    return 1;
+}
+
+/* Dialogo para guardar la escena activa como .cene. */
+void dialogo_guardar_escena(void) {
+    char ruta[MAX_PATH];
+    OPENFILENAMEA ofn;
+    Escena *e;
+
+    if (g.escena_activa < 0 || g.escena_activa >= g.num_escenas) {
+        dialogo_error("No hay ninguna escena para guardar.");
+        return;
+    }
+    escenas_guardar_activa();
+    e = &g.escenas[g.escena_activa];
+    ruta[0] = '\0';
+    _snprintf(ruta, MAX_PATH, "%s.cene", e->nombre);
+    ruta[MAX_PATH - 1] = 0;
+    memset(&ofn, 0, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = g.hwnd;
+    ofn.lpstrFilter = "Escena (*.cene)\0*.cene\0Todos los archivos\0*.*\0\0";
+    ofn.lpstrFile = ruta;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrDefExt = "cene";
+    ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY |
+                OFN_OVERWRITEPROMPT;
+    if (!GetSaveFileNameA(&ofn)) return;
+    if (escena_guardar_archivo(ruta))
+        app_estado("Escena guardada: %s", ruta);
+    else
+        dialogo_error("No se pudo guardar la escena.");
+    app_invalidar();
 }
 
 /* ------------------------------------------------------------------ */

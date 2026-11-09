@@ -1302,6 +1302,22 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 app_soltar(ax1, ay1, 0);
             }
         }
+        /* Guardado directo de la escena activa (pruebas sin dialogo). Va
+         * despues de los clics para poder comprobar el estado plegado. */
+        {
+            char *cene_arg = arg_valor(cmd, "--guardar-escena");
+            if (cene_arg) {
+                char cene_ruta[MAX_PATH];
+                int n = 0;
+                while (cene_arg[n] && cene_arg[n] != ' ' && cene_arg[n] != '\t' &&
+                       n < MAX_PATH - 1) {
+                    cene_ruta[n] = cene_arg[n];
+                    n++;
+                }
+                cene_ruta[n] = 0;
+                escena_guardar_archivo(cene_ruta);
+            }
+        }
         /* Posicion final del raton: actualiza tambien el hover, como un
          * movimiento real, para capturar resaltes y cursores. */
         if (raton_arg) {
