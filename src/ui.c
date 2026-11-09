@@ -5,7 +5,7 @@
 #include "app.h"
 
 static const char *MENU_ETIQUETAS[8] = {
-    "ARCHIVO", "MODO", "EDITAR", "GESTOR DE MODULOS",
+    "ARCHIVO", "MODO", "EDITAR", "GESTOR DE ESCENAS",
     "SELECCIONAR", "CAPA", "COLORES", "INFO"
 };
 
@@ -98,7 +98,7 @@ static Zona modulos_abajo_zona(void) {
     return zona_hacer(panel, g.alto - alto, ancho, alto);
 }
 
-/* Lienzo del gestor de modulos: todo el hueco central entre los paneles
+/* Lienzo del gestor de escenas: todo el hueco central entre los paneles
  * laterales, desde la barra de menus hasta la barra inferior. */
 Zona modulos_lienzo_zona(void) {
     Zona abajo = modulos_abajo_zona();
@@ -118,6 +118,23 @@ Zona modulos_boton_zona(void) {
     if (ancho < 8) ancho = 8;
     return zona_hacer(x0 + SIDEBAR_MARGEN, AREA_SUP_ALTO + SIDEBAR_MARGEN,
                       ancho, MODULOS_BOTON_ALTO);
+}
+
+/* Fila de una escena en la lista del panel izquierdo del gestor. */
+Zona escena_fila_zona(int indice) {
+    int panel = modulos_panel_ancho();
+    int y0 = AREA_SUP_ALTO + ESCENA_TITULO_ALTO;
+    return zona_hacer(SIDEBAR_MARGEN,
+                      y0 + indice * (ESCENA_FILA_ALTO + ESCENA_FILA_HUECO),
+                      panel - SIDEBAR_MARGEN * 2, ESCENA_FILA_ALTO);
+}
+
+/* Boton "Nueva escena", en la parte inferior del panel izquierdo. */
+Zona escena_nueva_zona(void) {
+    int panel = modulos_panel_ancho();
+    return zona_hacer(SIDEBAR_MARGEN,
+                      g.alto - SIDEBAR_MARGEN - ESCENA_NUEVA_ALTO,
+                      panel - SIDEBAR_MARGEN * 2, ESCENA_NUEVA_ALTO);
 }
 
 static int grupos_sidebar(int total, int grupos[3]) {
@@ -3035,7 +3052,41 @@ static void ui_dibujar_boton_modulos(void) {
                  SEPARADOR);
 }
 
-/* Paneles del gestor de modulos: dos laterales iguales y barra inferior,
+/* Lista de escenas y boton de creacion en el panel izquierdo del gestor. */
+static void escenas_dibujar_panel(void) {
+    Zona nueva = escena_nueva_zona();
+    int i;
+
+    fuente_dibujar(SIDEBAR_MARGEN, AREA_SUP_ALTO + 8, "ESCENAS", TEXTO_UI);
+
+    for (i = 0; i < g.num_escenas; i++) {
+        Zona z = escena_fila_zona(i);
+        int activa = (i == g.escena_activa);
+        int hover = (i == g.hover_escena);
+        if (zona_abajo(z) > nueva.y - 4) break;
+        dibujar_rect_z(z, activa ? BOTON_SELECCION
+                                 : (hover ? 0x00EDF2F7u : BARRA));
+        dibujar_marco_z(z, activa ? BOTON_SELECCION : BARRA_BORDE);
+        fuente_dibujar(z.x + 6, z.y + (z.alto - 7) / 2, g.escenas[i].nombre,
+                       activa ? 0x00FFFFFFu : TEXTO_UI);
+    }
+
+    if (g.num_escenas == 0)
+        fuente_dibujar(SIDEBAR_MARGEN, escena_fila_zona(0).y + 8,
+                       "SIN ESCENAS", BARRA_BORDE);
+
+    /* Boton "Nueva escena". */
+    dibujar_rect_z(nueva, g.hover_escena_nueva ? 0x00EDF2F7u : BARRA);
+    dibujar_marco_z(nueva, g.hover_escena_nueva ? BOTON_SELECCION
+                                                : BARRA_BORDE);
+    {
+        const char *texto = "Nueva escena";
+        int tx = nueva.x + (nueva.ancho - fuente_texto_ancho(texto)) / 2;
+        fuente_dibujar(tx, nueva.y + (nueva.alto - 7) / 2, texto, TEXTO_UI);
+    }
+}
+
+/* Paneles del gestor de escenas: dos laterales iguales y barra inferior,
  * completamente vacios. */
 static void ui_dibujar_paneles_vacios(void) {
     int panel = modulos_panel_ancho();
@@ -3057,6 +3108,9 @@ static void ui_dibujar_paneles_vacios(void) {
     dibujar_rect(abajo.x, abajo.y, zona_derecha(abajo), abajo.y + 1,
                  BARRA_BORDE);
 
+    /* Lista de escenas en el panel izquierdo. */
+    escenas_dibujar_panel();
+
     /* Boton de insercion en el panel derecho. */
     ui_dibujar_boton_modulos();
 }
@@ -3064,7 +3118,7 @@ static void ui_dibujar_paneles_vacios(void) {
 void ui_dibujar(void) {
     int i;
 
-    /* Gestor de modulos: paneles vacios, lienzo desplazable y boton. */
+    /* Gestor de escenas: paneles, lista, lienzo desplazable y boton. */
     if (g.vista == VISTA_MODULOS) {
         dibujar_rect(0, 0, g.ancho, g.alto, FONDO);
         ui_dibujar_paneles_vacios();

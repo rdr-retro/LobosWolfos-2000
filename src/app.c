@@ -702,7 +702,7 @@ static void clic_etiqueta_menu(int menu) {
         return;
     }
     if (menu == 3) {
-        /* GESTOR DE MODULOS: espacio de trabajo en blanco. */
+        /* GESTOR DE ESCENAS: lista de escenas en el panel izquierdo. */
         g.menu_abierto = -1;
         app_alternar_gestor_modulos();
         app_invalidar();
@@ -756,7 +756,82 @@ int clic_pestanas(int x, int y, int boton) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Gestor de modulos: boton arrastrable, lienzo y acople magnetico     */
+/* Gestor de escenas: lista del panel izquierdo                        */
+/* ------------------------------------------------------------------ */
+static void escenas_reset_arrastre(void) {
+    g.modulo_arrastrando = 0;
+    g.modulo_drag_i = -1;
+    g.modulo_snap_linea_x = -1;
+    g.modulo_snap_linea_y = -1;
+}
+
+/* Guarda en la escena activa la configuracion actual del lienzo. */
+static void escenas_guardar_activa(void) {
+    Escena *e;
+    if (g.escena_activa < 0 || g.escena_activa >= g.num_escenas) return;
+    e = &g.escenas[g.escena_activa];
+    memcpy(e->elementos, g.modulos, sizeof(ModuloElemento) * g.num_modulos);
+    e->num_elementos = g.num_modulos;
+    e->pan_x = g.pan_x;
+    e->pan_y = g.pan_y;
+}
+
+/* Carga en el lienzo la configuracion de la escena activa. */
+static void escenas_cargar_activa(void) {
+    Escena *e;
+    if (g.escena_activa < 0 || g.escena_activa >= g.num_escenas) return;
+    e = &g.escenas[g.escena_activa];
+    memcpy(g.modulos, e->elementos, sizeof(ModuloElemento) * e->num_elementos);
+    g.num_modulos = e->num_elementos;
+    g.pan_x = e->pan_x;
+    g.pan_y = e->pan_y;
+}
+
+/* Reinicia la lista de escenas y crea la primera vacia. */
+void escenas_iniciar(void) {
+    g.num_escenas = 0;
+    g.escena_activa = -1;
+    g.escena_siguiente = 1;
+    g.hover_escena = -1;
+    g.hover_escena_nueva = 0;
+    g.num_modulos = 0;
+    g.pan_x = 0;
+    g.pan_y = 0;
+    escenas_reset_arrastre();
+    escenas_nueva();
+}
+
+/* Guarda la escena actual y crea otra vacia con su propia vista. */
+void escenas_nueva(void) {
+    Escena *e;
+    if (g.num_escenas >= ESCENAS_MAX) return;
+    escenas_guardar_activa();
+    e = &g.escenas[g.num_escenas];
+    memset(e, 0, sizeof(*e));
+    formatear(e->nombre, sizeof(e->nombre), "Escena %d", g.escena_siguiente++);
+    g.escena_activa = g.num_escenas++;
+    g.num_modulos = 0;
+    g.pan_x = 0;
+    g.pan_y = 0;
+    g.hover_escena = -1;
+    g.hover_escena_nueva = 0;
+    escenas_reset_arrastre();
+}
+
+/* Cambia de escena: guarda la actual y carga la elegida. */
+void escenas_activar(int indice) {
+    if (indice < 0 || indice >= g.num_escenas || indice == g.escena_activa)
+        return;
+    escenas_guardar_activa();
+    g.escena_activa = indice;
+    escenas_cargar_activa();
+    g.hover_escena = indice;
+    g.hover_escena_nueva = 0;
+    escenas_reset_arrastre();
+}
+
+/* ------------------------------------------------------------------ */
+/* Gestor de escenas: boton arrastrable, lienzo y acople magnetico     */
 /* ------------------------------------------------------------------ */
 /* Ajusta una posicion para acoplar los lados del rectangulo a otro
  * elemento ya colocado. `linea_x`/`linea_y` reciben la guia de acople en
@@ -881,6 +956,25 @@ static void modulos_pulsar(int x, int y, int boton) {
         return;
     }
 
+    /* Panel izquierdo: boton de nueva escena y lista de escenas creadas. */
+    if (boton == 0) {
+        int i;
+        if (zona_contiene(escena_nueva_zona(), x, y)) {
+            escenas_nueva();
+            app_invalidar();
+            return;
+        }
+        for (i = 0; i < g.num_escenas; i++) {
+            if (zona_abajo(escena_fila_zona(i)) >
+                escena_nueva_zona().y - 4) break;
+            if (zona_contiene(escena_fila_zona(i), x, y)) {
+                escenas_activar(i);
+                app_invalidar();
+                return;
+            }
+        }
+    }
+
     if (zona_contiene(lienzo, x, y)) {
         /* Con el boton izquierdo, si hay un elemento debajo se mueve. */
         if (boton == 0) {
@@ -956,6 +1050,25 @@ static void modulos_mover(int x, int y) {
         e->y = wy;
         app_invalidar();
         return;
+    }
+
+    /* Hover de la lista de escenas del panel izquierdo. */
+    {
+        int i, h = -1, hn;
+        for (i = 0; i < g.num_escenas; i++) {
+            if (zona_abajo(escena_fila_zona(i)) >
+                escena_nueva_zona().y - 4) break;
+            if (zona_contiene(escena_fila_zona(i), x, y)) {
+                h = i;
+                break;
+            }
+        }
+        hn = zona_contiene(escena_nueva_zona(), x, y);
+        if (h != g.hover_escena || hn != g.hover_escena_nueva) {
+            g.hover_escena = h;
+            g.hover_escena_nueva = hn;
+            app_invalidar();
+        }
     }
 
     hover = zona_contiene(modulos_boton_zona(), x, y);
@@ -1034,7 +1147,7 @@ void app_pulsar(int x, int y, int boton) {
         return;
     }
 
-    /* El gestor de modulos tiene su propio boton y lienzo desplazable. */
+    /* El gestor de escenas tiene su propio boton, lienzo y lista. */
     if (g.vista == VISTA_MODULOS) {
         modulos_pulsar(x, y, boton);
         return;

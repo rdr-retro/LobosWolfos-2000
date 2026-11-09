@@ -15,9 +15,11 @@ para cargar y guardar PNG.
 - Patrón de textura repetido, visor de mosaico y guardado de tiles en PNG.
 - Pestañas de modo: Pintar, Tiles, Mapa y patrón comparten el mismo documento;
   cada pestaña conserva su vista, zoom y desplazamiento.
-- Gestor de módulos: paneles izquierdo, derecho e inferior vacíos, un botón
-  rectangular arrastrable y un lienzo desplazable con rejilla. Los elementos se
-  pueden mover y se acoplan entre sí por sus lados con efecto imán.
+- Gestor de escenas: paneles izquierdo, derecho e inferior (los laterales del
+  mismo ancho), un botón rectangular arrastrable y un lienzo desplazable con
+  rejilla. Los elementos se pueden mover y se acoplan entre sí por sus lados con
+  efecto imán. El panel izquierdo lista las escenas creadas y permite crear
+  nuevas; cada escena guarda su configuración de rectángulos.
 - Apertura y exportación de PNG/BMP y mapas `.mav`.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
 
@@ -51,10 +53,14 @@ sustituyen el documento compartido, no crean pestañas nuevas.
 El menú **MODO** incluye **Modo pintar**, que cierra el visor de patrón, sale del
 modo tiles o del editor de mapas y vuelve al lienzo normal.
 
-Al pulsar **GESTOR DE MODULOS** en la barra de menús se abre un espacio de
-trabajo con los paneles izquierdo, derecho e inferior vacíos (los dos laterales
-del mismo ancho), manteniendo las pestañas y la barra de menús. Pulsa de nuevo
-la etiqueta para volver a Pintar.
+Al pulsar **GESTOR DE ESCENAS** en la barra de menús se abre un espacio de
+trabajo con los paneles izquierdo, derecho e inferior (los dos laterales del
+mismo ancho), manteniendo las pestañas y la barra de menús. Pulsa de nuevo la
+etiqueta para volver a Pintar.
+
+El panel izquierdo muestra la lista de escenas creadas. Cada escena es una
+configuración de rectángulos del lienzo: al pulsar una escena se carga en el
+lienzo, y el botón **Nueva escena** guarda la actual y crea otra vacía.
 
 Dentro del gestor, el panel derecho contiene un botón rectangular sin nombre:
 arrástralo hasta el lienzo para insertar un elemento. Los elementos ya colocados

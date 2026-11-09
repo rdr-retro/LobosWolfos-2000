@@ -138,7 +138,7 @@ typedef unsigned char  u8;
 #define CONFIRMAR_ALTO    132
 #define PANEL_DERECHO_MARGEN_INFERIOR 12
 
-/* Gestor de modulos: lienzo desplazable y boton de insercion. */
+/* Gestor de escenas: lienzo desplazable, boton de insercion y escenas. */
 #define MODULOS_MAX            128
 #define MODULOS_CUADRICULA     32
 #define MODULOS_ELEMENTO_ANCHO 96
@@ -147,6 +147,13 @@ typedef unsigned char  u8;
 #define MODULOS_IMAN           12
 #define MODULOS_REJILLA        0x001A2430u
 #define MODULOS_EJE            0x00304050u
+
+/* Escenas: cada una guarda la configuracion de rectangulos del lienzo. */
+#define ESCENAS_MAX            16
+#define ESCENA_FILA_ALTO       24
+#define ESCENA_FILA_HUECO      2
+#define ESCENA_TITULO_ALTO     28
+#define ESCENA_NUEVA_ALTO      24
 
 #define SIDEBAR_DERECHO_ANCHO \
     (((SIDEBAR_MARGEN * 2 + TILES_REJILLA_ANCHO + TILES_SCROLL_HUECO + TILES_SCROLL_ANCHO) > (SIDEBAR_ANCHO * 2)) \
@@ -579,12 +586,20 @@ typedef struct TileDoc {
     Documento doc;
 } TileDoc;
 
-/* Elemento insertado en el lienzo del gestor de modulos. La posicion se guarda
+/* Elemento insertado en el lienzo del gestor de escenas. La posicion se guarda
  * en coordenadas del mundo y se dibuja con el desplazamiento de la vista. */
 typedef struct ModuloElemento {
     int x, y;
     int ancho, alto;
 } ModuloElemento;
+
+/* Escena: configuracion de rectangulos del lienzo, con su vista. */
+typedef struct Escena {
+    char nombre[32];
+    ModuloElemento elementos[MODULOS_MAX];
+    int num_elementos;
+    int pan_x, pan_y;
+} Escena;
 
 /* ------------------------------------------------------------------ */
 /* Estado global                                                       */
@@ -694,7 +709,7 @@ typedef struct App {
     int mapa_tile_sel;
     char mapa_ruta[MAX_PATH];
 
-    /* Gestor de modulos: elementos insertados en el lienzo y estado del
+    /* Gestor de escenas: elementos insertados en el lienzo y estado del
      * arrastre. El desplazamiento de la vista usa pan_x/pan_y. */
     ModuloElemento modulos[MODULOS_MAX];
     int num_modulos;
@@ -705,6 +720,15 @@ typedef struct App {
     int modulo_elem_off_x, modulo_elem_off_y;
     int modulo_snap_linea_x, modulo_snap_linea_y; /* mundo, -1 = ninguna */
     int hover_modulo_boton;
+
+    /* Escenas creadas y escena activa. La escena activa se edita en
+     * modulos/num_modulos y se guarda al cambiar o crear otra. */
+    Escena escenas[ESCENAS_MAX];
+    int num_escenas;
+    int escena_activa;    /* indice en escenas[], -1 si no hay ninguna */
+    int escena_siguiente; /* numero para el nombre de la proxima escena */
+    int hover_escena;     /* fila de escena bajo el cursor, -1 ninguna */
+    int hover_escena_nueva;
 
     /* Modo tiles */
     int modo_tiles;
@@ -1072,9 +1096,14 @@ Zona barra_abajo_zona(void);
 Zona zona_trabajo(void);
 Zona modulos_lienzo_zona(void);
 Zona modulos_boton_zona(void);
+Zona escena_nueva_zona(void);
+Zona escena_fila_zona(int indice);
 void modulos_acoplar(int *x, int *y, int ancho, int alto, int ignorar,
                      int *linea_x, int *linea_y);
 void modulos_insertar(int x, int y);
+void escenas_iniciar(void);
+void escenas_nueva(void);
+void escenas_activar(int indice);
 int  sidebar_derecho_ancho(void);
 Zona herramienta_zona(int indice);
 Zona panel_textura_zona(void);

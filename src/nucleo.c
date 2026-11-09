@@ -433,7 +433,7 @@ void app_actualizar_titulo(void) {
     const char *nombre;
     if (!g.hwnd) return;
     if (g.vista == VISTA_MODULOS) {
-        strcpy(titulo, "Texture Paint 2000 - Gestor de modulos");
+        strcpy(titulo, "Texture Paint 2000 - Gestor de escenas");
     } else if (g.hover_herramienta >= 0) {
         nombre = ui_nombre_herramienta(g.hover_herramienta);
         _snprintf(titulo, sizeof(titulo), "Texture Paint 2000 - %s", nombre);
@@ -650,6 +650,7 @@ int app_iniciar(void) {
     tiles_modo_iniciar();
     texto_iniciar();
     pestanas_iniciar();
+    escenas_iniciar();
 
     crear_fuentes();
     cargar_iconos();
@@ -707,6 +708,7 @@ static void reemplazar_documento(Documento *nuevo, const char *ruta) {
     pila_limpiar(&g.rehacer);
     seleccion_limpiar(&g.sel);
     tiles_modo_limpiar();
+    escenas_iniciar();
     if (ruta && ruta[0])
         recortar_texto(g.doc_ruta, ruta, sizeof(g.doc_ruta));
     else
@@ -781,6 +783,9 @@ void app_cambiar_vista(Vista vista) {
     g.modulo_snap_linea_x = -1;
     g.modulo_snap_linea_y = -1;
     g.hover_modulo_boton = 0;
+    g.hover_escena = -1;
+    g.hover_escena_nueva = 0;
+    app_actualizar_titulo();
     app_invalidar();
 }
 
@@ -793,8 +798,8 @@ void app_alternar_mapa(void) {
     }
 }
 
-/* Gestor de modulos: espacio de trabajo en blanco que solo conserva las
- * pestanas y la barra de menus. Pulsar de nuevo la etiqueta vuelve a Pintar. */
+/* Gestor de escenas: espacio de trabajo con la lista de escenas en el panel
+ * izquierdo. Pulsar de nuevo la etiqueta vuelve a Pintar. */
 void app_alternar_gestor_modulos(void) {
     if (g.vista == VISTA_MODULOS) {
         app_cambiar_vista(VISTA_PINTAR);
@@ -813,6 +818,7 @@ void app_alternar_gestor_modulos(void) {
     g.capa_menu_abierto = -1;
     g.confirmar_borrado = 0;
     g.confirmar_tile = -1;
+    if (g.num_escenas == 0) escenas_iniciar();
     app_cambiar_vista(VISTA_MODULOS);
 }
 
