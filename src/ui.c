@@ -120,12 +120,38 @@ Zona modulos_boton_zona(void) {
                       ancho, MODULOS_BOTON_ALTO);
 }
 
+/* Bloque de filas de la lista de elementos del lienzo. */
+Zona elementos_lista_zona(void) {
+    int panel = modulos_panel_ancho();
+    int y0 = AREA_SUP_ALTO + ELEMENTO_TITULO_ALTO;
+    return zona_hacer(SIDEBAR_MARGEN, y0, panel - SIDEBAR_MARGEN * 2,
+                      ELEMENTOS_VISIBLES * (ELEMENTO_FILA_ALTO +
+                                            ELEMENTO_FILA_HUECO));
+}
+
+/* Fila de un elemento en la lista del panel izquierdo. */
+Zona elemento_fila_zona(int indice) {
+    int panel = modulos_panel_ancho();
+    int y0 = AREA_SUP_ALTO + ELEMENTO_TITULO_ALTO;
+    return zona_hacer(SIDEBAR_MARGEN,
+                      y0 + indice * (ELEMENTO_FILA_ALTO + ELEMENTO_FILA_HUECO),
+                      panel - SIDEBAR_MARGEN * 2, ELEMENTO_FILA_ALTO);
+}
+
+/* La lista de escenas ocupa siempre el mismo alto reservado para los
+ * elementos, para que no se desplace al cambiar de escena. */
+static int escenas_lista_y0(void) {
+    return AREA_SUP_ALTO + ELEMENTO_TITULO_ALTO +
+           ELEMENTOS_VISIBLES * (ELEMENTO_FILA_ALTO + ELEMENTO_FILA_HUECO) +
+           4 + ESCENA_TITULO_ALTO;
+}
+
 /* Fila de una escena en la lista del panel izquierdo del gestor. */
 Zona escena_fila_zona(int indice) {
     int panel = modulos_panel_ancho();
-    int y0 = AREA_SUP_ALTO + ESCENA_TITULO_ALTO;
     return zona_hacer(SIDEBAR_MARGEN,
-                      y0 + indice * (ESCENA_FILA_ALTO + ESCENA_FILA_HUECO),
+                      escenas_lista_y0() +
+                      indice * (ESCENA_FILA_ALTO + ESCENA_FILA_HUECO),
                       panel - SIDEBAR_MARGEN * 2, ESCENA_FILA_ALTO);
 }
 
@@ -3052,12 +3078,41 @@ static void ui_dibujar_boton_modulos(void) {
                  SEPARADOR);
 }
 
+/* Lista de elementos del lienzo actual, encima de la lista de escenas. */
+static void elementos_dibujar_panel(void) {
+    int total = g.num_modulos;
+    int filas = total;
+    char titulo[32];
+    int i;
+
+    if (filas > ELEMENTOS_VISIBLES) filas = ELEMENTOS_VISIBLES;
+    formatear(titulo, sizeof(titulo), "ELEMENTOS %d", total);
+    fuente_dibujar(SIDEBAR_MARGEN, AREA_SUP_ALTO + 8, titulo, TEXTO_UI);
+
+    for (i = 0; i < filas; i++) {
+        int idx = g.elementos_scroll + i;
+        Zona z;
+        char etiqueta[32];
+        int activo;
+        if (idx >= total) break;
+        z = elemento_fila_zona(i);
+        activo = (g.modulo_arrastrando == 3 && idx == g.modulo_drag_i);
+        formatear(etiqueta, sizeof(etiqueta), "Elemento %d", idx + 1);
+        dibujar_rect_z(z, activo ? BOTON_SELECCION : BARRA);
+        dibujar_marco_z(z, activo ? BOTON_SELECCION : BARRA_BORDE);
+        fuente_dibujar(z.x + 6, z.y + (z.alto - 7) / 2, etiqueta,
+                       activo ? 0x00FFFFFFu : TEXTO_UI);
+    }
+}
+
 /* Lista de escenas y boton de creacion en el panel izquierdo del gestor. */
 static void escenas_dibujar_panel(void) {
     Zona nueva = escena_nueva_zona();
     int i;
 
-    fuente_dibujar(SIDEBAR_MARGEN, AREA_SUP_ALTO + 8, "ESCENAS", TEXTO_UI);
+    fuente_dibujar(SIDEBAR_MARGEN,
+                   escenas_lista_y0() - ESCENA_TITULO_ALTO + 8,
+                   "ESCENAS", TEXTO_UI);
 
     for (i = 0; i < g.num_escenas; i++) {
         Zona z = escena_fila_zona(i);
@@ -3108,7 +3163,8 @@ static void ui_dibujar_paneles_vacios(void) {
     dibujar_rect(abajo.x, abajo.y, zona_derecha(abajo), abajo.y + 1,
                  BARRA_BORDE);
 
-    /* Lista de escenas en el panel izquierdo. */
+    /* Lista de elementos y lista de escenas en el panel izquierdo. */
+    elementos_dibujar_panel();
     escenas_dibujar_panel();
 
     /* Boton de insercion en el panel derecho. */

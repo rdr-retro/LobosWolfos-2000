@@ -794,6 +794,7 @@ void escenas_iniciar(void) {
     g.escena_siguiente = 1;
     g.hover_escena = -1;
     g.hover_escena_nueva = 0;
+    g.elementos_scroll = 0;
     g.num_modulos = 0;
     g.pan_x = 0;
     g.pan_y = 0;
@@ -815,6 +816,7 @@ void escenas_nueva(void) {
     g.pan_y = 0;
     g.hover_escena = -1;
     g.hover_escena_nueva = 0;
+    g.elementos_scroll = 0;
     escenas_reset_arrastre();
 }
 
@@ -827,6 +829,7 @@ void escenas_activar(int indice) {
     escenas_cargar_activa();
     g.hover_escena = indice;
     g.hover_escena_nueva = 0;
+    g.elementos_scroll = 0;
     escenas_reset_arrastre();
 }
 
@@ -941,6 +944,9 @@ void modulos_insertar(int x, int y) {
     e->y = wy;
     e->ancho = MODULOS_ELEMENTO_ANCHO;
     e->alto = MODULOS_ELEMENTO_ALTO;
+    /* La lista muestra el elemento recien anadido. */
+    if (g.num_modulos > ELEMENTOS_VISIBLES)
+        g.elementos_scroll = g.num_modulos - ELEMENTOS_VISIBLES;
 }
 
 static void modulos_pulsar(int x, int y, int boton) {
@@ -1079,6 +1085,19 @@ static void modulos_mover(int x, int y) {
 }
 
 static void modulos_rueda(int x, int y, int delta, int ctrl) {
+    /* Rueda sobre la lista de elementos: desplaza la lista. */
+    if (zona_contiene(elementos_lista_zona(), x, y)) {
+        int maximo = g.num_modulos - ELEMENTOS_VISIBLES;
+        int scroll = g.elementos_scroll + (delta > 0 ? -1 : 1);
+        if (maximo < 0) maximo = 0;
+        if (scroll < 0) scroll = 0;
+        if (scroll > maximo) scroll = maximo;
+        if (scroll != g.elementos_scroll) {
+            g.elementos_scroll = scroll;
+            app_invalidar();
+        }
+        return;
+    }
     if (!zona_contiene(modulos_lienzo_zona(), x, y)) return;
     if (ctrl) {
         g.pan_x += delta > 0 ? MODULOS_CUADRICULA : -MODULOS_CUADRICULA;

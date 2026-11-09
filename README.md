@@ -18,8 +18,8 @@ para cargar y guardar PNG.
 - Gestor de escenas: paneles izquierdo, derecho e inferior (los laterales del
   mismo ancho), un botón rectangular arrastrable y un lienzo desplazable con
   rejilla. Los elementos se pueden mover y se acoplan entre sí por sus lados con
-  efecto imán. El panel izquierdo lista las escenas creadas y permite crear
-  nuevas; cada escena guarda su configuración de rectángulos.
+  efecto imán. El panel izquierdo lista los elementos del lienzo y las escenas
+  creadas; cada escena guarda su configuración de rectángulos.
 - Apertura y exportación de PNG/BMP y mapas `.mav`.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
 
@@ -58,9 +58,11 @@ trabajo con los paneles izquierdo, derecho e inferior (los dos laterales del
 mismo ancho), manteniendo las pestañas y la barra de menús. Pulsa de nuevo la
 etiqueta para volver a Pintar.
 
-El panel izquierdo muestra la lista de escenas creadas. Cada escena es una
+El panel izquierdo muestra, de arriba abajo, la lista de elementos del lienzo
+(`Elemento 1`, `Elemento 2`…) y la lista de escenas creadas. Cada escena es una
 configuración de rectángulos del lienzo: al pulsar una escena se carga en el
-lienzo, y el botón **Nueva escena** guarda la actual y crea otra vacía.
+lienzo, y el botón **Nueva escena** guarda la actual y crea otra vacía. Si hay
+más de seis elementos, la rueda sobre la lista los desplaza.
 
 Dentro del gestor, el panel derecho contiene un botón rectangular sin nombre:
 arrástralo hasta el lienzo para insertar un elemento. Los elementos ya colocados

@@ -152,8 +152,14 @@ typedef unsigned char  u8;
 #define ESCENAS_MAX            16
 #define ESCENA_FILA_ALTO       24
 #define ESCENA_FILA_HUECO      2
-#define ESCENA_TITULO_ALTO     28
+#define ESCENA_TITULO_ALTO     24
 #define ESCENA_NUEVA_ALTO      24
+
+/* Lista de elementos del lienzo, encima de la lista de escenas. */
+#define ELEMENTO_TITULO_ALTO   22
+#define ELEMENTO_FILA_ALTO     20
+#define ELEMENTO_FILA_HUECO    2
+#define ELEMENTOS_VISIBLES     6
 
 #define SIDEBAR_DERECHO_ANCHO \
     (((SIDEBAR_MARGEN * 2 + TILES_REJILLA_ANCHO + TILES_SCROLL_HUECO + TILES_SCROLL_ANCHO) > (SIDEBAR_ANCHO * 2)) \
@@ -729,6 +735,7 @@ typedef struct App {
     int escena_siguiente; /* numero para el nombre de la proxima escena */
     int hover_escena;     /* fila de escena bajo el cursor, -1 ninguna */
     int hover_escena_nueva;
+    int elementos_scroll; /* primer elemento visible de la lista */
 
     /* Modo tiles */
     int modo_tiles;
@@ -1096,6 +1103,8 @@ Zona barra_abajo_zona(void);
 Zona zona_trabajo(void);
 Zona modulos_lienzo_zona(void);
 Zona modulos_boton_zona(void);
+Zona elementos_lista_zona(void);
+Zona elemento_fila_zona(int indice);
 Zona escena_nueva_zona(void);
 Zona escena_fila_zona(int indice);
 void modulos_acoplar(int *x, int *y, int ancho, int alto, int ignorar,
