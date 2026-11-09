@@ -841,51 +841,81 @@ int pestana_en(int x, int y) {
     return -1;
 }
 
-/* Borde izquierdo del trapecio para una fila local. La parte superior se
- * redondea y la base se abre con una curva concava hasta el ancho completo. */
-static int tab_izquierda(int ancho, int alto, int y) {
-    int s = TAB_LADO_INSET;
-    int r = TAB_RADIO_SUP;
-    int b = TAB_CURVA_BASE;
-    if (ancho <= 0 || alto <= 0) return 0;
-    if (y < 0) y = 0;
-    if (y >= alto) y = alto - 1;
-    if (b > alto / 2) b = alto / 2;
-    if (r > alto / 2) r = alto / 2;
-    if (y < r) {
-        int dy = r - y;
-        int dentro = r * r - dy * dy;
-        int f = (int)(sqrtf((float)dentro) + 0.5f);
-        return s + r - f;
+/* Prototipo: mezcla de cobertura usada por el borde suavizado. */
+static void mezclar_cobertura(int x, int y, u32 color, int alfa);
+
+/* Interiores de la pestana redondeada. La base queda abierta: la forma sigue
+ * hasta el borde inferior de la barra. */
+static int tab_dentro(float px, float py, Zona t, float r) {
+    float x0 = (float)t.x, y0 = (float)t.y;
+    float x1 = (float)(t.x + t.ancho);
+
+    if (px < x0 || px >= x1 || py < y0) return 0;
+    if (py < y0 + r) {
+        float dx, dy;
+        if (px < x0 + r) {
+            dx = px - (x0 + r);
+            dy = py - (y0 + r);
+            return dx * dx + dy * dy <= r * r;
+        }
+        if (px > x1 - r) {
+            dx = px - (x1 - r);
+            dy = py - (y0 + r);
+            return dx * dx + dy * dy <= r * r;
+        }
     }
-    if (y < alto - b) return s;
-    {
-        int k = y - (alto - b);
-        float t = (float)k / (float)(b > 0 ? b : 1);
-        float inv = 1.0f - t;
-        return (int)((float)s * inv * inv + 0.5f);
-    }
+    return 1;
 }
 
-/* Rellena el trapecio y dibuja su contorno. La base queda abierta para que la
- * pestana se funda con la barra inferior. */
+/* Distancia al borde superior o lateral; se usa para el contorno de 1 px. */
+static float tab_distancia_borde(float px, float py, Zona t, float r) {
+    float x0 = (float)t.x, y0 = (float)t.y;
+    float x1 = (float)(t.x + t.ancho);
+    float d;
+
+    if (py < y0 + r && (px < x0 + r || px > x1 - r)) {
+        float cx = (px < x0 + r) ? (x0 + r) : (x1 - r);
+        float dx = px - cx, dy = py - (y0 + r);
+        return r - sqrtf(dx * dx + dy * dy);
+    }
+    d = px - x0;
+    if (x1 - px < d) d = x1 - px;
+    if (py - y0 < d) d = py - y0;
+    return d;
+}
+
+/* Rellena la pestana con esquinas superiores redondeadas y contorno suavizado
+ * por supermuestreo 4x4. La base queda abierta para fundirse con la barra. */
 static void dibujar_forma_pestana(Zona t, int activa, u32 fondo) {
-    int y;
     u32 borde = activa ? TAB_ACTIVA_BORDE : TAB_INACTIVA_BORDE;
-    for (y = 0; y < t.alto; y++) {
-        int xl = tab_izquierda(t.ancho, t.alto, y);
-        int xr = t.ancho - 1 - xl;
-        int py = t.y + y;
-        if (xr <= xl) continue;
-        dibujar_rect(t.x + xl, py, t.x + xr + 1, py + 1, fondo);
-        if (y == 0) {
-            dibujar_rect(t.x + xl, py, t.x + xr + 1, py + 1, borde);
-        } else {
-            dibujar_rect(t.x + xl, py, t.x + xl + 1, py + 1, borde);
-            dibujar_rect(t.x + xr, py, t.x + xr + 1, py + 1, borde);
-            if (!activa && y == 1)
-                dibujar_rect(t.x + xl + 1, py, t.x + xr, py + 1,
-                             TAB_BARRA_LUZ);
+    float r = (float)TAB_RADIO_SUP;
+    int x, y;
+    const int muestras = 4;
+
+    if (t.ancho <= 0 || t.alto <= 0) return;
+    for (y = t.y; y < t.y + t.alto; y++) {
+        for (x = t.x; x < t.x + t.ancho; x++) {
+            int cb = 0, cf = 0, sx, sy;
+            if (x < 0 || y < 0 || x >= g.ancho || y >= g.alto) continue;
+            for (sy = 0; sy < muestras; sy++) {
+                for (sx = 0; sx < muestras; sx++) {
+                    float px = (float)x + ((float)sx + 0.5f) / muestras;
+                    float py = (float)y + ((float)sy + 0.5f) / muestras;
+                    if (!tab_dentro(px, py, t, r)) continue;
+                    if (tab_distancia_borde(px, py, t, r) <= 1.0f)
+                        cb++;
+                    else
+                        cf++;
+                }
+            }
+            if (cb > 0)
+                mezclar_cobertura(x, y, borde,
+                                  (cb * 255 + muestras * muestras / 2) /
+                                  (muestras * muestras));
+            if (cf > 0)
+                mezclar_cobertura(x, y, fondo,
+                                  (cf * 255 + muestras * muestras / 2) /
+                                  (muestras * muestras));
         }
     }
 }

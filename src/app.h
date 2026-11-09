@@ -314,8 +314,7 @@ typedef unsigned char  u8;
 #define TAB_CERRAR_LADO   16
 #define TAB_NUEVO_LADO    24
 #define TAB_LADO_INSET    4
-#define TAB_RADIO_SUP     4
-#define TAB_CURVA_BASE    8
+#define TAB_RADIO_SUP     6
 
 /* Herramienta de texto: medidas y margenes. */
 #define TEXTO_MARGEN                 2
