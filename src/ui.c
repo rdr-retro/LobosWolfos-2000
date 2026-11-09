@@ -2893,6 +2893,15 @@ void ui_dibujar_info(void) {
 void ui_dibujar(void) {
     int i;
 
+    /* Gestor de modulos: lienzo en blanco con solo pestanas y menus. */
+    if (g.vista == VISTA_MODULOS) {
+        dibujar_rect(0, 0, g.ancho, g.alto, 0x00FFFFFFu);
+        ui_dibujar_pestanas();
+        ui_dibujar_barra_menus();
+        ui_dibujar_menu_desplegable();
+        return;
+    }
+
     /* Fondo general. */
     dibujar_rect(0, 0, g.ancho, g.alto, FONDO);
 

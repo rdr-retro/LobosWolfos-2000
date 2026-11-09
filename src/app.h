@@ -573,7 +573,8 @@ typedef struct TileDoc {
 /* ------------------------------------------------------------------ */
 typedef enum {
     VISTA_PINTAR = 0,
-    VISTA_MAPA
+    VISTA_MAPA,
+    VISTA_MODULOS
 } Vista;
 
 /* Estado de una pestana. Todas las pestanas comparten el mismo documento, el
@@ -1146,6 +1147,7 @@ void app_abrir_imagen(const char *ruta);
 void app_guardar_imagen(const char *ruta, int png);
 void app_cambiar_vista(Vista vista);
 void app_alternar_mapa(void);
+void app_alternar_gestor_modulos(void);
 void app_poner_herramienta(int herramienta);
 void app_agregar_color_paleta(u32 color);
 

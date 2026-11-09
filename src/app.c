@@ -101,6 +101,7 @@ static void accion_modo(int opcion) {
     switch (opcion) {
         case 0:
             g.patron_visible = 1;
+            if (g.vista != VISTA_PINTAR) app_cambiar_vista(VISTA_PINTAR);
             app_invalidar();
             break;
         case 1:
@@ -693,9 +694,15 @@ static void clic_etiqueta_menu(int menu) {
         app_invalidar();
         return;
     }
-    if (menu == 3 || menu == 5 || menu == 6) {
-        /* GESTOR DE MODULOS, CAPA y COLORES no tienen desplegable: solo su
-         * etiqueta. */
+    if (menu == 3) {
+        /* GESTOR DE MODULOS: espacio de trabajo en blanco. */
+        g.menu_abierto = -1;
+        app_alternar_gestor_modulos();
+        app_invalidar();
+        return;
+    }
+    if (menu == 5 || menu == 6) {
+        /* CAPA y COLORES no tienen desplegable: solo su etiqueta. */
         g.menu_abierto = -1;
         app_invalidar();
         return;
@@ -800,6 +807,9 @@ void app_pulsar(int x, int y, int boton) {
         return;
     }
 
+    /* El gestor de modulos solo tiene pestanas y menus. */
+    if (g.vista == VISTA_MODULOS) return;
+
     if (g.vista == VISTA_PINTAR && texto_pulsar(x, y, boton)) return;
 
     if (clic_info(x, y)) return;
@@ -837,6 +847,7 @@ void app_soltar(int x, int y, int boton) {
     g.raton_y = y;
     g.opcion_arrastrada = -1;
     g.cubo_arrastre = -1;
+    if (g.vista == VISTA_MODULOS) return;
     if (g.arrastre_tiles) {
         tiles_modo_soltar();
         app_invalidar();
@@ -877,6 +888,12 @@ void app_mover(int x, int y, int botones) {
     int i;
     g.raton_x = x;
     g.raton_y = y;
+
+    /* En el gestor solo cambia el hover de pestanas y menus. */
+    if (g.vista == VISTA_MODULOS) {
+        if (y < AREA_SUP_ALTO) app_invalidar();
+        return;
+    }
 
     /* La franja de pestanas solo necesita repintar el hover. */
     if (y >= 0 && y < TAB_BARRA_ALTO && arrastre == 0 && !g.arrastre_tiles &&
@@ -1028,6 +1045,7 @@ void app_mover(int x, int y, int botones) {
 void app_rueda(int x, int y, int delta, int ctrl) {
     g.raton_x = x;
     g.raton_y = y;
+    if (g.vista == VISTA_MODULOS) return;
     if (g.vista == VISTA_MAPA && zona_contiene(zona_trabajo(), x, y)) {
         mapa_rueda(x, y, delta, ctrl);
         return;
@@ -1065,11 +1083,13 @@ void app_tecla(int vk, int ctrl, int shift) {
     if (ctrl && vk == 'S') { dialogo_guardar_png(); return; }
     if (ctrl && vk == 'M') { app_cambiar_vista(g.vista == VISTA_MAPA ? VISTA_PINTAR : VISTA_MAPA); return; }
     if (vk == VK_F1) { g.info_visible = !g.info_visible; app_invalidar(); return; }
+    if (g.vista == VISTA_MODULOS) return;
     if (g.vista == VISTA_PINTAR && texto_tecla(vk, ctrl, shift)) return;
     pintura_tecla(vk, ctrl, shift);
 }
 
 void app_caracter(int ch) {
+    if (g.vista == VISTA_MODULOS) return;
     if (g.vista == VISTA_PINTAR && texto_caracter(ch)) return;
     pintura_caracter(ch);
 }
@@ -1081,7 +1101,7 @@ void app_doble_clic(int x, int y) {
             pestanas_nueva_modo();
         return;
     }
-    if (g.vista == VISTA_MAPA) return;
+    if (g.vista == VISTA_MAPA || g.vista == VISTA_MODULOS) return;
     pintura_doble_clic(x, y);
 }
 

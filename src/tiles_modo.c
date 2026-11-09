@@ -319,8 +319,8 @@ void tiles_modo_liberar(void) {
 
 void tiles_modo_entrar(void) {
     int i;
-    /* Al entrar en tiles se sale del editor de mapas. */
-    if (g.vista == VISTA_MAPA) g.vista = VISTA_PINTAR;
+    /* Al entrar en tiles se sale del editor de mapas o del gestor. */
+    if (g.vista != VISTA_PINTAR) g.vista = VISTA_PINTAR;
 
     if (g.sel.activa) pintura_confirmar_seleccion();
     seleccion_limpiar(&g.sel);

@@ -255,6 +255,7 @@ const char *pestanas_titulo(int indice) {
         tiles = g.pestanas[indice].modo_tiles;
     }
     if (vista == VISTA_MAPA) return "Mapa";
+    if (vista == VISTA_MODULOS) return "Modulos";
     if (tiles) return "Tiles";
     if (patron) return "Patron";
     return "Pintar";

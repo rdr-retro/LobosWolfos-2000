@@ -432,14 +432,20 @@ void app_actualizar_titulo(void) {
     char titulo[128];
     const char *nombre;
     if (!g.hwnd) return;
-    if (g.hover_herramienta >= 0) nombre = ui_nombre_herramienta(g.hover_herramienta);
-    else nombre = ui_nombre_herramienta((int)g.herramienta);
-    if (nombre && nombre[0]) {
+    if (g.vista == VISTA_MODULOS) {
+        strcpy(titulo, "Texture Paint 2000 - Gestor de modulos");
+    } else if (g.hover_herramienta >= 0) {
+        nombre = ui_nombre_herramienta(g.hover_herramienta);
         _snprintf(titulo, sizeof(titulo), "Texture Paint 2000 - %s", nombre);
-        titulo[sizeof(titulo) - 1] = 0;
     } else {
-        strcpy(titulo, "Texture Paint 2000");
+        nombre = ui_nombre_herramienta((int)g.herramienta);
+        if (nombre && nombre[0]) {
+            _snprintf(titulo, sizeof(titulo), "Texture Paint 2000 - %s", nombre);
+        } else {
+            strcpy(titulo, "Texture Paint 2000");
+        }
     }
+    titulo[sizeof(titulo) - 1] = 0;
     SetWindowTextA(g.hwnd, titulo);
 }
 
@@ -703,6 +709,8 @@ static void reemplazar_documento(Documento *nuevo, const char *ruta) {
     else
         g.doc_ruta[0] = 0;
     pestanas_documento_reemplazado();
+    /* El documento nuevo se muestra en el lienzo, no en el gestor. */
+    if (g.vista == VISTA_MODULOS) g.vista = VISTA_PINTAR;
     app_actualizar_titulo();
     app_invalidar();
 }
@@ -774,6 +782,29 @@ void app_alternar_mapa(void) {
         app_cambiar_vista(VISTA_MAPA);
         mapa_reiniciar();
     }
+}
+
+/* Gestor de modulos: espacio de trabajo en blanco que solo conserva las
+ * pestanas y la barra de menus. Pulsar de nuevo la etiqueta vuelve a Pintar. */
+void app_alternar_gestor_modulos(void) {
+    if (g.vista == VISTA_MODULOS) {
+        app_cambiar_vista(VISTA_PINTAR);
+        return;
+    }
+    /* Cierra cualquier edicion en curso antes de ocultar el lienzo. */
+    if (g.texto_activo) texto_confirmar();
+    if (g.curva_activa) pintura_figura_confirmar(0, 0, 0);
+    if (g.preview_activa) pintura_figura_cancelar();
+    if (g.sel.activa && g.sel.flotante)
+        seleccion_soltar(&g.sel, &g.doc, &g.deshacer);
+    g.pintando = 0;
+    g.poligono_activo = 0;
+    g.lienzo_tirador = -1;
+    g.sel_tirador = -1;
+    g.capa_menu_abierto = -1;
+    g.confirmar_borrado = 0;
+    g.confirmar_tile = -1;
+    app_cambiar_vista(VISTA_MODULOS);
 }
 
 void app_poner_herramienta(int herramienta) {
@@ -1188,6 +1219,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
         if (menu_arg) g.menu_abierto = atoi(menu_arg);
         if (vista_arg && strncmp(vista_arg, "mapa", 4) == 0) g.vista = VISTA_MAPA;
         if (strstr(cmd, "--tiles") != NULL) tiles_modo_entrar();
+        if (strstr(cmd, "--gestor") != NULL) g.vista = VISTA_MODULOS;
         if (strstr(cmd, "--info") != NULL) g.info_visible = 1;
         if (strstr(cmd, "--patron") != NULL) g.patron_visible = 1;
         if (strstr(cmd, "--mayus") != NULL) g.shift_simulado = 1;
