@@ -680,6 +680,33 @@ void app_terminar(void) {
 /* ------------------------------------------------------------------ */
 /* Cambios de vista y documentos                                       */
 /* ------------------------------------------------------------------ */
+/* Sustituye el documento compartido por otro. Los modos de las pestanas se
+ * conservan, pero el historial, la seleccion y la rejilla de tiles empiezan
+ * de cero porque pertenecen al documento anterior. */
+static void reemplazar_documento(Documento *nuevo, const char *ruta) {
+    /* Cancela cualquier edicion en curso: pertenece al documento anterior. */
+    if (g.texto_activo) texto_cancelar();
+    if (g.preview_activa || g.curva_activa) pintura_figura_cancelar();
+    g.pintando = 0;
+    g.poligono_activo = 0;
+    g.lienzo_tirador = -1;
+    g.sel_tirador = -1;
+    doc_liberar(&g.doc);
+    g.doc = *nuevo;
+    memset(nuevo, 0, sizeof(*nuevo));
+    pila_limpiar(&g.deshacer);
+    pila_limpiar(&g.rehacer);
+    seleccion_limpiar(&g.sel);
+    tiles_modo_limpiar();
+    if (ruta && ruta[0])
+        recortar_texto(g.doc_ruta, ruta, sizeof(g.doc_ruta));
+    else
+        g.doc_ruta[0] = 0;
+    pestanas_documento_reemplazado();
+    app_actualizar_titulo();
+    app_invalidar();
+}
+
 void app_nueva_imagen(int ancho, int alto) {
     Documento nuevo;
     ancho = limitar(ancho, MIN_LADO, LIENZO_MAX);
@@ -691,16 +718,13 @@ void app_nueva_imagen(int ancho, int alto) {
         return;
     }
     doc_componer_todo(&nuevo);
-    if (!pestanas_nueva_documento(&nuevo, NULL, NULL,
-                                  zoom_para_caber(ancho, alto)))
-        doc_liberar(&nuevo);
+    reemplazar_documento(&nuevo, NULL);
 }
 
 void app_abrir_imagen(const char *ruta) {
     int w = 0, h = 0;
     u32 *pix = imagen_cargar(ruta, &w, &h);
     Documento nuevo;
-    char titulo[128];
     if (!pix) {
         dialogo_error("No se pudo abrir la imagen.");
         return;
@@ -721,12 +745,7 @@ void app_abrir_imagen(const char *ruta) {
     copiar_pixeles(nuevo.capas[0].pixeles, pix, w * h);
     free(pix);
     doc_componer_todo(&nuevo);
-    ruta_nombre(titulo, sizeof(titulo), ruta);
-    if (!pestanas_nueva_documento(&nuevo, titulo, ruta,
-                                  zoom_para_caber(w, h))) {
-        doc_liberar(&nuevo);
-        return;
-    }
+    reemplazar_documento(&nuevo, ruta);
     app_estado("Imagen abierta: %dx%d", w, h);
 }
 
@@ -822,8 +841,12 @@ static OPENFILENAMEA preparar_dialogo(char *ruta, const char *filtro, const char
 }
 
 void dialogo_nuevo(void) {
-    /* Cada documento vive en su propia pestana: crear uno nuevo no descarta
-     * el actual. */
+    if (g.doc.modificado) {
+        if (!dialogo_confirmar("Nuevo lienzo",
+                "El documento tiene cambios sin guardar.\n"
+                "¿Crear uno nuevo de todos modos?"))
+            return;
+    }
     app_nueva_imagen(LIENZO_INICIAL, LIENZO_INICIAL);
 }
 
@@ -835,7 +858,14 @@ void dialogo_abrir_imagen(void) {
         "Imagenes\0*.png;*.bmp;*.jpg;*.jpeg;*.gif;*.tif;*.tiff\0Todos los archivos\0*.*\0\0",
         "");
     ofn.Flags |= OFN_FILEMUSTEXIST;
-    if (GetOpenFileNameA(&ofn)) app_abrir_imagen(ruta);
+    if (!GetOpenFileNameA(&ofn)) return;
+    if (g.doc.modificado) {
+        if (!dialogo_confirmar("Abrir imagen",
+                "El documento tiene cambios sin guardar.\n"
+                "¿Abrir otra imagen de todos modos?"))
+            return;
+    }
+    app_abrir_imagen(ruta);
 }
 
 void dialogo_guardar_png(void) {
@@ -1043,7 +1073,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_CLOSE:
             if (pestanas_hay_cambios()) {
-                if (!dialogo_confirmar("Salir", "Hay cambios sin guardar en una o mas pestanas.\n¿Salir de todos modos?"))
+                if (!dialogo_confirmar("Salir", "El documento tiene cambios sin guardar.\n¿Salir de todos modos?"))
                     return 0;
             }
             DestroyWindow(hwnd);

@@ -576,21 +576,17 @@ typedef enum {
     VISTA_MAPA
 } Vista;
 
-/* Estado completo de una pestana. La pestana activa mantiene su documento en
- * `g.doc`, sus pilas en `g.deshacer`/`g.rehacer` y su seleccion en `g.sel`;
- * las inactivas guardan aqui su propio estado. */
+/* Estado de una pestana. Todas las pestanas comparten el mismo documento, el
+ * historial, la seleccion y la rejilla de tiles; aqui solo se guarda como se
+ * esta viendo ese documento: modo de trabajo, zoom y desplazamiento. */
 typedef struct Pestana {
-    char titulo[128];
-    char ruta[MAX_PATH];
-    Documento doc;
-    PilaUndo deshacer, rehacer;
-    Seleccion sel;
     int zoom_idx;
     Vista vista;
+    int patron_visible;
     int modo_tiles;
-    int tile_cx, tile_cy;
-    TileDoc tiles_modo[TILES_MODO_MAX];
-    int num_tiles_modo;
+    int pan_x, pan_y;
+    int tiles_visible;
+    int tiles_plegado;
 } Pestana;
 
 typedef struct App {
@@ -611,6 +607,7 @@ typedef struct App {
     int boton_izq, boton_der, boton_medio;
 
     Documento doc;
+    char doc_ruta[MAX_PATH];
     PilaUndo deshacer, rehacer;
     Seleccion sel;
 
@@ -1003,8 +1000,8 @@ int  tiles_modo_cruzar_trazo(int x, int y);
 /* ------------------------------------------------------------------ */
 void pestanas_iniciar(void);
 void pestanas_terminar(void);
-int  pestanas_nueva_documento(Documento *nuevo, const char *titulo,
-                              const char *ruta, int zoom_idx);
+int  pestanas_nueva_modo(void);
+void pestanas_documento_reemplazado(void);
 int  pestanas_activar(int indice);
 int  pestanas_cerrar(int indice);
 int  pestanas_hay_cambios(void);

@@ -734,7 +734,7 @@ int clic_pestanas(int x, int y, int boton) {
         return 1;
     }
     if (zona_contiene(pestana_nueva_zona(), x, y)) {
-        app_nueva_imagen(LIENZO_INICIAL, LIENZO_INICIAL);
+        pestanas_nueva_modo();
         return 1;
     }
     /* Clic en una zona vacia de la franja: no pasa al resto de la interfaz. */
@@ -1052,7 +1052,7 @@ void app_tecla(int vk, int ctrl, int shift) {
         app_invalidar();
         return;
     }
-    if (ctrl && vk == 'T') { app_nueva_imagen(LIENZO_INICIAL, LIENZO_INICIAL); return; }
+    if (ctrl && vk == 'T') { pestanas_nueva_modo(); return; }
     if (ctrl && vk == 'W') { pestanas_cerrar(g.pestana_activa); return; }
     if (ctrl && vk == VK_TAB) { pestanas_avanzar(shift ? -1 : 1); return; }
     if (ctrl && vk >= '1' && vk <= '9') {
@@ -1078,7 +1078,7 @@ void app_doble_clic(int x, int y) {
     if (y >= 0 && y < TAB_BARRA_ALTO) {
         if (pestana_en(x, y) < 0 &&
             !zona_contiene(pestana_nueva_zona(), x, y))
-            app_nueva_imagen(LIENZO_INICIAL, LIENZO_INICIAL);
+            pestanas_nueva_modo();
         return;
     }
     if (g.vista == VISTA_MAPA) return;

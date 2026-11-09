@@ -13,8 +13,8 @@ para cargar y guardar PNG.
 - Selección rectangular y de forma libre, con arrastre y redimensionado.
 - Herramienta de texto con varias fuentes y tamaños.
 - Patrón de textura repetido, visor de mosaico y guardado de tiles en PNG.
-- Pestañas estilo navegador: cada documento conserva su historial, selección,
-  zoom y estado de mosaicos.
+- Pestañas de modo: Pintar, Tiles, Mapa y patrón comparten el mismo documento;
+  cada pestaña conserva su vista, zoom y desplazamiento.
 - Apertura y exportación de PNG/BMP y mapas `.mav`.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
 
@@ -40,13 +40,18 @@ También se puede compilar desde PowerShell:
 Ejecuta `TexturePaint2000.exe`. Los tiles que guardes se almacenan en la carpeta
 `tiles` junto al ejecutable.
 
+Las pestañas representan modos de trabajo sobre el mismo documento. El botón
+`+` (o `Ctrl+T`) duplica el modo actual en otra pestaña; después puedes cambiar
+esa pestaña a Tiles, Mapa o patrón sin tocar el documento. `Nuevo` y `Abrir`
+sustituyen el documento compartido, no crean pestañas nuevas.
+
 ## Atajos
 
 | Atajo | Acción |
 |---|---|
 | `Ctrl+Z` | Deshacer |
 | `Ctrl+Y` / `Ctrl+Shift+Z` | Rehacer |
-| `Ctrl+T` | Nueva pestaña |
+| `Ctrl+T` | Nueva pestaña con el modo actual |
 | `Ctrl+W` | Cerrar la pestaña activa |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Pestaña siguiente / anterior |
 | `Ctrl+1` … `Ctrl+9` | Ir a una pestaña |
