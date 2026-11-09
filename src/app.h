@@ -137,6 +137,16 @@ typedef unsigned char  u8;
 #define CONFIRMAR_ANCHO   320
 #define CONFIRMAR_ALTO    132
 #define PANEL_DERECHO_MARGEN_INFERIOR 12
+
+/* Gestor de modulos: lienzo desplazable y boton de insercion. */
+#define MODULOS_MAX            128
+#define MODULOS_CUADRICULA     32
+#define MODULOS_ELEMENTO_ANCHO 96
+#define MODULOS_ELEMENTO_ALTO  64
+#define MODULOS_BOTON_ALTO     56
+#define MODULOS_REJILLA        0x001A2430u
+#define MODULOS_EJE            0x00304050u
+
 #define SIDEBAR_DERECHO_ANCHO \
     (((SIDEBAR_MARGEN * 2 + TILES_REJILLA_ANCHO + TILES_SCROLL_HUECO + TILES_SCROLL_ANCHO) > (SIDEBAR_ANCHO * 2)) \
         ? (SIDEBAR_MARGEN * 2 + TILES_REJILLA_ANCHO + TILES_SCROLL_HUECO + TILES_SCROLL_ANCHO) \
@@ -568,6 +578,13 @@ typedef struct TileDoc {
     Documento doc;
 } TileDoc;
 
+/* Elemento insertado en el lienzo del gestor de modulos. La posicion se guarda
+ * en coordenadas del mundo y se dibuja con el desplazamiento de la vista. */
+typedef struct ModuloElemento {
+    int x, y;
+    int ancho, alto;
+} ModuloElemento;
+
 /* ------------------------------------------------------------------ */
 /* Estado global                                                       */
 /* ------------------------------------------------------------------ */
@@ -675,6 +692,14 @@ typedef struct App {
     Mapa mapa;
     int mapa_tile_sel;
     char mapa_ruta[MAX_PATH];
+
+    /* Gestor de modulos: elementos insertados en el lienzo y estado del
+     * arrastre. El desplazamiento de la vista usa pan_x/pan_y. */
+    ModuloElemento modulos[MODULOS_MAX];
+    int num_modulos;
+    int modulo_arrastrando; /* 0 = nada, 1 = elemento nuevo, 2 = paneo */
+    int modulo_drag_x, modulo_drag_y;
+    int hover_modulo_boton;
 
     /* Modo tiles */
     int modo_tiles;
@@ -1040,6 +1065,8 @@ int  menu_barra_en(int x, int y);
 Zona barra_zona(void);
 Zona barra_abajo_zona(void);
 Zona zona_trabajo(void);
+Zona modulos_lienzo_zona(void);
+Zona modulos_boton_zona(void);
 int  sidebar_derecho_ancho(void);
 Zona herramienta_zona(int indice);
 Zona panel_textura_zona(void);

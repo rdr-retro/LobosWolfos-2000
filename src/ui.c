@@ -84,6 +84,28 @@ Zona zona_trabajo(void) {
     return zona_hacer(SIDEBAR_ANCHO, arriba, ancho_util(), alto);
 }
 
+/* Lienzo del gestor de modulos: todo el hueco central entre los paneles
+ * laterales, desde la barra de menus hasta la barra inferior. */
+Zona modulos_lienzo_zona(void) {
+    Zona abajo = barra_abajo_zona();
+    int panel = sidebar_derecho_ancho();
+    int ancho = g.ancho - SIDEBAR_ANCHO - panel;
+    int alto = abajo.y - AREA_SUP_ALTO;
+    if (ancho < MIN_LADO) ancho = MIN_LADO;
+    if (alto < MIN_LADO) alto = MIN_LADO;
+    return zona_hacer(SIDEBAR_ANCHO, AREA_SUP_ALTO, ancho, alto);
+}
+
+/* Boton rectangular sin nombre del panel derecho del gestor. */
+Zona modulos_boton_zona(void) {
+    int panel = sidebar_derecho_ancho();
+    int x0 = g.ancho - panel;
+    int ancho = panel - SIDEBAR_MARGEN * 2;
+    if (ancho < 8) ancho = 8;
+    return zona_hacer(x0 + SIDEBAR_MARGEN, AREA_SUP_ALTO + SIDEBAR_MARGEN,
+                      ancho, MODULOS_BOTON_ALTO);
+}
+
 static int grupos_sidebar(int total, int grupos[3]) {
     int normales = total - HERRAMIENTAS_ESPECIALES;
     int division;
@@ -2892,6 +2914,82 @@ void ui_dibujar_info(void) {
 /* ------------------------------------------------------------------ */
 /* Dibujo general                                                      */
 /* ------------------------------------------------------------------ */
+/* Recorta un rectangulo a la zona indicada. Devuelve 0 si no queda nada. */
+static int modulos_recortar(Zona z, int *x0, int *y0, int *x1, int *y1) {
+    if (*x0 < z.x) *x0 = z.x;
+    if (*y0 < z.y) *y0 = z.y;
+    if (*x1 > zona_derecha(z)) *x1 = zona_derecha(z);
+    if (*y1 > zona_abajo(z)) *y1 = zona_abajo(z);
+    return *x0 < *x1 && *y0 < *y1;
+}
+
+static void modulos_dibujar_rejilla(Zona lienzo) {
+    int off_x = g.pan_x % MODULOS_CUADRICULA;
+    int off_y = g.pan_y % MODULOS_CUADRICULA;
+    int x, y;
+
+    if (off_x < 0) off_x += MODULOS_CUADRICULA;
+    if (off_y < 0) off_y += MODULOS_CUADRICULA;
+
+    for (x = lienzo.x + off_x; x < zona_derecha(lienzo); x += MODULOS_CUADRICULA)
+        dibujar_rect(x, lienzo.y, x + 1, zona_abajo(lienzo), MODULOS_REJILLA);
+    for (y = lienzo.y + off_y; y < zona_abajo(lienzo); y += MODULOS_CUADRICULA)
+        dibujar_rect(lienzo.x, y, zona_derecha(lienzo), y + 1, MODULOS_REJILLA);
+
+    /* Origen del mundo: ayuda a percibir el desplazamiento. */
+    x = lienzo.x + g.pan_x;
+    y = lienzo.y + g.pan_y;
+    if (x >= lienzo.x && x < zona_derecha(lienzo))
+        dibujar_rect(x, lienzo.y, x + 1, zona_abajo(lienzo), MODULOS_EJE);
+    if (y >= lienzo.y && y < zona_abajo(lienzo))
+        dibujar_rect(lienzo.x, y, zona_derecha(lienzo), y + 1, MODULOS_EJE);
+}
+
+/* Lienzo desplazable del gestor: rejilla y elementos insertados. */
+static void modulos_dibujar_lienzo(void) {
+    Zona lienzo = modulos_lienzo_zona();
+    int i;
+
+    modulos_dibujar_rejilla(lienzo);
+
+    for (i = 0; i < g.num_modulos; i++) {
+        ModuloElemento *e = &g.modulos[i];
+        int x0 = lienzo.x + g.pan_x + e->x;
+        int y0 = lienzo.y + g.pan_y + e->y;
+        int x1 = x0 + e->ancho;
+        int y1 = y0 + e->alto;
+        if (!modulos_recortar(lienzo, &x0, &y0, &x1, &y1)) continue;
+        dibujar_rect(x0, y0, x1, y1, BARRA);
+        dibujar_marco(x0, y0, x1, y1, SEPARADOR);
+    }
+
+    /* Previsualizacion del elemento que se arrastra desde el panel derecho. */
+    if (g.modulo_arrastrando == 1) {
+        int x0 = g.raton_x - MODULOS_ELEMENTO_ANCHO / 2;
+        int y0 = g.raton_y - MODULOS_ELEMENTO_ALTO / 2;
+        int x1 = x0 + MODULOS_ELEMENTO_ANCHO;
+        int y1 = y0 + MODULOS_ELEMENTO_ALTO;
+        if (modulos_recortar(lienzo, &x0, &y0, &x1, &y1)) {
+            dibujar_rect(x0, y0, x1, y1, 0x004A5A6Au);
+            dibujar_marco(x0, y0, x1, y1, BOTON_SELECCION);
+        }
+    }
+}
+
+/* Boton rectangular sin nombre que se arrastra al lienzo. */
+static void ui_dibujar_boton_modulos(void) {
+    Zona b = modulos_boton_zona();
+    int hover = zona_contiene(b, g.raton_x, g.raton_y);
+
+    dibujar_rect_z(b, hover ? 0x00EDF2F7u : BARRA);
+    dibujar_rect(b.x, b.y, zona_derecha(b), b.y + 1, 0x00F8F8F8u);
+    dibujar_rect(b.x, b.y, b.x + 1, zona_abajo(b), 0x00F8F8F8u);
+    dibujar_rect(b.x, zona_abajo(b) - 1, zona_derecha(b), zona_abajo(b),
+                 SEPARADOR);
+    dibujar_rect(zona_derecha(b) - 1, b.y, zona_derecha(b), zona_abajo(b),
+                 SEPARADOR);
+}
+
 /* Paneles del gestor de modulos: los mismos huecos que en modo normal
  * (izquierdo, derecho e inferior) pero completamente vacios. */
 static void ui_dibujar_paneles_vacios(void) {
@@ -2915,15 +3013,19 @@ static void ui_dibujar_paneles_vacios(void) {
     dibujar_rect_z(abajo, BARRA);
     dibujar_rect(abajo.x, abajo.y, zona_derecha(abajo), abajo.y + 1,
                  BARRA_BORDE);
+
+    /* Boton de insercion en el panel derecho. */
+    ui_dibujar_boton_modulos();
 }
 
 void ui_dibujar(void) {
     int i;
 
-    /* Gestor de modulos: paneles vacios sobre el fondo normal. */
+    /* Gestor de modulos: paneles vacios, lienzo desplazable y boton. */
     if (g.vista == VISTA_MODULOS) {
         dibujar_rect(0, 0, g.ancho, g.alto, FONDO);
         ui_dibujar_paneles_vacios();
+        modulos_dibujar_lienzo();
         ui_dibujar_pestanas();
         ui_dibujar_barra_menus();
         ui_dibujar_menu_desplegable();

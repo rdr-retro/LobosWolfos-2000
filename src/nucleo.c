@@ -772,6 +772,9 @@ void app_cambiar_vista(Vista vista) {
     if (vista == g.vista) return;
     g.vista = vista;
     g.menu_abierto = -1;
+    /* Cancela cualquier arrastre del gestor al cambiar de modo. */
+    g.modulo_arrastrando = 0;
+    g.hover_modulo_boton = 0;
     app_invalidar();
 }
 

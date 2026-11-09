@@ -755,6 +755,84 @@ int clic_pestanas(int x, int y, int boton) {
     return 1;
 }
 
+/* ------------------------------------------------------------------ */
+/* Gestor de modulos: boton arrastrable y lienzo desplazable           */
+/* ------------------------------------------------------------------ */
+static void modulos_pulsar(int x, int y, int boton) {
+    Zona lienzo = modulos_lienzo_zona();
+
+    /* Boton del panel derecho: empieza el arrastre de un elemento nuevo. */
+    if (boton == 0 && zona_contiene(modulos_boton_zona(), x, y)) {
+        g.modulo_arrastrando = 1;
+        g.hover_modulo_boton = 1;
+        app_invalidar();
+        return;
+    }
+
+    /* El lienzo se desplaza arrastrando con el boton izquierdo o central. */
+    if (zona_contiene(lienzo, x, y) && (boton == 0 || boton == 2)) {
+        g.modulo_arrastrando = 2;
+        g.modulo_drag_x = x - g.pan_x;
+        g.modulo_drag_y = y - g.pan_y;
+        app_invalidar();
+        return;
+    }
+    /* Los paneles vacios no responden a clics. */
+}
+
+static void modulos_soltar(int x, int y) {
+    Zona lienzo = modulos_lienzo_zona();
+
+    if (g.modulo_arrastrando == 1) {
+        if (zona_contiene(lienzo, x, y) && g.num_modulos < MODULOS_MAX) {
+            ModuloElemento *e = &g.modulos[g.num_modulos++];
+            e->ancho = MODULOS_ELEMENTO_ANCHO;
+            e->alto = MODULOS_ELEMENTO_ALTO;
+            e->x = x - lienzo.x - g.pan_x - e->ancho / 2;
+            e->y = y - lienzo.y - g.pan_y - e->alto / 2;
+        }
+        g.modulo_arrastrando = 0;
+        app_invalidar();
+        return;
+    }
+
+    if (g.modulo_arrastrando == 2) {
+        g.modulo_arrastrando = 0;
+        app_invalidar();
+    }
+}
+
+static void modulos_mover(int x, int y) {
+    int hover;
+
+    if (g.modulo_arrastrando == 2) {
+        g.pan_x = x - g.modulo_drag_x;
+        g.pan_y = y - g.modulo_drag_y;
+        app_invalidar();
+        return;
+    }
+    if (g.modulo_arrastrando == 1) {
+        app_invalidar();
+        return;
+    }
+
+    hover = zona_contiene(modulos_boton_zona(), x, y);
+    if (hover != g.hover_modulo_boton) {
+        g.hover_modulo_boton = hover;
+        app_invalidar();
+    }
+}
+
+static void modulos_rueda(int x, int y, int delta, int ctrl) {
+    if (!zona_contiene(modulos_lienzo_zona(), x, y)) return;
+    if (ctrl) {
+        g.pan_x += delta > 0 ? MODULOS_CUADRICULA : -MODULOS_CUADRICULA;
+    } else {
+        g.pan_y += delta > 0 ? MODULOS_CUADRICULA : -MODULOS_CUADRICULA;
+    }
+    app_invalidar();
+}
+
 void app_pulsar(int x, int y, int boton) {
     g.raton_x = x;
     g.raton_y = y;
@@ -814,8 +892,11 @@ void app_pulsar(int x, int y, int boton) {
         return;
     }
 
-    /* El gestor de modulos solo tiene pestanas y menus. */
-    if (g.vista == VISTA_MODULOS) return;
+    /* El gestor de modulos tiene su propio boton y lienzo desplazable. */
+    if (g.vista == VISTA_MODULOS) {
+        modulos_pulsar(x, y, boton);
+        return;
+    }
 
     if (g.vista == VISTA_PINTAR && texto_pulsar(x, y, boton)) return;
 
@@ -854,7 +935,10 @@ void app_soltar(int x, int y, int boton) {
     g.raton_y = y;
     g.opcion_arrastrada = -1;
     g.cubo_arrastre = -1;
-    if (g.vista == VISTA_MODULOS) return;
+    if (g.vista == VISTA_MODULOS) {
+        modulos_soltar(x, y);
+        return;
+    }
     if (g.arrastre_tiles) {
         tiles_modo_soltar();
         app_invalidar();
@@ -896,8 +980,9 @@ void app_mover(int x, int y, int botones) {
     g.raton_x = x;
     g.raton_y = y;
 
-    /* En el gestor solo cambia el hover de pestanas y menus. */
+    /* En el gestor se actualiza el arrastre y el hover del boton. */
     if (g.vista == VISTA_MODULOS) {
+        modulos_mover(x, y);
         if (y < AREA_SUP_ALTO) app_invalidar();
         return;
     }
@@ -1052,7 +1137,10 @@ void app_mover(int x, int y, int botones) {
 void app_rueda(int x, int y, int delta, int ctrl) {
     g.raton_x = x;
     g.raton_y = y;
-    if (g.vista == VISTA_MODULOS) return;
+    if (g.vista == VISTA_MODULOS) {
+        modulos_rueda(x, y, delta, ctrl);
+        return;
+    }
     if (g.vista == VISTA_MAPA && zona_contiene(zona_trabajo(), x, y)) {
         mapa_rueda(x, y, delta, ctrl);
         return;

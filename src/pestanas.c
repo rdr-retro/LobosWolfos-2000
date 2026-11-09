@@ -63,6 +63,8 @@ static void preparar_cambio(void) {
     g.confirmar_borrado = 0;
     g.confirmar_tile = -1;
     g.arrastre_tiles = 0;
+    g.modulo_arrastrando = 0;
+    g.hover_modulo_boton = 0;
 }
 
 static void limpiar_estado_transitorio(void) {
