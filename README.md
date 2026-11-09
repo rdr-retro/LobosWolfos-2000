@@ -47,6 +47,9 @@ Las pestañas representan modos de trabajo sobre el mismo documento. El botón
 esa pestaña a Tiles, Mapa o patrón sin tocar el documento. `Nuevo` y `Abrir`
 sustituyen el documento compartido, no crean pestañas nuevas.
 
+El menú **MODO** incluye **Modo pintar**, que cierra el visor de patrón, sale del
+modo tiles o del editor de mapas y vuelve al lienzo normal.
+
 Al pulsar **GESTOR DE MODULOS** en la barra de menús se abre un espacio de
 trabajo con los paneles izquierdo, derecho e inferior vacíos, manteniendo las
 pestañas y la barra de menús. Pulsa de nuevo la etiqueta para volver a Pintar.

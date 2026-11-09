@@ -100,11 +100,18 @@ static void accion_archivo(int opcion) {
 static void accion_modo(int opcion) {
     switch (opcion) {
         case 0:
+            /* Modo pintar: sale de tiles y oculta el visor del patron. */
+            if (g.modo_tiles) tiles_modo_salir();
+            g.patron_visible = 0;
+            app_cambiar_vista(VISTA_PINTAR);
+            app_invalidar();
+            break;
+        case 1:
             g.patron_visible = 1;
             if (g.vista != VISTA_PINTAR) app_cambiar_vista(VISTA_PINTAR);
             app_invalidar();
             break;
-        case 1:
+        case 2:
             if (g.modo_tiles) {
                 tiles_modo_salir();
             } else {
@@ -112,7 +119,7 @@ static void accion_modo(int opcion) {
             }
             app_invalidar();
             break;
-        case 2:
+        case 3:
             if (g.vista == VISTA_MAPA) {
                 app_cambiar_vista(VISTA_PINTAR);
             } else {

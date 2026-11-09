@@ -585,7 +585,7 @@ static const char *SELECCIONAR_ATAJO[3] = {
 int menu_num_filas(int menu) {
     switch (menu) {
         case 0: return g.vista == VISTA_MAPA ? 6 : 4;
-        case 1: return 3;
+        case 1: return 4;
         case 2: return 5;
         case 4: return 3;
         default: return 0;
@@ -607,7 +607,7 @@ Zona menu_panel_zona(int menu) {
             if (interior < 40) interior = 40;
             if (ancho > interior) ancho = interior;
             return zona_hacer(etiqueta.x, zona_abajo(etiqueta), ancho,
-                              3 + MENU_FILA_ALTO * 3 + 3);
+                              3 + MENU_FILA_ALTO * 4 + 3);
         case 2:
             interior = 0;
             for (i = 0; i < 5; i++) {
@@ -1025,11 +1025,13 @@ void ui_dibujar_menu_desplegable(void) {
                 dibujar_fila_menu(z, texto, NULL, hover, activo, 0x00A0A0A0u);
                 break;
             case 1:
-                if (i == 0) texto = "Visualizar patron de textura";
-                else if (i == 1) texto = "Modo tiles";
+                if (i == 0) texto = "Modo pintar";
+                else if (i == 1) texto = "Visualizar patron de textura";
+                else if (i == 2) texto = "Modo tiles";
                 else texto = "Editor de mapas";
                 if (hover) dibujar_rect_z(z, MENU_BARRA_HOVER);
-                if ((i == 1 && g.modo_tiles) || (i == 2 && mapa)) {
+                if ((i == 0 && g.vista == VISTA_PINTAR && !g.modo_tiles) ||
+                    (i == 2 && g.modo_tiles) || (i == 3 && mapa)) {
                     dibujar_rect(z.x + 1, z.y + 6, z.x + 4, zona_abajo(z) - 6,
                                  hover ? MENU_BARRA_HOVER_TXT : BOTON_SELECCION);
                 }
