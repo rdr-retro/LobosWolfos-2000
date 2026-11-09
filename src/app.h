@@ -144,6 +144,7 @@ typedef unsigned char  u8;
 #define MODULOS_ELEMENTO_ANCHO 96
 #define MODULOS_ELEMENTO_ALTO  64
 #define MODULOS_BOTON_ALTO     56
+#define MODULOS_IMAN           12
 #define MODULOS_REJILLA        0x001A2430u
 #define MODULOS_EJE            0x00304050u
 
@@ -697,8 +698,12 @@ typedef struct App {
      * arrastre. El desplazamiento de la vista usa pan_x/pan_y. */
     ModuloElemento modulos[MODULOS_MAX];
     int num_modulos;
-    int modulo_arrastrando; /* 0 = nada, 1 = elemento nuevo, 2 = paneo */
+    int modulo_arrastrando; /* 0 = nada, 1 = elemento nuevo, 2 = paneo,
+                             * 3 = mover un elemento existente */
     int modulo_drag_x, modulo_drag_y;
+    int modulo_drag_i;
+    int modulo_elem_off_x, modulo_elem_off_y;
+    int modulo_snap_linea_x, modulo_snap_linea_y; /* mundo, -1 = ninguna */
     int hover_modulo_boton;
 
     /* Modo tiles */
@@ -1067,6 +1072,9 @@ Zona barra_abajo_zona(void);
 Zona zona_trabajo(void);
 Zona modulos_lienzo_zona(void);
 Zona modulos_boton_zona(void);
+void modulos_acoplar(int *x, int *y, int ancho, int alto, int ignorar,
+                     int *linea_x, int *linea_y);
+void modulos_insertar(int x, int y);
 int  sidebar_derecho_ancho(void);
 Zona herramienta_zona(int indice);
 Zona panel_textura_zona(void);

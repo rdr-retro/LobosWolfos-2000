@@ -2945,6 +2945,22 @@ static void modulos_dibujar_rejilla(Zona lienzo) {
         dibujar_rect(lienzo.x, y, zona_derecha(lienzo), y + 1, MODULOS_EJE);
 }
 
+/* Guias de acople: linea vertical u horizontal que marca el lado imantado. */
+static void modulos_dibujar_guia(Zona lienzo, int linea_x, int linea_y) {
+    if (linea_x >= 0) {
+        int sx = lienzo.x + g.pan_x + linea_x;
+        if (sx >= lienzo.x && sx < zona_derecha(lienzo))
+            dibujar_rect(sx, lienzo.y, sx + 1, zona_abajo(lienzo),
+                         BOTON_SELECCION);
+    }
+    if (linea_y >= 0) {
+        int sy = lienzo.y + g.pan_y + linea_y;
+        if (sy >= lienzo.y && sy < zona_abajo(lienzo))
+            dibujar_rect(lienzo.x, sy, zona_derecha(lienzo), sy + 1,
+                         BOTON_SELECCION);
+    }
+}
+
 /* Lienzo desplazable del gestor: rejilla y elementos insertados. */
 static void modulos_dibujar_lienzo(void) {
     Zona lienzo = modulos_lienzo_zona();
@@ -2954,25 +2970,40 @@ static void modulos_dibujar_lienzo(void) {
 
     for (i = 0; i < g.num_modulos; i++) {
         ModuloElemento *e = &g.modulos[i];
+        int activo = (g.modulo_arrastrando == 3 && i == g.modulo_drag_i);
         int x0 = lienzo.x + g.pan_x + e->x;
         int y0 = lienzo.y + g.pan_y + e->y;
         int x1 = x0 + e->ancho;
         int y1 = y0 + e->alto;
         if (!modulos_recortar(lienzo, &x0, &y0, &x1, &y1)) continue;
-        dibujar_rect(x0, y0, x1, y1, BARRA);
-        dibujar_marco(x0, y0, x1, y1, SEPARADOR);
+        dibujar_rect(x0, y0, x1, y1, activo ? 0x00E4ECF6u : BARRA);
+        dibujar_marco(x0, y0, x1, y1,
+                      activo ? BOTON_SELECCION : SEPARADOR);
     }
 
-    /* Previsualizacion del elemento que se arrastra desde el panel derecho. */
+    /* Guias del elemento que se esta moviendo. */
+    if (g.modulo_arrastrando == 3)
+        modulos_dibujar_guia(lienzo, g.modulo_snap_linea_x,
+                             g.modulo_snap_linea_y);
+
+    /* Previsualizacion del elemento que se arrastra desde el panel derecho,
+     * aplicando el mismo acople que se usara al soltarlo. */
     if (g.modulo_arrastrando == 1) {
-        int x0 = g.raton_x - MODULOS_ELEMENTO_ANCHO / 2;
-        int y0 = g.raton_y - MODULOS_ELEMENTO_ALTO / 2;
-        int x1 = x0 + MODULOS_ELEMENTO_ANCHO;
-        int y1 = y0 + MODULOS_ELEMENTO_ALTO;
+        int wx = g.raton_x - lienzo.x - g.pan_x - MODULOS_ELEMENTO_ANCHO / 2;
+        int wy = g.raton_y - lienzo.y - g.pan_y - MODULOS_ELEMENTO_ALTO / 2;
+        int lx = -1, ly = -1;
+        int x0, y0, x1, y1;
+        modulos_acoplar(&wx, &wy, MODULOS_ELEMENTO_ANCHO,
+                        MODULOS_ELEMENTO_ALTO, -1, &lx, &ly);
+        x0 = lienzo.x + g.pan_x + wx;
+        y0 = lienzo.y + g.pan_y + wy;
+        x1 = x0 + MODULOS_ELEMENTO_ANCHO;
+        y1 = y0 + MODULOS_ELEMENTO_ALTO;
         if (modulos_recortar(lienzo, &x0, &y0, &x1, &y1)) {
             dibujar_rect(x0, y0, x1, y1, 0x004A5A6Au);
             dibujar_marco(x0, y0, x1, y1, BOTON_SELECCION);
         }
+        modulos_dibujar_guia(lienzo, lx, ly);
     }
 }
 

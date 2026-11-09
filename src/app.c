@@ -756,8 +756,118 @@ int clic_pestanas(int x, int y, int boton) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Gestor de modulos: boton arrastrable y lienzo desplazable           */
+/* Gestor de modulos: boton arrastrable, lienzo y acople magnetico     */
 /* ------------------------------------------------------------------ */
+/* Ajusta una posicion para acoplar los lados del rectangulo a otro
+ * elemento ya colocado. `linea_x`/`linea_y` reciben la guia de acople en
+ * coordenadas del mundo, o -1 si ese eje no se ha acoplado. */
+void modulos_acoplar(int *x, int *y, int ancho, int alto, int ignorar,
+                     int *linea_x, int *linea_y) {
+    int i;
+    int mejor_x = MODULOS_IMAN + 1, mejor_y = MODULOS_IMAN + 1;
+    int dx = 0, dy = 0, lx = -1, ly = -1;
+
+    for (i = 0; i < g.num_modulos; i++) {
+        ModuloElemento *e = &g.modulos[i];
+        int cerca_v, cerca_h;
+        if (i == ignorar) continue;
+
+        /* Solo se acoplan lados que se miran: en horizontal los rectangulos
+         * deben compartir altura (o estar cerca) y viceversa. */
+        cerca_v = *y < e->y + e->alto + MODULOS_IMAN &&
+                  *y + alto > e->y - MODULOS_IMAN;
+        cerca_h = *x < e->x + e->ancho + MODULOS_IMAN &&
+                  *x + ancho > e->x - MODULOS_IMAN;
+
+        if (cerca_v) {
+            int cand[4], guia[4], k;
+            cand[0] = e->x - (*x + ancho);            /* acoplar a su izquierda */
+            cand[1] = e->x + e->ancho - *x;           /* acoplar a su derecha */
+            cand[2] = e->x - *x;                      /* alinear izquierdas */
+            cand[3] = e->x + e->ancho - (*x + ancho); /* alinear derechas */
+            guia[0] = guia[2] = e->x;
+            guia[1] = guia[3] = e->x + e->ancho;
+            for (k = 0; k < 4; k++) {
+                int d = cand[k] < 0 ? -cand[k] : cand[k];
+                if (d < mejor_x) {
+                    mejor_x = d;
+                    dx = cand[k];
+                    lx = guia[k];
+                }
+            }
+        }
+        if (cerca_h) {
+            int cand[4], guia[4], k;
+            cand[0] = e->y - (*y + alto);             /* acoplar encima */
+            cand[1] = e->y + e->alto - *y;            /* acoplar debajo */
+            cand[2] = e->y - *y;                      /* alinear superiores */
+            cand[3] = e->y + e->alto - (*y + alto);   /* alinear inferiores */
+            guia[0] = guia[2] = e->y;
+            guia[1] = guia[3] = e->y + e->alto;
+            for (k = 0; k < 4; k++) {
+                int d = cand[k] < 0 ? -cand[k] : cand[k];
+                if (d < mejor_y) {
+                    mejor_y = d;
+                    dy = cand[k];
+                    ly = guia[k];
+                }
+            }
+        }
+    }
+
+    if (mejor_x <= MODULOS_IMAN) *x += dx;
+    else lx = -1;
+    if (mejor_y <= MODULOS_IMAN) *y += dy;
+    else ly = -1;
+
+    if (linea_x) *linea_x = lx;
+    if (linea_y) *linea_y = ly;
+}
+
+/* Elemento bajo el cursor, de arriba (ultimo dibujado) a abajo. */
+static int modulos_elemento_en(int x, int y) {
+    Zona lienzo = modulos_lienzo_zona();
+    int i;
+    for (i = g.num_modulos - 1; i >= 0; i--) {
+        ModuloElemento *e = &g.modulos[i];
+        int x0 = lienzo.x + g.pan_x + e->x;
+        int y0 = lienzo.y + g.pan_y + e->y;
+        if (x >= x0 && x < x0 + e->ancho &&
+            y >= y0 && y < y0 + e->alto)
+            return i;
+    }
+    return -1;
+}
+
+static void modulos_al_frente(int idx) {
+    ModuloElemento tmp;
+    int i;
+    if (idx < 0 || idx >= g.num_modulos || idx == g.num_modulos - 1) return;
+    tmp = g.modulos[idx];
+    for (i = idx; i < g.num_modulos - 1; i++) g.modulos[i] = g.modulos[i + 1];
+    g.modulos[g.num_modulos - 1] = tmp;
+}
+
+/* Inserta un elemento centrado en un punto de pantalla, con acople. */
+void modulos_insertar(int x, int y) {
+    Zona lienzo = modulos_lienzo_zona();
+    ModuloElemento *e;
+    int wx, wy;
+
+    if (!zona_contiene(lienzo, x, y) || g.num_modulos >= MODULOS_MAX) return;
+
+    wx = x - lienzo.x - g.pan_x - MODULOS_ELEMENTO_ANCHO / 2;
+    wy = y - lienzo.y - g.pan_y - MODULOS_ELEMENTO_ALTO / 2;
+    modulos_acoplar(&wx, &wy, MODULOS_ELEMENTO_ANCHO, MODULOS_ELEMENTO_ALTO,
+                    -1, NULL, NULL);
+
+    e = &g.modulos[g.num_modulos++];
+    e->x = wx;
+    e->y = wy;
+    e->ancho = MODULOS_ELEMENTO_ANCHO;
+    e->alto = MODULOS_ELEMENTO_ALTO;
+}
+
 static void modulos_pulsar(int x, int y, int boton) {
     Zona lienzo = modulos_lienzo_zona();
 
@@ -765,39 +875,59 @@ static void modulos_pulsar(int x, int y, int boton) {
     if (boton == 0 && zona_contiene(modulos_boton_zona(), x, y)) {
         g.modulo_arrastrando = 1;
         g.hover_modulo_boton = 1;
+        g.modulo_snap_linea_x = -1;
+        g.modulo_snap_linea_y = -1;
         app_invalidar();
         return;
     }
 
-    /* El lienzo se desplaza arrastrando con el boton izquierdo o central. */
-    if (zona_contiene(lienzo, x, y) && (boton == 0 || boton == 2)) {
-        g.modulo_arrastrando = 2;
-        g.modulo_drag_x = x - g.pan_x;
-        g.modulo_drag_y = y - g.pan_y;
-        app_invalidar();
-        return;
+    if (zona_contiene(lienzo, x, y)) {
+        /* Con el boton izquierdo, si hay un elemento debajo se mueve. */
+        if (boton == 0) {
+            int idx = modulos_elemento_en(x, y);
+            if (idx >= 0) {
+                ModuloElemento *e;
+                int wx = x - lienzo.x - g.pan_x;
+                int wy = y - lienzo.y - g.pan_y;
+                modulos_al_frente(idx);
+                idx = g.num_modulos - 1;
+                e = &g.modulos[idx];
+                g.modulo_arrastrando = 3;
+                g.modulo_drag_i = idx;
+                g.modulo_elem_off_x = wx - e->x;
+                g.modulo_elem_off_y = wy - e->y;
+                g.modulo_snap_linea_x = -1;
+                g.modulo_snap_linea_y = -1;
+                app_invalidar();
+                return;
+            }
+        }
+        /* Zona vacia (o boton central): desplazar el lienzo. */
+        if (boton == 0 || boton == 2) {
+            g.modulo_arrastrando = 2;
+            g.modulo_drag_x = x - g.pan_x;
+            g.modulo_drag_y = y - g.pan_y;
+            app_invalidar();
+            return;
+        }
     }
     /* Los paneles vacios no responden a clics. */
 }
 
 static void modulos_soltar(int x, int y) {
-    Zona lienzo = modulos_lienzo_zona();
-
     if (g.modulo_arrastrando == 1) {
-        if (zona_contiene(lienzo, x, y) && g.num_modulos < MODULOS_MAX) {
-            ModuloElemento *e = &g.modulos[g.num_modulos++];
-            e->ancho = MODULOS_ELEMENTO_ANCHO;
-            e->alto = MODULOS_ELEMENTO_ALTO;
-            e->x = x - lienzo.x - g.pan_x - e->ancho / 2;
-            e->y = y - lienzo.y - g.pan_y - e->alto / 2;
-        }
+        modulos_insertar(x, y);
         g.modulo_arrastrando = 0;
+        g.modulo_snap_linea_x = -1;
+        g.modulo_snap_linea_y = -1;
         app_invalidar();
         return;
     }
 
-    if (g.modulo_arrastrando == 2) {
+    if (g.modulo_arrastrando == 2 || g.modulo_arrastrando == 3) {
         g.modulo_arrastrando = 0;
+        g.modulo_snap_linea_x = -1;
+        g.modulo_snap_linea_y = -1;
         app_invalidar();
     }
 }
@@ -812,6 +942,18 @@ static void modulos_mover(int x, int y) {
         return;
     }
     if (g.modulo_arrastrando == 1) {
+        app_invalidar();
+        return;
+    }
+    if (g.modulo_arrastrando == 3) {
+        Zona lienzo = modulos_lienzo_zona();
+        ModuloElemento *e = &g.modulos[g.modulo_drag_i];
+        int wx = x - lienzo.x - g.pan_x - g.modulo_elem_off_x;
+        int wy = y - lienzo.y - g.pan_y - g.modulo_elem_off_y;
+        modulos_acoplar(&wx, &wy, e->ancho, e->alto, g.modulo_drag_i,
+                        &g.modulo_snap_linea_x, &g.modulo_snap_linea_y);
+        e->x = wx;
+        e->y = wy;
         app_invalidar();
         return;
     }

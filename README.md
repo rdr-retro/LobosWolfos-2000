@@ -16,8 +16,8 @@ para cargar y guardar PNG.
 - Pestañas de modo: Pintar, Tiles, Mapa y patrón comparten el mismo documento;
   cada pestaña conserva su vista, zoom y desplazamiento.
 - Gestor de módulos: paneles izquierdo, derecho e inferior vacíos, un botón
-  rectangular arrastrable y un lienzo desplazable con rejilla para insertar
-  elementos.
+  rectangular arrastrable y un lienzo desplazable con rejilla. Los elementos se
+  pueden mover y se acoplan entre sí por sus lados con efecto imán.
 - Apertura y exportación de PNG/BMP y mapas `.mav`.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
 
@@ -56,10 +56,12 @@ trabajo con los paneles izquierdo, derecho e inferior vacíos, manteniendo las
 pestañas y la barra de menús. Pulsa de nuevo la etiqueta para volver a Pintar.
 
 Dentro del gestor, el panel derecho contiene un botón rectangular sin nombre:
-arrástralo hasta el lienzo para insertar un elemento. El lienzo no sirve para
-pintar; es un entorno desplazable con rejilla. Arrastra con el botón izquierdo o
-central sobre una zona vacía para mover la vista, o usa la rueda para desplazarte
-en vertical (`Ctrl+rueda` en horizontal).
+arrástralo hasta el lienzo para insertar un elemento. Los elementos ya colocados
+también se pueden arrastrar. Sus lados tienen efecto imán: al acercarlos a otro
+elemento se acoplan y se alinean, mostrando una guía azul. El lienzo no sirve
+para pintar; es un entorno desplazable con rejilla. Arrastra sobre una zona vacía
+con el botón izquierdo o central para mover la vista, o usa la rueda para
+desplazarte en vertical (`Ctrl+rueda` en horizontal).
 
 ## Atajos
 

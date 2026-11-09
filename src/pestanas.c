@@ -64,6 +64,9 @@ static void preparar_cambio(void) {
     g.confirmar_tile = -1;
     g.arrastre_tiles = 0;
     g.modulo_arrastrando = 0;
+    g.modulo_drag_i = -1;
+    g.modulo_snap_linea_x = -1;
+    g.modulo_snap_linea_y = -1;
     g.hover_modulo_boton = 0;
 }
 

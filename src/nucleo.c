@@ -625,6 +625,9 @@ static void cargar_paleta(void) {
 int app_iniciar(void) {
     char carpeta[MAX_PATH];
     memset(&g, 0, sizeof(g));
+    g.modulo_drag_i = -1;
+    g.modulo_snap_linea_x = -1;
+    g.modulo_snap_linea_y = -1;
     cargar_preferencias();
     cargar_paleta();
 
@@ -774,6 +777,9 @@ void app_cambiar_vista(Vista vista) {
     g.menu_abierto = -1;
     /* Cancela cualquier arrastre del gestor al cambiar de modo. */
     g.modulo_arrastrando = 0;
+    g.modulo_drag_i = -1;
+    g.modulo_snap_linea_x = -1;
+    g.modulo_snap_linea_y = -1;
     g.hover_modulo_boton = 0;
     app_invalidar();
 }
@@ -1223,6 +1229,20 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
         if (vista_arg && strncmp(vista_arg, "mapa", 4) == 0) g.vista = VISTA_MAPA;
         if (strstr(cmd, "--tiles") != NULL) tiles_modo_entrar();
         if (strstr(cmd, "--gestor") != NULL) g.vista = VISTA_MODULOS;
+        /* Elementos de prueba del gestor: "x,y;x,y". */
+        {
+            char *mods_arg = arg_valor(cmd, "--modulos");
+            if (mods_arg && g.vista == VISTA_MODULOS) {
+                const char *p = mods_arg;
+                while (*p) {
+                    int mx = 0, my = 0, n = 0;
+                    if (sscanf(p, "%d,%d%n", &mx, &my, &n) != 2) break;
+                    modulos_insertar(mx, my);
+                    p += n;
+                    while (*p == ';' || *p == ' ' || *p == ',') p++;
+                }
+            }
+        }
         if (strstr(cmd, "--info") != NULL) g.info_visible = 1;
         if (strstr(cmd, "--patron") != NULL) g.patron_visible = 1;
         if (strstr(cmd, "--mayus") != NULL) g.shift_simulado = 1;
