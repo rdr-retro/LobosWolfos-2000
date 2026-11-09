@@ -1,5 +1,5 @@
 /* ==========================================================================
- * Texture Paint XP - editor de texturas para Windows 2000/XP.
+ * Texture Paint 2000 - editor de texturas para Windows 2000/XP.
  *
  * Interfaz Win32/GDI dibujada a mano sobre un buffer de 32 bits. Compatible
  * con Windows XP (WINVER 0x0501).
@@ -24,8 +24,8 @@
 extern "C" {
 #endif
 
-#define TP_NOMBRE    "Texture Paint XP"
-#define TP_VERSION   "1.0"
+#define TP_NOMBRE    "Texture Paint 2000"
+#define TP_VERSION   "1.0 beta"
 
 typedef unsigned int   u32;
 typedef unsigned short u16;

@@ -116,7 +116,7 @@ void editor_iniciar(EditorCodigo *e) {
     e->modificado = 0;
     if (e->texto) {
         const char *bienvenida =
-            "-- Texture Paint XP: editor de codigo\n"
+            "-- Texture Paint 2000: editor de codigo\n"
             "-- Ctrl+S guardar, Ctrl+O abrir, Ctrl+N nuevo\n"
             "\n";
         int n = (int)strlen(bienvenida);

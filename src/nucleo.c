@@ -430,8 +430,8 @@ void app_invalidar(void) {
     if (g.hwnd) InvalidateRect(g.hwnd, NULL, FALSE);
 }
 
-/* Titulo de ventana: "Texture Paint - <herramienta>". Bajo el cursor manda la
- * herramienta apuntada; si no, la activa. */
+/* Titulo de ventana: "Texture Paint 2000 - <herramienta>". Bajo el cursor manda
+ * la herramienta apuntada; si no, la activa. */
 void app_actualizar_titulo(void) {
     char titulo[128];
     const char *nombre;
@@ -439,10 +439,10 @@ void app_actualizar_titulo(void) {
     if (g.hover_herramienta >= 0) nombre = ui_nombre_herramienta(g.hover_herramienta);
     else nombre = ui_nombre_herramienta((int)g.herramienta);
     if (nombre && nombre[0]) {
-        _snprintf(titulo, sizeof(titulo), "Texture Paint - %s", nombre);
+        _snprintf(titulo, sizeof(titulo), "Texture Paint 2000 - %s", nombre);
         titulo[sizeof(titulo) - 1] = 0;
     } else {
-        strcpy(titulo, "Texture Paint");
+        strcpy(titulo, "Texture Paint 2000");
     }
     SetWindowTextA(g.hwnd, titulo);
 }
@@ -1162,7 +1162,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
     wc.hInstance = inst;
     wc.hCursor = LoadCursorA(NULL, IDC_ARROW);
     wc.hbrBackground = NULL;
-    wc.lpszClassName = "TexturePaintXP";
+    wc.lpszClassName = "TexturePaint2000";
     wc.hIcon = LoadIconA(inst, MAKEINTRESOURCEA(IDI_APP));
     wc.hIconSm = wc.hIcon;
     if (!RegisterClassExA(&wc)) {
@@ -1173,7 +1173,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
     r.left = 0; r.top = 0;
     r.right = ANCHO_INICIAL; r.bottom = ALTO_INICIAL;
     AdjustWindowRectEx(&r, WS_OVERLAPPEDWINDOW, FALSE, 0);
-    hwnd = CreateWindowExA(0, "TexturePaintXP", TP_NOMBRE " " TP_VERSION,
+    hwnd = CreateWindowExA(0, "TexturePaint2000", TP_NOMBRE " " TP_VERSION,
                            WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
                            CW_USEDEFAULT, CW_USEDEFAULT,
                            r.right - r.left, r.bottom - r.top,

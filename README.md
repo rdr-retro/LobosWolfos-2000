@@ -25,7 +25,7 @@ build.bat [ruta\a\mingw32\bin]
 ```
 
 Si no se indica la ruta, se busca la variable `MINGW32` o la ruta usada durante
-el desarrollo. El resultado es `TexturePaintXP.exe`.
+el desarrollo. El resultado es `TexturePaint2000.exe`.
 
 También se puede compilar desde PowerShell:
 
@@ -35,7 +35,7 @@ También se puede compilar desde PowerShell:
 
 ## Uso
 
-Ejecuta `TexturePaintXP.exe`. Los tiles que guardes se almacenan en la carpeta
+Ejecuta `TexturePaint2000.exe`. Los tiles que guardes se almacenan en la carpeta
 `tiles` junto al ejecutable.
 
 ## Atajos

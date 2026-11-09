@@ -1,6 +1,6 @@
 @echo off
 rem ==========================================================================
-rem  Texture Paint XP - compilacion con MinGW-w64 i686 (Windows XP)
+rem  Texture Paint 2000 - compilacion con MinGW-w64 i686 (Windows XP)
 rem  Uso: build.bat [ruta\a\mingw32\bin]
 rem ==========================================================================
 setlocal enabledelayedexpansion
@@ -8,7 +8,7 @@ setlocal enabledelayedexpansion
 set "AQUI=%~dp0"
 set "SRC=%AQUI%src"
 set "OBJ=%AQUI%obj"
-set "SALIDA=%AQUI%TexturePaintXP.exe"
+set "SALIDA=%AQUI%TexturePaint2000.exe"
 
 if not "%~1"=="" (
     set "MINGW=%~1"
@@ -53,7 +53,7 @@ for %%F in (src\nucleo.c src\fuente.c src\documento.c src\imagen.c src\pintura.c
 )
 
 echo Enlazando...
-"%GCC%" -m32 -o "TexturePaintXP.exe" obj\nucleo.o obj\fuente.o obj\documento.o obj\imagen.o obj\pintura.o obj\texto.o obj\ui.o obj\tiles.o obj\mapa.o obj\editor.o obj\tiles_modo.o obj\app.o obj\recurso.o %LIBS% -mwindows -static-libgcc
+"%GCC%" -m32 -o "TexturePaint2000.exe" obj\nucleo.o obj\fuente.o obj\documento.o obj\imagen.o obj\pintura.o obj\texto.o obj\ui.o obj\tiles.o obj\mapa.o obj\editor.o obj\tiles_modo.o obj\app.o obj\recurso.o %LIBS% -mwindows -static-libgcc
 if errorlevel 1 goto error_pop
 popd
 goto exito
