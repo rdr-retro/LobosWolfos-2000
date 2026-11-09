@@ -1,0 +1,61 @@
+# Texture Paint 2000
+
+Editor de texturas ligero para **Windows 2000 y Windows XP** de 32 bits. Está
+escrito en C con Win32/GDI puro y un búfer propio de 32 bits; GDI+ solo se usa
+para cargar y guardar PNG.
+
+## Características
+
+- Lienzo con zoom (hasta 1000 %), capas y deshacer/rehacer.
+- Pincel, lápiz, aerógrafo, cubo de relleno y selector de color.
+- Figuras: línea, rectángulo, rectángulo redondeado, elipse, polígono y curva
+  de Bézier.
+- Selección rectangular y de forma libre, con arrastre y redimensionado.
+- Herramienta de texto con varias fuentes y tamaños.
+- Patrón de textura repetido, visor de mosaico y guardado de tiles en PNG.
+- Apertura y exportación de PNG/BMP, mapas `.mav` y editor de código.
+- Interfaz flotante de opciones, panel de capas y menús contextuales.
+
+## Compilar
+
+Requiere MinGW-w64 para 32 bits (i686) con `gcc` y `windres`.
+
+```bat
+build.bat [ruta\a\mingw32\bin]
+```
+
+Si no se indica la ruta, se busca la variable `MINGW32` o la ruta usada durante
+el desarrollo. El resultado es `TexturePaintXP.exe`.
+
+También se puede compilar desde PowerShell:
+
+```powershell
+.\build.ps1
+```
+
+## Uso
+
+Ejecuta `TexturePaintXP.exe`. Los tiles que guardes se almacenan en la carpeta
+`tiles` junto al ejecutable.
+
+## Atajos
+
+| Atajo | Acción |
+|---|---|
+| `Ctrl+Z` | Deshacer |
+| `Ctrl+Y` / `Ctrl+Shift+Z` | Rehacer |
+| `Ctrl+rueda` | Cambiar el zoom |
+| `Esc` | Cancelar la acción en curso |
+| `Enter` | Confirmar la acción en curso |
+| `Supr` | Borrar la selección |
+
+## Estructura
+
+- `src/` — código fuente C y recursos de la interfaz.
+- `recursos/` — iconos e imágenes de las herramientas.
+- `tiles/` — carpeta donde se guardan los mosaicos.
+- `build.bat` / `build.ps1` — scripts de compilación.
+
+## Licencia
+
+Uso interno de Green Blue Studios.

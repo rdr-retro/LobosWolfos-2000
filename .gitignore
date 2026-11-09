@@ -1,0 +1,14 @@
+# Compilacion
+obj/
+*.o
+*.exe
+
+# Archivos temporales de la aplicacion
+pid.txt
+
+# Capturas y diferencias de pruebas
+tp_*.png
+diff_*.png
+
+# Notas de desarrollo locales
+/PLAN_1_1.md
