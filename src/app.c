@@ -136,6 +136,10 @@ static void accion_modo(int opcion) {
                 app_cambiar_vista(VISTA_MAPA);
             }
             break;
+        case 4:
+            /* Gestor de escenas: panel de elementos y escenas. */
+            app_alternar_gestor_modulos();
+            break;
         default:
             break;
     }
@@ -209,10 +213,10 @@ static void ejecutar_menu(int menu, int opcion) {
         case 0: accion_archivo(opcion); break;
         case 1: accion_modo(opcion); break;
         case 2: accion_editar(opcion); break;
-        case 4: accion_seleccionar(opcion); break;
-        case 5: accion_capa(opcion); break;
-        case 6: accion_colores(opcion); break;
-        case 7:
+        case 3: accion_seleccionar(opcion); break;
+        case 4: accion_capa(opcion); break;
+        case 5: accion_colores(opcion); break;
+        case 6:
             g.info_visible = 1;
             app_invalidar();
             break;
@@ -697,21 +701,14 @@ int clic_lienzo(int x, int y) {
 /* Entrada principal                                                   */
 /* ------------------------------------------------------------------ */
 static void clic_etiqueta_menu(int menu) {
-    if (menu == 7) {
+    if (menu == 6) {
         g.menu_abierto = -1;
         g.textura_menu_abierto = 0;
         g.info_visible = 1;
         app_invalidar();
         return;
     }
-    if (menu == 3) {
-        /* GESTOR DE ESCENAS: lista de escenas en el panel izquierdo. */
-        g.menu_abierto = -1;
-        app_alternar_gestor_modulos();
-        app_invalidar();
-        return;
-    }
-    if (menu == 5 || menu == 6) {
+    if (menu == 4 || menu == 5) {
         /* CAPA y COLORES no tienen desplegable: solo su etiqueta. */
         g.menu_abierto = -1;
         app_invalidar();

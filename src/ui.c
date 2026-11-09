@@ -4,8 +4,9 @@
  * ========================================================================== */
 #include "app.h"
 
-static const char *MENU_ETIQUETAS[8] = {
-    "ARCHIVO", "MODO", "EDITAR", "GESTOR DE ESCENAS",
+#define MENU_TOTAL 7
+static const char *MENU_ETIQUETAS[MENU_TOTAL] = {
+    "ARCHIVO", "MODO", "EDITAR",
     "SELECCIONAR", "CAPA", "COLORES", "INFO"
 };
 
@@ -620,7 +621,7 @@ static int menu_ancho_etiqueta(const char *texto) {
 static Zona menu_etiqueta_zona(int indice, int *x_salida) {
     int x = MENU_MARGEN;
     int i;
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < MENU_TOTAL; i++) {
         int ancho = menu_ancho_etiqueta(MENU_ETIQUETAS[i]);
         if (i == indice) {
             if (x_salida) *x_salida = x;
@@ -634,7 +635,7 @@ static Zona menu_etiqueta_zona(int indice, int *x_salida) {
 
 int menu_barra_en(int x, int y) {
     int i;
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < MENU_TOTAL; i++) {
         Zona z = menu_etiqueta_zona(i, NULL);
         if (zona_derecha(z) > g.ancho) return -1;
         if (zona_contiene(z, x, y)) return i;
@@ -664,9 +665,9 @@ static const char *SELECCIONAR_ATAJO[3] = {
 int menu_num_filas(int menu) {
     switch (menu) {
         case 0: return g.vista == VISTA_MAPA ? 7 : 5;
-        case 1: return 4;
+        case 1: return 5;
         case 2: return 5;
-        case 4: return 3;
+        case 3: return 3;
         default: return 0;
     }
 }
@@ -674,7 +675,7 @@ int menu_num_filas(int menu) {
 Zona menu_panel_zona(int menu) {
     Zona etiqueta;
     int x = 0, interior, ancho, i;
-    if (menu < 0 || menu >= 8) return zona_vacia();
+    if (menu < 0 || menu >= MENU_TOTAL) return zona_vacia();
     etiqueta = menu_etiqueta_zona(menu, &x);
     switch (menu) {
         case 0:
@@ -686,7 +687,7 @@ Zona menu_panel_zona(int menu) {
             if (interior < 40) interior = 40;
             if (ancho > interior) ancho = interior;
             return zona_hacer(etiqueta.x, zona_abajo(etiqueta), ancho,
-                              3 + MENU_FILA_ALTO * 4 + 3);
+                              3 + MENU_FILA_ALTO * 5 + 3);
         case 2:
             interior = 0;
             for (i = 0; i < 5; i++) {
@@ -699,7 +700,7 @@ Zona menu_panel_zona(int menu) {
             if (ancho > interior) ancho = interior;
             return zona_hacer(etiqueta.x, zona_abajo(etiqueta), ancho,
                               3 + MENU_FILA_ALTO * 5 + 3);
-        case 4:
+        case 3:
             interior = 0;
             for (i = 0; i < 3; i++) {
                 int w = texto_menu_ancho(SELECCIONAR_TEXTO[i]) +
@@ -752,7 +753,7 @@ int menu_fila_activa(int menu, int fila) {
             if (fila == 2 || fila == 3) return g.sel.activa;
             if (fila == 4) return g.portapapeles != NULL;
             return 0;
-        case 4:
+        case 3:
             if (fila == 0) return 1;
             if (fila == 1 || fila == 2) return g.sel.activa;
             return 0;
@@ -1047,7 +1048,7 @@ void ui_dibujar_barra_menus(void) {
 
     dibujar_rect(0, TAB_BARRA_ALTO, g.ancho, AREA_SUP_ALTO, MENU_BARRA_FONDO);
 
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < MENU_TOTAL; i++) {
         Zona z = menu_etiqueta_zona(i, NULL);
         int hover = (i == mouse_en);
         if (zona_derecha(z) > g.ancho) break;
@@ -1139,10 +1140,12 @@ void ui_dibujar_menu_desplegable(void) {
                 if (i == 0) texto = "Modo pintar";
                 else if (i == 1) texto = "Visualizar patron de textura";
                 else if (i == 2) texto = "Modo tiles";
-                else texto = "Editor de mapas";
+                else if (i == 3) texto = "Editor de mapas";
+                else texto = "Gestor de escenas";
                 if (hover) dibujar_rect_z(z, MENU_BARRA_HOVER);
                 if ((i == 0 && g.vista == VISTA_PINTAR && !g.modo_tiles) ||
-                    (i == 2 && g.modo_tiles) || (i == 3 && mapa)) {
+                    (i == 2 && g.modo_tiles) || (i == 3 && mapa) ||
+                    (i == 4 && g.vista == VISTA_MODULOS)) {
                     dibujar_rect(z.x + 1, z.y + 6, z.x + 4, zona_abajo(z) - 6,
                                  hover ? MENU_BARRA_HOVER_TXT : BOTON_SELECCION);
                 }
@@ -1153,7 +1156,7 @@ void ui_dibujar_menu_desplegable(void) {
                 dibujar_fila_menu(z, EDITAR_TEXTO[i], EDITAR_ATAJO[i], hover, activo,
                                   0x00909090u);
                 break;
-            case 4:
+            case 3:
                 dibujar_fila_menu(z, SELECCIONAR_TEXTO[i], SELECCIONAR_ATAJO[i], hover,
                                   activo, 0x00909090u);
                 break;

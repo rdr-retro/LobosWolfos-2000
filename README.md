@@ -51,12 +51,10 @@ esa pestaña a Tiles, Mapa o patrón sin tocar el documento. `Nuevo` y `Abrir`
 sustituyen el documento compartido, no crean pestañas nuevas.
 
 El menú **MODO** incluye **Modo pintar**, que cierra el visor de patrón, sale del
-modo tiles o del editor de mapas y vuelve al lienzo normal.
-
-Al pulsar **GESTOR DE ESCENAS** en la barra de menús se abre un espacio de
-trabajo con los paneles izquierdo, derecho e inferior (los dos laterales del
-mismo ancho), manteniendo las pestañas y la barra de menús. Pulsa de nuevo la
-etiqueta para volver a Pintar.
+modo tiles o del editor de mapas y vuelve al lienzo normal, y **Gestor de
+escenas**, que abre un espacio de trabajo con los paneles izquierdo, derecho e
+inferior (los dos laterales del mismo ancho), manteniendo las pestañas y la
+barra de menús. Al elegir **Gestor de escenas** de nuevo se vuelve a Pintar.
 
 El panel izquierdo muestra, de arriba abajo, la lista de elementos del lienzo
 (`Elemento 1`, `Elemento 2`…) y la lista de escenas creadas. Los elementos

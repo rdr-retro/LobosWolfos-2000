@@ -799,7 +799,7 @@ void app_alternar_mapa(void) {
 }
 
 /* Gestor de escenas: espacio de trabajo con la lista de escenas en el panel
- * izquierdo. Pulsar de nuevo la etiqueta vuelve a Pintar. */
+ * izquierdo. Elegirlo de nuevo en el menu MODO vuelve a Pintar. */
 void app_alternar_gestor_modulos(void) {
     if (g.vista == VISTA_MODULOS) {
         app_cambiar_vista(VISTA_PINTAR);
