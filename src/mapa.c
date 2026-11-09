@@ -289,7 +289,7 @@ int mapa_guardar(const char *ruta) {
     if (!texto) return 0;
 
     usado += (size_t)sprintf(texto + usado,
-        "-- Mapa guardado con Texture Paint 2000\n"
+        "-- Mapa guardado con LobosWolfos 2000\n"
         "-- Love2D: local mapa = dofile(\"mapa.mav\")\n"
         "return {\n"
         "    version = 1,\n"

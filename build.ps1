@@ -1,5 +1,5 @@
 # ==========================================================================
-#  Texture Paint 2000 - compilacion con MinGW-w64 i686 (Windows XP)
+#  LobosWolfos 2000 - compilacion con MinGW-w64 i686 (Windows XP)
 #  Uso:  powershell -ExecutionPolicy Bypass -File build.ps1 [-Mingw <ruta\bin>]
 # ==========================================================================
 param(
@@ -10,7 +10,7 @@ $ErrorActionPreference = "Stop"
 $Aqui = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Src = Join-Path $Aqui "src"
 $Obj = Join-Path $Aqui "obj"
-$Salida = Join-Path $Aqui "TexturePaint2000.exe"
+$Salida = Join-Path $Aqui "LobosWolfos2000.exe"
 
 if ($Mingw -eq "") {
     if ($env:MINGW32) { $Mingw = $env:MINGW32 }
@@ -63,7 +63,7 @@ foreach ($f in $Fuentes) {
 Write-Host "Enlazando..." -ForegroundColor Cyan
 $Objetos = @("recurso.o") + ($Fuentes | ForEach-Object { [IO.Path]::GetFileNameWithoutExtension($_) + ".o" })
 $RutasObj = $Objetos | ForEach-Object { Join-Path "obj" $_ }
-& $Gcc -m32 -o "TexturePaint2000.exe" @RutasObj @Libs -mwindows -static-libgcc
+& $Gcc -m32 -o "LobosWolfos2000.exe" @RutasObj @Libs -mwindows -static-libgcc
 if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Error "el enlazado fallo"; exit 1 }
 Pop-Location
 

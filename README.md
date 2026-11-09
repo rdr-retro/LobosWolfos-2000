@@ -1,4 +1,4 @@
-# Texture Paint 2000
+# LobosWolfos 2000
 
 Editor de texturas ligero para **Windows 2000 y Windows XP** de 32 bits. Está
 escrito en C con Win32/GDI puro y un búfer propio de 32 bits; GDI+ solo se usa
@@ -32,7 +32,7 @@ build.bat [ruta\a\mingw32\bin]
 ```
 
 Si no se indica la ruta, se busca la variable `MINGW32` o la ruta usada durante
-el desarrollo. El resultado es `TexturePaint2000.exe`.
+el desarrollo. El resultado es `LobosWolfos2000.exe`.
 
 También se puede compilar desde PowerShell:
 
@@ -42,7 +42,7 @@ También se puede compilar desde PowerShell:
 
 ## Uso
 
-Ejecuta `TexturePaint2000.exe`. Los tiles que guardes se almacenan en la carpeta
+Ejecuta `LobosWolfos2000.exe`. Los tiles que guardes se almacenan en la carpeta
 `tiles` junto al ejecutable.
 
 Las pestañas representan modos de trabajo sobre el mismo documento. El botón

@@ -426,23 +426,23 @@ void app_invalidar(void) {
     if (g.hwnd) InvalidateRect(g.hwnd, NULL, FALSE);
 }
 
-/* Titulo de ventana: "Texture Paint 2000 - <herramienta>". Bajo el cursor manda
+/* Titulo de ventana: "LobosWolfos 2000 - <herramienta>". Bajo el cursor manda
  * la herramienta apuntada; si no, la activa. */
 void app_actualizar_titulo(void) {
     char titulo[128];
     const char *nombre;
     if (!g.hwnd) return;
     if (g.vista == VISTA_MODULOS) {
-        strcpy(titulo, "Texture Paint 2000 - Gestor de escenas");
+        strcpy(titulo, "LobosWolfos 2000 - Gestor de escenas");
     } else if (g.hover_herramienta >= 0) {
         nombre = ui_nombre_herramienta(g.hover_herramienta);
-        _snprintf(titulo, sizeof(titulo), "Texture Paint 2000 - %s", nombre);
+        _snprintf(titulo, sizeof(titulo), "LobosWolfos 2000 - %s", nombre);
     } else {
         nombre = ui_nombre_herramienta((int)g.herramienta);
         if (nombre && nombre[0]) {
-            _snprintf(titulo, sizeof(titulo), "Texture Paint 2000 - %s", nombre);
+            _snprintf(titulo, sizeof(titulo), "LobosWolfos 2000 - %s", nombre);
         } else {
-            strcpy(titulo, "Texture Paint 2000");
+            strcpy(titulo, "LobosWolfos 2000");
         }
     }
     titulo[sizeof(titulo) - 1] = 0;
@@ -1196,7 +1196,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
     wc.hInstance = inst;
     wc.hCursor = LoadCursorA(NULL, IDC_ARROW);
     wc.hbrBackground = NULL;
-    wc.lpszClassName = "TexturePaint2000";
+    wc.lpszClassName = "LobosWolfos2000";
     wc.hIcon = LoadIconA(inst, MAKEINTRESOURCEA(IDI_APP));
     wc.hIconSm = wc.hIcon;
     if (!RegisterClassExA(&wc)) {
@@ -1207,7 +1207,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
     r.left = 0; r.top = 0;
     r.right = ANCHO_INICIAL; r.bottom = ALTO_INICIAL;
     AdjustWindowRectEx(&r, WS_OVERLAPPEDWINDOW, FALSE, 0);
-    hwnd = CreateWindowExA(0, "TexturePaint2000", TP_NOMBRE " " TP_VERSION,
+    hwnd = CreateWindowExA(0, "LobosWolfos2000", TP_NOMBRE " " TP_VERSION,
                            WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
                            CW_USEDEFAULT, CW_USEDEFAULT,
                            r.right - r.left, r.bottom - r.top,
