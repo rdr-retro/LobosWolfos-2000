@@ -413,17 +413,13 @@ static void crear_fuentes(void) {
     g.fuente_negrita = CreateFontA(-13, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                                    OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
                                    DEFAULT_PITCH | FF_SWISS, "Tahoma");
-    g.fuente_codigo = CreateFontA(-15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                                  OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
-                                  FIXED_PITCH | FF_MODERN, "Courier New");
 }
 
 static void liberar_fuentes(void) {
     if (g.fuente) DeleteObject(g.fuente);
     if (g.fuente_peq) DeleteObject(g.fuente_peq);
     if (g.fuente_negrita) DeleteObject(g.fuente_negrita);
-    if (g.fuente_codigo) DeleteObject(g.fuente_codigo);
-    g.fuente = g.fuente_peq = g.fuente_negrita = g.fuente_codigo = NULL;
+    g.fuente = g.fuente_peq = g.fuente_negrita = NULL;
 }
 
 void app_invalidar(void) {
@@ -642,7 +638,6 @@ int app_iniciar(void) {
     pila_iniciar(&g.rehacer, MAX_UNDO);
     seleccion_limpiar(&g.sel);
     mapa_iniciar();
-    editor_iniciar(&g.editor);
     tiles_modo_iniciar();
     texto_iniciar();
 
@@ -668,7 +663,6 @@ void app_terminar(void) {
     doc_liberar(&g.doc);
     seleccion_liberar(&g.sel);
     mapa_liberar();
-    editor_terminar(&g.editor);
     tiles_modo_liberar();
     texto_terminar();
     tiles_liberar();
@@ -769,7 +763,6 @@ void app_guardar_imagen(const char *ruta, int png) {
 
 void app_cambiar_vista(Vista vista) {
     if (vista == g.vista) return;
-    if (g.vista == VISTA_CODIGO) app_cerrar_editor_codigo();
     g.vista = vista;
     g.menu_abierto = -1;
     app_invalidar();
@@ -782,19 +775,6 @@ void app_alternar_mapa(void) {
         app_cambiar_vista(VISTA_MAPA);
         mapa_reiniciar();
     }
-}
-
-void app_abrir_editor_codigo(void) {
-    g.vista = VISTA_CODIGO;
-    g.editor.activo = 1;
-    g.menu_abierto = -1;
-    app_invalidar();
-}
-
-void app_cerrar_editor_codigo(void) {
-    g.editor.activo = 0;
-    g.vista = VISTA_PINTAR;
-    app_invalidar();
 }
 
 void app_poner_herramienta(int herramienta) {
@@ -1062,7 +1042,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case WM_TIMER:
             if (wp == 1) {
-                if (g.sel.activa || (g.vista == VISTA_CODIGO && g.editor.activo) ||
+                if (g.sel.activa ||
                     (g.estado_hasta && GetTickCount() > g.estado_hasta) ||
                     g.texto_activo) {
                     app_invalidar();
@@ -1072,9 +1052,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_SETCURSOR: {
             int zona = LOWORD(lp);
             if (zona == HTCLIENT) {
-                if (g.vista == VISTA_CODIGO) {
-                    SetCursor(LoadCursorA(NULL, IDC_IBEAM));
-                } else if (lienzo_contiene(g.raton_x, g.raton_y) && g.vista == VISTA_PINTAR) {
+                if (lienzo_contiene(g.raton_x, g.raton_y) && g.vista == VISTA_PINTAR) {
                     SetCursor(LoadCursorA(NULL, IDC_CROSS));
                 } else {
                     SetCursor(LoadCursorA(NULL, IDC_ARROW));

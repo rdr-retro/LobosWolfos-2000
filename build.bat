@@ -46,14 +46,14 @@ echo Compilando recursos...
 if errorlevel 1 goto error_pop
 
 echo Compilando C...
-for %%F in (src\nucleo.c src\fuente.c src\documento.c src\imagen.c src\pintura.c src\texto.c src\ui.c src\tiles.c src\mapa.c src\editor.c src\tiles_modo.c src\app.c) do (
+for %%F in (src\nucleo.c src\fuente.c src\documento.c src\imagen.c src\pintura.c src\texto.c src\ui.c src\tiles.c src\mapa.c src\tiles_modo.c src\app.c) do (
     echo   %%~nxF
     "%GCC%" %CFLAGS% -c "%%~F" -o "obj\%%~nF.o"
     if errorlevel 1 goto error_pop
 )
 
 echo Enlazando...
-"%GCC%" -m32 -o "TexturePaint2000.exe" obj\nucleo.o obj\fuente.o obj\documento.o obj\imagen.o obj\pintura.o obj\texto.o obj\ui.o obj\tiles.o obj\mapa.o obj\editor.o obj\tiles_modo.o obj\app.o obj\recurso.o %LIBS% -mwindows -static-libgcc
+"%GCC%" -m32 -o "TexturePaint2000.exe" obj\nucleo.o obj\fuente.o obj\documento.o obj\imagen.o obj\pintura.o obj\texto.o obj\ui.o obj\tiles.o obj\mapa.o obj\tiles_modo.o obj\app.o obj\recurso.o %LIBS% -mwindows -static-libgcc
 if errorlevel 1 goto error_pop
 popd
 goto exito

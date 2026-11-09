@@ -5,7 +5,7 @@
 #include "app.h"
 
 static const char *MENU_ETIQUETAS[8] = {
-    "ARCHIVO", "MODO", "EDITAR", "EDITOR CODIGO",
+    "ARCHIVO", "MODO", "EDITAR", "GESTOR DE MODULOS",
     "SELECCIONAR", "CAPA", "COLORES", "INFO"
 };
 
@@ -2667,12 +2667,6 @@ void ui_dibujar(void) {
     dibujar_rect(0, 0, g.ancho, g.alto, FONDO);
 
     ui_dibujar_barra_menus();
-
-    if (g.vista == VISTA_CODIGO) {
-        editor_dibujar(&g.editor);
-        ui_dibujar_menu_desplegable();
-        return;
-    }
 
     ui_dibujar_sidebar();
     ui_dibujar_topbar();

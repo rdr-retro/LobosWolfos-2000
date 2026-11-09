@@ -45,7 +45,7 @@ $Libs = @(
 
 $Fuentes = @(
     "nucleo.c", "fuente.c", "documento.c", "imagen.c", "pintura.c", "texto.c", "ui.c",
-    "tiles.c", "mapa.c", "editor.c", "tiles_modo.c", "app.c"
+    "tiles.c", "mapa.c", "tiles_modo.c", "app.c"
 )
 
 Write-Host "Compilando recursos..." -ForegroundColor Cyan

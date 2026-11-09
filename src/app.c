@@ -198,10 +198,6 @@ static void ejecutar_menu(int menu, int opcion) {
         case 0: accion_archivo(opcion); break;
         case 1: accion_modo(opcion); break;
         case 2: accion_editar(opcion); break;
-        case 3:
-            if (opcion == 0) app_abrir_editor_codigo();
-            else if (opcion == 1) { g.editor.activo = 0; app_cerrar_editor_codigo(); }
-            break;
         case 4: accion_seleccionar(opcion); break;
         case 5: accion_capa(opcion); break;
         case 6: accion_colores(opcion); break;
@@ -690,11 +686,6 @@ int clic_lienzo(int x, int y) {
 /* Entrada principal                                                   */
 /* ------------------------------------------------------------------ */
 static void clic_etiqueta_menu(int menu) {
-    if (menu == 3) {
-        g.menu_abierto = -1;
-        app_abrir_editor_codigo();
-        return;
-    }
     if (menu == 7) {
         g.menu_abierto = -1;
         g.textura_menu_abierto = 0;
@@ -702,8 +693,9 @@ static void clic_etiqueta_menu(int menu) {
         app_invalidar();
         return;
     }
-    if (menu == 5 || menu == 6) {
-        /* CAPA y COLORES no tienen desplegable: solo su etiqueta. */
+    if (menu == 3 || menu == 5 || menu == 6) {
+        /* GESTOR DE MODULOS, CAPA y COLORES no tienen desplegable: solo su
+         * etiqueta. */
         g.menu_abierto = -1;
         app_invalidar();
         return;
@@ -718,49 +710,19 @@ void app_pulsar(int x, int y, int boton) {
 
     /* El menu contextual de capa y las confirmaciones bloquean el resto de la
      * interfaz mientras estan abiertos. */
-    if (g.vista != VISTA_CODIGO &&
-        (g.confirmar_borrado || g.confirmar_tile >= 0 || g.capa_menu_abierto >= 0)) {
+    if (g.confirmar_borrado || g.confirmar_tile >= 0 || g.capa_menu_abierto >= 0) {
         clic_panel_derecho(x, y, boton);
         return;
     }
 
     /* Un clic fuera del circulo de textura o de su menu cierra el menu. */
-    if (g.vista != VISTA_CODIGO && g.textura_menu_abierto) {
+    if (g.textura_menu_abierto) {
         int juego = textura_juego_actual();
         if (!zona_contiene(panel_textura_zona(), x, y) &&
             textura_muestra_en(x, y, juego) < 0) {
             g.textura_menu_abierto = 0;
             app_invalidar();
         }
-    }
-
-    if (g.vista == VISTA_CODIGO) {
-        if (y < MENU_BARRA_ALTO) {
-            /* Barra de menus sigue activa. */
-            if (g.menu_abierto >= 0) {
-                int op = opcion_menu_en(x, y);
-                if (op >= 0) {
-                    int menu = g.menu_abierto;
-                    g.menu_abierto = -1;
-                    if (menu_fila_activa(menu, op)) ejecutar_menu(menu, op);
-                    app_invalidar();
-                    return;
-                }
-            }
-            {
-                int menu = menu_barra_en(x, y);
-                if (menu >= 0) {
-                    clic_etiqueta_menu(menu);
-                    return;
-                }
-            }
-            g.menu_abierto = -1;
-            app_invalidar();
-            return;
-        }
-        if (g.menu_abierto >= 0) { g.menu_abierto = -1; app_invalidar(); }
-        editor_pulsar(&g.editor, x, y, boton);
-        return;
     }
 
     /* Menu abierto: tiene prioridad. */
@@ -860,10 +822,6 @@ void app_soltar(int x, int y, int boton) {
         arrastre = 0;
         return;
     }
-    if (g.vista == VISTA_CODIGO) {
-        editor_soltar(&g.editor, x, y, boton);
-        return;
-    }
     if (g.vista == VISTA_MAPA) {
         mapa_soltar(x, y, boton);
         return;
@@ -876,11 +834,6 @@ void app_mover(int x, int y, int botones) {
     int i;
     g.raton_x = x;
     g.raton_y = y;
-
-    if (g.vista == VISTA_CODIGO) {
-        editor_mover(&g.editor, x, y, botones);
-        return;
-    }
 
     /* Los menus no cambian al pasar el raton: solo al pulsar una etiqueta. */
 
@@ -1021,10 +974,6 @@ void app_mover(int x, int y, int botones) {
 void app_rueda(int x, int y, int delta, int ctrl) {
     g.raton_x = x;
     g.raton_y = y;
-    if (g.vista == VISTA_CODIGO) {
-        editor_rueda(&g.editor, x, y, delta);
-        return;
-    }
     if (g.vista == VISTA_MAPA && zona_contiene(zona_trabajo(), x, y)) {
         mapa_rueda(x, y, delta, ctrl);
         return;
@@ -1049,14 +998,9 @@ void app_tecla(int vk, int ctrl, int shift) {
         app_invalidar();
         return;
     }
-    if (g.vista == VISTA_CODIGO) {
-        editor_tecla(&g.editor, vk, ctrl, shift);
-        return;
-    }
     if (ctrl && vk == 'N') { dialogo_nuevo(); return; }
     if (ctrl && vk == 'O') { dialogo_abrir_imagen(); return; }
     if (ctrl && vk == 'S') { dialogo_guardar_png(); return; }
-    if (ctrl && vk == 'E') { app_abrir_editor_codigo(); return; }
     if (ctrl && vk == 'M') { app_cambiar_vista(g.vista == VISTA_MAPA ? VISTA_PINTAR : VISTA_MAPA); return; }
     if (vk == VK_F1) { g.info_visible = !g.info_visible; app_invalidar(); return; }
     if (g.vista == VISTA_PINTAR && texto_tecla(vk, ctrl, shift)) return;
@@ -1064,16 +1008,11 @@ void app_tecla(int vk, int ctrl, int shift) {
 }
 
 void app_caracter(int ch) {
-    if (g.vista == VISTA_CODIGO) {
-        editor_caracter(&g.editor, ch);
-        return;
-    }
     if (g.vista == VISTA_PINTAR && texto_caracter(ch)) return;
     pintura_caracter(ch);
 }
 
 void app_doble_clic(int x, int y) {
-    if (g.vista == VISTA_CODIGO) return;
     if (g.vista == VISTA_MAPA) return;
     pintura_doble_clic(x, y);
 }

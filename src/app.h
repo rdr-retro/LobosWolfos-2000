@@ -76,21 +76,6 @@ typedef unsigned char  u8;
 #define MAPA_TEXTO       0x00D8E2ECu
 #define MAPA_PANEL       0x00101A24u
 
-#define EDITOR_FONDO       0x001E1E1Eu
-#define EDITOR_BARRA       0x002D2D2Du
-#define EDITOR_BARRA_BORDE 0x00484848u
-#define EDITOR_BOTON       0x003A3A3Au
-#define EDITOR_BOTON_BORDE 0x00606060u
-#define EDITOR_TEXTO       0x00D8D8D8u
-#define EDITOR_TENUE       0x00808080u
-#define EDITOR_NUMERO      0x00707878u
-#define EDITOR_LINEA       0x00262A30u
-#define EDITOR_CURSOR      0x0060A8FFu
-#define EDITOR_SCROLL      0x00505050u
-#define EDITOR_PULGAR      0x00A0A0A0u
-#define EDITOR_PANEL       0x00242424u
-#define EDITOR_PANEL_SEP   0x00484848u
-
 /* ------------------------------------------------------------------ */
 /* Medidas de la interfaz                                              */
 /* ------------------------------------------------------------------ */
@@ -555,36 +540,11 @@ typedef struct TileDoc {
 } TileDoc;
 
 /* ------------------------------------------------------------------ */
-/* Editor de codigo                                                    */
-/* ------------------------------------------------------------------ */
-typedef struct ZonasEditor {
-    Zona barra;
-    Zona nuevo, abrir, guardar, cerrar;
-    Zona texto;
-    Zona estado;
-    Zona scroll;
-} ZonasEditor;
-
-typedef struct EditorCodigo {
-    int activo;
-    char *texto;
-    int largo;
-    int cursor;          /* indice en el texto */
-    int sel_ancla;       /* -1 sin seleccion */
-    int scroll_x, scroll_y;
-    char ruta[MAX_PATH];
-    char titulo[128];
-    int modificado;
-    int arrastrando_scroll;
-} EditorCodigo;
-
-/* ------------------------------------------------------------------ */
 /* Estado global                                                       */
 /* ------------------------------------------------------------------ */
 typedef enum {
     VISTA_PINTAR = 0,
-    VISTA_MAPA,
-    VISTA_CODIGO
+    VISTA_MAPA
 } Vista;
 
 typedef struct App {
@@ -599,7 +559,6 @@ typedef struct App {
     HFONT fuente;
     HFONT fuente_peq;
     HFONT fuente_negrita;
-    HFONT fuente_codigo;
 
     int raton_x, raton_y;
     int raton_dentro;
@@ -684,8 +643,6 @@ typedef struct App {
 
     TileGuardado tiles[MAX_TILES];
     int num_tiles;
-
-    EditorCodigo editor;
 
     /* Estado de arrastre de herramientas de pintura */
     int pintando;
@@ -990,28 +947,6 @@ void ui_dibujar_tiles_minimizado(void);
 int  tiles_modo_cruzar_trazo(int x, int y);
 
 /* ------------------------------------------------------------------ */
-/* Editor de codigo                                                    */
-/* ------------------------------------------------------------------ */
-void editor_iniciar(EditorCodigo *e);
-void editor_terminar(EditorCodigo *e);
-void editor_abrir(EditorCodigo *e);
-void editor_abrir_ruta(EditorCodigo *e, const char *ruta);
-void editor_guardar(EditorCodigo *e);
-void editor_guardar_como(EditorCodigo *e);
-void editor_nuevo(EditorCodigo *e);
-void editor_cerrar(EditorCodigo *e);
-void editor_dibujar(EditorCodigo *e);
-void editor_pulsar(EditorCodigo *e, int x, int y, int boton);
-void editor_soltar(EditorCodigo *e, int x, int y, int boton);
-void editor_mover(EditorCodigo *e, int x, int y, int botones);
-void editor_rueda(EditorCodigo *e, int x, int y, int delta);
-void editor_tecla(EditorCodigo *e, int vk, int ctrl, int shift);
-void editor_caracter(EditorCodigo *e, int ch);
-void editor_insertar(EditorCodigo *e, const char *texto);
-void editor_scroll_visible(EditorCodigo *e);
-ZonasEditor editor_zonas(EditorCodigo *e);
-
-/* ------------------------------------------------------------------ */
 /* UI                                                                  */
 /* ------------------------------------------------------------------ */
 void ui_dibujar(void);
@@ -1139,8 +1074,6 @@ void app_abrir_imagen(const char *ruta);
 void app_guardar_imagen(const char *ruta, int png);
 void app_cambiar_vista(Vista vista);
 void app_alternar_mapa(void);
-void app_abrir_editor_codigo(void);
-void app_cerrar_editor_codigo(void);
 void app_poner_herramienta(int herramienta);
 void app_agregar_color_paleta(u32 color);
 

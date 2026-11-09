@@ -13,7 +13,7 @@ para cargar y guardar PNG.
 - Selección rectangular y de forma libre, con arrastre y redimensionado.
 - Herramienta de texto con varias fuentes y tamaños.
 - Patrón de textura repetido, visor de mosaico y guardado de tiles en PNG.
-- Apertura y exportación de PNG/BMP, mapas `.mav` y editor de código.
+- Apertura y exportación de PNG/BMP y mapas `.mav`.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
 
 ## Compilar
