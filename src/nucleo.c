@@ -1233,6 +1233,21 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
         char *arrastre_arg = arg_valor(cmd, "--arrastre");
         if (menu_arg) g.menu_abierto = atoi(menu_arg);
         if (vista_arg && strncmp(vista_arg, "mapa", 4) == 0) g.vista = VISTA_MAPA;
+        /* Ruta de mapa para pruebas: carga el .mav antes de simular clics. */
+        {
+            char *mruta = arg_valor(cmd, "--mapa-ruta");
+            if (mruta) {
+                int n = 0;
+                while (mruta[n] && mruta[n] != ' ' && mruta[n] != '\t' &&
+                       n < MAX_PATH - 1) {
+                    g.mapa_ruta[n] = mruta[n];
+                    n++;
+                }
+                g.mapa_ruta[n] = 0;
+                mapa_reiniciar();
+                mapa_cargar(g.mapa_ruta);
+            }
+        }
         if (strstr(cmd, "--tiles") != NULL) tiles_modo_entrar();
         if (strstr(cmd, "--gestor") != NULL) g.vista = VISTA_MODULOS;
         /* Elementos de prueba del gestor: "x,y;x,y". */
@@ -1300,6 +1315,73 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 }
                 g.boton_izq = 0;
                 app_soltar(ax1, ay1, 0);
+            }
+        }
+        /* Paneo simulado del editor de mapas con el boton central. */
+        {
+            char *pan_arg = arg_valor(cmd, "--mapa-pan");
+            if (pan_arg) {
+                int px0 = 0, py0 = 0, px1 = 0, py1 = 0;
+                if (sscanf(pan_arg, "%d,%d;%d,%d", &px0, &py0, &px1, &py1) == 4) {
+                    int paso;
+                    app_pulsar(px0, py0, 2);
+                    g.boton_medio = 1;
+                    for (paso = 1; paso <= 24; paso++) {
+                        int mx = px0 + (px1 - px0) * paso / 24;
+                        int my = py0 + (py1 - py0) * paso / 24;
+                        app_mover(mx, my, MK_MBUTTON);
+                    }
+                    g.boton_medio = 0;
+                    app_soltar(px1, py1, 2);
+                }
+            }
+        }
+        /* Rueda simulada en el editor de mapas: "x,y,delta[,ctrl]". */
+        {
+            char *rueda_arg = arg_valor(cmd, "--mapa-rueda");
+            if (rueda_arg) {
+                int rx = 0, ry = 0, d = 0, n = 0, ctrl = 0;
+                if (sscanf(rueda_arg, "%d,%d,%d%n", &rx, &ry, &d, &n) >= 3) {
+                    if (rueda_arg[n] == ',') ctrl = atoi(rueda_arg + n + 1);
+                    mapa_rueda(rx, ry, d, ctrl);
+                }
+            }
+        }
+        /* Borrado simulado del editor de mapas arrastrando el boton derecho. */
+        {
+            char *borrar_arg = arg_valor(cmd, "--mapa-borrar");
+            if (borrar_arg) {
+                int bx0 = 0, by0 = 0, bx1 = 0, by1 = 0;
+                if (sscanf(borrar_arg, "%d,%d;%d,%d", &bx0, &by0, &bx1, &by1) == 4) {
+                    int paso;
+                    app_pulsar(bx0, by0, 1);
+                    g.boton_der = 1;
+                    for (paso = 1; paso <= 24; paso++) {
+                        int mx = bx0 + (bx1 - bx0) * paso / 24;
+                        int my = by0 + (by1 - by0) * paso / 24;
+                        app_mover(mx, my, MK_RBUTTON);
+                    }
+                    g.boton_der = 0;
+                    app_soltar(bx1, by1, 1);
+                }
+            }
+        }
+        /* Guardado directo del mapa para pruebas, sin dialogo. */
+        {
+            char *guardar_arg = arg_valor(cmd, "--guardar-mapa");
+            if (guardar_arg) {
+                char ruta[MAX_PATH];
+                int n = 0;
+                while (guardar_arg[n] && guardar_arg[n] != ' ' &&
+                       guardar_arg[n] != '\t' && n < MAX_PATH - 1) {
+                    ruta[n] = guardar_arg[n];
+                    n++;
+                }
+                ruta[n] = 0;
+                if (ruta[0] && mapa_guardar(ruta)) {
+                    strncpy(g.mapa_ruta, ruta, MAX_PATH - 1);
+                    g.mapa_ruta[MAX_PATH - 1] = 0;
+                }
             }
         }
         /* Guardado directo de la escena activa (pruebas sin dialogo). Va

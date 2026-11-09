@@ -77,6 +77,19 @@ para pintar; es un entorno desplazable con rejilla. Arrastra sobre una zona vac�
 con el botón izquierdo o central para mover la vista, o usa la rueda para
 desplazarte en vertical (`Ctrl+rueda` en horizontal).
 
+El **Editor de mapas** del menú **MODO** pide un archivo `.mav` y muestra una
+rejilla infinita de celdas. El clic izquierdo coloca el tile elegido en el panel
+derecho y el derecho lo borra; en ambos casos puedes arrastrar para pintar o
+borrar varias celdas. El botón central (o `Espacio` + clic izquierdo) mueve la
+vista, la rueda la desplaza 48 píxeles (`Shift` en horizontal) y `Ctrl+rueda`
+cambia el tamaño de celda entre 8 y 128 píxeles manteniendo bajo el cursor el
+mismo punto del mapa. Los ejes, las etiquetas de coordenadas y el panel de estado
+indican la celda actual. Los tiles conservan su proporción dentro de la celda.
+**ARCHIVO > Guardar mapa .mav** guarda el mapa en formato Lua para Love2D; al
+volver a entrar se conserva el mapa que ya está en memoria. Las imágenes se
+buscan primero en la carpeta `tiles_dir` junto al `.mav`, después junto al propio
+`.mav` y por último en la carpeta `tiles` del ejecutable.
+
 ## Atajos
 
 | Atajo | Acción |

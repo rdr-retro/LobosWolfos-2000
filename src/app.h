@@ -561,8 +561,8 @@ typedef struct TileMapa {
 typedef struct Mapa {
     TileMapa celdas[MAX_CELDAS];
     int num;
-    int lado;
-    int scroll_x, scroll_y;   /* desplazamiento en px de pantalla */
+    int lado;                 /* lado de celda en pantalla (zoom propio) */
+    int origen_x, origen_y;   /* esquina de la celda (0,0) en pantalla */
     int tile_sel;
 } Mapa;
 

@@ -126,13 +126,29 @@ static void accion_modo(int opcion) {
             if (g.vista == VISTA_MAPA) {
                 app_cambiar_vista(VISTA_PINTAR);
             } else {
-                char ruta[MAX_PATH];
                 if (g.modo_tiles) tiles_modo_salir();
-                if (!pedir_ruta_mapa(ruta)) break;
-                strncpy(g.mapa_ruta, ruta, MAX_PATH - 1);
-                g.mapa_ruta[MAX_PATH - 1] = 0;
-                mapa_reiniciar();
-                if (ruta_existe(ruta)) mapa_cargar(ruta);
+                /* Si el mapa ya tiene celdas en memoria se conserva tal cual.
+                 * Solo se pide archivo o se recarga cuando esta vacio. */
+                if (g.mapa.num == 0) {
+                    if (g.mapa_ruta[0] == 0) {
+                        char ruta[MAX_PATH];
+                        if (!pedir_ruta_mapa(ruta)) break;
+                        strncpy(g.mapa_ruta, ruta, MAX_PATH - 1);
+                        g.mapa_ruta[MAX_PATH - 1] = 0;
+                        mapa_reiniciar();
+                        if (ruta_existe(ruta)) mapa_cargar(ruta);
+                    } else if (ruta_existe(g.mapa_ruta)) {
+                        mapa_reiniciar();
+                        mapa_cargar(g.mapa_ruta);
+                    }
+                }
+                /* Al entrar, si no habia tile elegido, usar el mas reciente. */
+                if (g.mapa.tile_sel < 0 && g.num_tiles > 0) {
+                    int indice = g.mapa_tile_sel;
+                    if (indice < 0 || indice >= g.num_tiles) indice = g.num_tiles - 1;
+                    g.mapa.tile_sel = indice;
+                    g.mapa_tile_sel = indice;
+                }
                 app_cambiar_vista(VISTA_MAPA);
             }
             break;
@@ -1471,6 +1487,9 @@ void app_mover(int x, int y, int botones) {
     int i;
     g.raton_x = x;
     g.raton_y = y;
+    /* Tambien se marca dentro cuando la prueba simula movimientos sin pasar
+     * por WM_MOUSEMOVE; el hover y las capturas lo necesitan. */
+    g.raton_dentro = 1;
 
     /* En el gestor se actualiza el arrastre y el hover del boton. */
     if (g.vista == VISTA_MODULOS) {
