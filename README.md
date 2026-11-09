@@ -61,10 +61,11 @@ etiqueta para volver a Pintar.
 El panel izquierdo muestra, de arriba abajo, la lista de elementos del lienzo
 (`Elemento 1`, `Elemento 2`…) y la lista de escenas creadas. Los elementos
 unidos entre sí por el efecto imán aparecen indentados bajo el elemento del
-grupo al que pertenecen. Cada escena es una configuración de rectángulos del
-lienzo: al pulsar una escena se carga en el lienzo, y el botón **Nueva escena**
-guarda la actual y crea otra vacía. Si hay más de seis elementos, la rueda sobre
-la lista los desplaza.
+grupo al que pertenecen; la flecha del grupo permite plegar o desplegar sus
+hijos en la lista. Cada escena es una configuración de rectángulos del lienzo:
+al pulsar una escena se carga en el lienzo, y el botón **Nueva escena** guarda
+la actual y crea otra vacía. Si hay más de seis elementos, la rueda sobre la
+lista los desplaza.
 
 Dentro del gestor, el panel derecho contiene un botón rectangular sin nombre:
 arrástralo hasta el lienzo para insertar un elemento. Los elementos ya colocados

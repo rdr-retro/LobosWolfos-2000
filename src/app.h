@@ -597,6 +597,7 @@ typedef struct ModuloElemento {
     int x, y;
     int ancho, alto;
     int id; /* orden de creacion, estable al moverlo en el lienzo */
+    int plegado; /* solo en la raiz del grupo: lista de hijos oculta */
 } ModuloElemento;
 
 /* Escena: configuracion de rectangulos del lienzo, con su vista. */

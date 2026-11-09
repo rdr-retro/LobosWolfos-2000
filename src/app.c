@@ -947,8 +947,9 @@ static int elementos_unidos(const ModuloElemento *a, const ModuloElemento *b) {
 }
 
 /* Ordena la lista de elementos por grupos unidos. Dentro de cada grupo manda
- * el id de creacion: el menor queda como raiz y el resto detras, marcados en
- * `hijos` para dibujarlos indentados. Devuelve el numero de filas. */
+ * el id de creacion: el menor queda como raiz y el resto detras. En `hijos`:
+ * 0 = elemento suelto, 1 = raiz con hijos, 2 = hijo indentado. Si la raiz esta
+ * plegada solo se emite su fila. Devuelve el numero de filas visibles. */
 int elementos_ordenar_lista(int *orden, int *hijos) {
     int comp[MODULOS_MAX], comp_min[MODULOS_MAX], comp_usado[MODULOS_MAX];
     int total = g.num_modulos, ncomp = 0, n = 0;
@@ -984,7 +985,7 @@ int elementos_ordenar_lista(int *orden, int *hijos) {
     }
 
     while (n < total) {
-        int mejor = -1, ultimo = -1;
+        int mejor = -1, ultimo = -1, tam = 0;
         for (i = 0; i < ncomp; i++) {
             if (comp_usado[i]) continue;
             if (mejor < 0 ||
@@ -993,6 +994,8 @@ int elementos_ordenar_lista(int *orden, int *hijos) {
         }
         if (mejor < 0) break;
         comp_usado[mejor] = 1;
+        for (i = 0; i < total; i++)
+            if (comp[i] == mejor) tam++;
         for (;;) {
             int elegido = -1;
             for (j = 0; j < total; j++) {
@@ -1004,12 +1007,37 @@ int elementos_ordenar_lista(int *orden, int *hijos) {
             }
             if (elegido < 0) break;
             orden[n] = elegido;
-            if (hijos) hijos[n] = (ultimo >= 0);
+            if (hijos) hijos[n] = (ultimo < 0) ? (tam > 1 ? 1 : 0) : 2;
             n++;
             ultimo = elegido;
+            /* Grupo plegado: solo se muestra su raiz. */
+            if (ultimo == comp_min[mejor] && tam > 1 &&
+                g.modulos[ultimo].plegado)
+                break;
         }
     }
     return n;
+}
+
+/* Raiz del grupo al que pertenece un elemento (el miembro de menor id). */
+static int elementos_raiz(int idx) {
+    int visto[MODULOS_MAX] = {0};
+    int cola[MODULOS_MAX], ini = 0, fin = 0, i, raiz = idx;
+
+    if (idx < 0 || idx >= g.num_modulos) return -1;
+    visto[idx] = 1;
+    cola[fin++] = idx;
+    while (ini < fin) {
+        int a = cola[ini++];
+        if (g.modulos[a].id < g.modulos[raiz].id) raiz = a;
+        for (i = 0; i < g.num_modulos; i++) {
+            if (visto[i] || !elementos_unidos(&g.modulos[a], &g.modulos[i]))
+                continue;
+            visto[i] = 1;
+            cola[fin++] = i;
+        }
+    }
+    return raiz;
 }
 
 /* Inserta un elemento centrado en un punto de pantalla, con acople. */
@@ -1031,6 +1059,12 @@ void modulos_insertar(int x, int y) {
     e->ancho = MODULOS_ELEMENTO_ANCHO;
     e->alto = MODULOS_ELEMENTO_ALTO;
     e->id = g.modulo_siguiente_id++;
+    e->plegado = 0;
+    /* Si el elemento cae en un grupo plegado, se despliega para mostrarlo. */
+    {
+        int raiz = elementos_raiz(g.num_modulos - 1);
+        if (raiz >= 0) g.modulos[raiz].plegado = 0;
+    }
     /* La lista muestra el elemento recien anadido, aunque quede dentro de
      * un grupo y no al final. */
     if (g.num_modulos > ELEMENTOS_VISIBLES) {
@@ -1038,7 +1072,7 @@ void modulos_insertar(int x, int y) {
         int fila, total = elementos_ordenar_lista(orden, hijos);
         for (fila = 0; fila < total; fila++)
             if (orden[fila] == g.num_modulos - 1) break;
-        if (fila >= ELEMENTOS_VISIBLES)
+        if (fila < total && fila >= ELEMENTOS_VISIBLES)
             g.elementos_scroll = fila - ELEMENTOS_VISIBLES + 1;
     }
 }
@@ -1056,21 +1090,45 @@ static void modulos_pulsar(int x, int y, int boton) {
         return;
     }
 
-    /* Panel izquierdo: boton de nueva escena y lista de escenas creadas. */
+    /* Panel izquierdo: lista de elementos (plegar grupos) y escenas. */
     if (boton == 0) {
-        int i;
-        if (zona_contiene(escena_nueva_zona(), x, y)) {
-            escenas_nueva();
-            app_invalidar();
+        Zona lista = elementos_lista_zona();
+        if (zona_contiene(lista, x, y)) {
+            int orden[MODULOS_MAX], hijos[MODULOS_MAX];
+            int filas = elementos_ordenar_lista(orden, hijos);
+            int paso = ELEMENTO_FILA_ALTO + ELEMENTO_FILA_HUECO;
+            int fila = (y - lista.y) / paso;
+            int visible = fila + g.elementos_scroll;
+            if (fila >= 0 && fila < ELEMENTOS_VISIBLES && visible < filas &&
+                hijos[visible] == 1 &&
+                x < elemento_fila_zona(fila).x + 20) {
+                int idx = orden[visible];
+                int maximo;
+                g.modulos[idx].plegado = !g.modulos[idx].plegado;
+                filas = elementos_ordenar_lista(orden, hijos);
+                maximo = filas - ELEMENTOS_VISIBLES;
+                if (maximo < 0) maximo = 0;
+                if (g.elementos_scroll > maximo) g.elementos_scroll = maximo;
+                app_invalidar();
+            }
             return;
         }
-        for (i = 0; i < g.num_escenas; i++) {
-            if (zona_abajo(escena_fila_zona(i)) >
-                escena_nueva_zona().y - 4) break;
-            if (zona_contiene(escena_fila_zona(i), x, y)) {
-                escenas_activar(i);
+
+        {
+            int i;
+            if (zona_contiene(escena_nueva_zona(), x, y)) {
+                escenas_nueva();
                 app_invalidar();
                 return;
+            }
+            for (i = 0; i < g.num_escenas; i++) {
+                if (zona_abajo(escena_fila_zona(i)) >
+                    escena_nueva_zona().y - 4) break;
+                if (zona_contiene(escena_fila_zona(i), x, y)) {
+                    escenas_activar(i);
+                    app_invalidar();
+                    return;
+                }
             }
         }
     }
@@ -1181,7 +1239,9 @@ static void modulos_mover(int x, int y) {
 static void modulos_rueda(int x, int y, int delta, int ctrl) {
     /* Rueda sobre la lista de elementos: desplaza la lista. */
     if (zona_contiene(elementos_lista_zona(), x, y)) {
-        int maximo = g.num_modulos - ELEMENTOS_VISIBLES;
+        int orden[MODULOS_MAX], hijos[MODULOS_MAX];
+        int filas = elementos_ordenar_lista(orden, hijos);
+        int maximo = filas - ELEMENTOS_VISIBLES;
         int scroll = g.elementos_scroll + (delta > 0 ? -1 : 1);
         if (maximo < 0) maximo = 0;
         if (scroll < 0) scroll = 0;

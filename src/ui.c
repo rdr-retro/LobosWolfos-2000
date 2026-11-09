@@ -3108,39 +3108,103 @@ static void ui_dibujar_boton_modulos(void) {
                  SEPARADOR);
 }
 
+/* Distancia de un punto a un segmento. */
+static float punto_segmento(float px, float py, float ax, float ay,
+                            float bx, float by) {
+    float vx = bx - ax, vy = by - ay;
+    float wx = px - ax, wy = py - ay;
+    float len2 = vx * vx + vy * vy;
+    float t = len2 > 0.0f ? (wx * vx + wy * vy) / len2 : 0.0f;
+    float dx, dy;
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    dx = px - (ax + t * vx);
+    dy = py - (ay + t * vy);
+    return sqrtf(dx * dx + dy * dy);
+}
+
+/* Chevron de la lista: v hacia abajo si el grupo esta abierto y > hacia la
+ * derecha si esta plegado. Suavizado por supermuestreo 4x4. */
+static void dibujar_chevron(int cx, int cy, int abierto, u32 color) {
+    const int muestras = 4;
+    int x, y, sx, sy;
+
+    for (y = cy - 5; y <= cy + 5; y++) {
+        for (x = cx - 5; x <= cx + 5; x++) {
+            int c = 0;
+            if (x < 0 || y < 0 || x >= g.ancho || y >= g.alto) continue;
+            for (sy = 0; sy < muestras; sy++) {
+                for (sx = 0; sx < muestras; sx++) {
+                    float px = (float)x + ((float)sx + 0.5f) / muestras;
+                    float py = (float)y + ((float)sy + 0.5f) / muestras;
+                    float d;
+                    if (abierto) {
+                        d = punto_segmento(px, py, cx - 3.5f, cy - 1.5f,
+                                           (float)cx, cy + 1.5f);
+                        if (punto_segmento(px, py, (float)cx, cy + 1.5f,
+                                           cx + 3.5f, cy - 1.5f) < d)
+                            d = punto_segmento(px, py, (float)cx, cy + 1.5f,
+                                               cx + 3.5f, cy - 1.5f);
+                    } else {
+                        d = punto_segmento(px, py, cx - 1.5f, cy - 3.5f,
+                                           cx + 1.5f, (float)cy);
+                        if (punto_segmento(px, py, cx + 1.5f, (float)cy,
+                                           cx - 1.5f, cy + 3.5f) < d)
+                            d = punto_segmento(px, py, cx + 1.5f, (float)cy,
+                                               cx - 1.5f, cy + 3.5f);
+                    }
+                    if (d <= 1.0f) c++;
+                }
+            }
+            if (c > 0)
+                mezclar_cobertura(x, y, color,
+                                  (c * 255 + muestras * muestras / 2) /
+                                  (muestras * muestras));
+        }
+    }
+}
+
 /* Lista de elementos del lienzo actual, encima de la lista de escenas. Los
- * elementos unidos por el iman se muestran indentados bajo su grupo. */
+ * grupos unidos por el iman se pueden plegar con el chevron de su raiz. */
 static void elementos_dibujar_panel(void) {
     int total = g.num_modulos;
-    int filas = total;
+    int visibles, filas;
     int orden[MODULOS_MAX], hijos[MODULOS_MAX];
     char titulo[32];
     int i;
 
-    elementos_ordenar_lista(orden, hijos);
+    visibles = elementos_ordenar_lista(orden, hijos);
+    filas = visibles;
     if (filas > ELEMENTOS_VISIBLES) filas = ELEMENTOS_VISIBLES;
     formatear(titulo, sizeof(titulo), "ELEMENTOS %d", total);
     fuente_dibujar(SIDEBAR_MARGEN, AREA_SUP_ALTO + 8, titulo, TEXTO_UI);
 
     for (i = 0; i < filas; i++) {
         int fila = g.elementos_scroll + i;
-        int idx, activo, tx;
+        int idx, activo, tx, marca;
         Zona z;
         char etiqueta[32];
-        if (fila >= total) break;
+        if (fila >= visibles) break;
         idx = orden[fila];
+        marca = hijos[fila];
         z = elemento_fila_zona(i);
         activo = (g.modulo_arrastrando == 3 && idx == g.modulo_drag_i);
         formatear(etiqueta, sizeof(etiqueta), "Elemento %d", g.modulos[idx].id);
         dibujar_rect_z(z, activo ? BOTON_SELECCION : BARRA);
         dibujar_marco_z(z, activo ? BOTON_SELECCION : BARRA_BORDE);
         tx = z.x + 6;
-        if (hijos[fila]) {
+        if (marca == 1) {
+            /* Raiz de un grupo: chevron para plegar o desplegar. */
+            dibujar_chevron(z.x + 12, z.y + z.alto / 2,
+                            !g.modulos[idx].plegado,
+                            activo ? 0x00FFFFFFu : TEXTO_UI);
+            tx = z.x + 20;
+        } else if (marca == 2) {
             /* Conexion en arbol: el elemento pertenece al grupo de arriba. */
             int cy = z.y + z.alto / 2;
             dibujar_rect(z.x + 8, z.y - 3, z.x + 9, cy + 1, BARRA_BORDE);
-            dibujar_rect(z.x + 8, cy, z.x + 14, cy + 1, BARRA_BORDE);
-            tx = z.x + 18;
+            dibujar_rect(z.x + 8, cy, z.x + 16, cy + 1, BARRA_BORDE);
+            tx = z.x + 20;
         }
         fuente_dibujar(tx, z.y + (z.alto - 7) / 2, etiqueta,
                        activo ? 0x00FFFFFFu : TEXTO_UI);
