@@ -2890,12 +2890,38 @@ void ui_dibujar_info(void) {
 /* ------------------------------------------------------------------ */
 /* Dibujo general                                                      */
 /* ------------------------------------------------------------------ */
+/* Paneles del gestor de modulos: los mismos huecos que en modo normal
+ * (izquierdo, derecho e inferior) pero completamente vacios. */
+static void ui_dibujar_paneles_vacios(void) {
+    Zona sidebar = zona_hacer(0, AREA_SUP_ALTO, SIDEBAR_ANCHO,
+                              g.alto - AREA_SUP_ALTO);
+    Zona abajo = barra_abajo_zona();
+    int panel = sidebar_derecho_ancho();
+    int x0 = g.ancho - panel;
+    Zona derecha = zona_hacer(x0, AREA_SUP_ALTO, panel, g.alto - AREA_SUP_ALTO);
+
+    /* Barra lateral izquierda. */
+    dibujar_rect_z(sidebar, SIDEBAR);
+    dibujar_rect(SIDEBAR_ANCHO - 1, AREA_SUP_ALTO, SIDEBAR_ANCHO, g.alto,
+                 SEPARADOR);
+
+    /* Panel derecho. */
+    dibujar_rect_z(derecha, SIDEBAR);
+    dibujar_rect(x0, AREA_SUP_ALTO, x0 + 1, g.alto, SEPARADOR);
+
+    /* Barra inferior. */
+    dibujar_rect_z(abajo, BARRA);
+    dibujar_rect(abajo.x, abajo.y, zona_derecha(abajo), abajo.y + 1,
+                 BARRA_BORDE);
+}
+
 void ui_dibujar(void) {
     int i;
 
-    /* Gestor de modulos: lienzo en blanco con solo pestanas y menus. */
+    /* Gestor de modulos: paneles vacios sobre el fondo normal. */
     if (g.vista == VISTA_MODULOS) {
-        dibujar_rect(0, 0, g.ancho, g.alto, 0x00FFFFFFu);
+        dibujar_rect(0, 0, g.ancho, g.alto, FONDO);
+        ui_dibujar_paneles_vacios();
         ui_dibujar_pestanas();
         ui_dibujar_barra_menus();
         ui_dibujar_menu_desplegable();

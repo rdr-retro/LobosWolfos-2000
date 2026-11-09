@@ -15,8 +15,8 @@ para cargar y guardar PNG.
 - Patrón de textura repetido, visor de mosaico y guardado de tiles en PNG.
 - Pestañas de modo: Pintar, Tiles, Mapa y patrón comparten el mismo documento;
   cada pestaña conserva su vista, zoom y desplazamiento.
-- Gestor de módulos: espacio de trabajo en blanco con solo las pestañas y la
-  barra de menús.
+- Gestor de módulos: los paneles izquierdo, derecho e inferior se muestran
+  vacíos sobre el fondo habitual de la aplicación.
 - Apertura y exportación de PNG/BMP y mapas `.mav`.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
 
@@ -48,8 +48,8 @@ esa pestaña a Tiles, Mapa o patrón sin tocar el documento. `Nuevo` y `Abrir`
 sustituyen el documento compartido, no crean pestañas nuevas.
 
 Al pulsar **GESTOR DE MODULOS** en la barra de menús se abre un espacio de
-trabajo en blanco que solo muestra las pestañas y la barra de menús. Pulsa de
-nuevo la etiqueta para volver a Pintar.
+trabajo con los paneles izquierdo, derecho e inferior vacíos, manteniendo las
+pestañas y la barra de menús. Pulsa de nuevo la etiqueta para volver a Pintar.
 
 ## Atajos
 
