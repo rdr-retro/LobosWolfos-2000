@@ -1,0 +1,153 @@
+# Plan: LobosWolfos 2000, entorno de videojuegos 2D
+
+LobosWolfos 2000 no es solo un editor de texturas: es el **entorno de
+desarrollo de videojuegos 2D con motor propio**. Se monta el juego en el
+editor y se compila a dos destinos: **`game.exe`** para Windows, o una
+**imagen USB flasheable** que arranca desde la BIOS con el kernel propio
+**loboswolfos**, sin Windows.
+
+Este documento organiza la visión, las piezas, las fases y las decisiones.
+Se actualiza con cada entrega.
+
+## 1. Las cuatro piezas
+
+| Pieza | Qué es | Dónde vive |
+|---|---|---|
+| **Editor** | El entorno de trabajo (este programa): pintar, tiles, mapas y el gestor de lógica donde se compone el juego. | Repositorio actual. C, Win32/GDI, 32 bits, Windows 2000/XP. |
+| **Proyecto del juego** | Lo que monta el usuario: lógica (elementos del lienzo), mapas `.mav`, tiles e items. | Archivo `.logic` + carpetas `maps/` y `tiles/` junto al editor. |
+| **Motor egine** | El corazón del juego: bucle, render, entrada y colisiones. Sus partes esenciales escritas en **ensamblador**. | Carpeta `motor/` (nueva): núcleo x86 de 32 bits, núcleo x86_64 e interfaz común. |
+| **Kernel loboswolfos** | El sistema operativo propio que arranca el juego desde la BIOS del PC. | Copia adaptada de `rocky` (`C:\Users\rdr-ryzen\Desktop\kernel`), reducida a lo que el juego necesita. |
+
+### 1.1 Editor (ya hecho)
+
+- Pestañas de modo: Pintar, Tiles, Mapa, Logica... todas sobre un único
+  documento compartido.
+- Editor de mapas `.mav` (rejilla infinita) y modo tiles.
+- **Gestor de lógica**: lienzo desplazable donde se compone el juego.
+  - Los **items** (mapas `.mav` de `maps/`) son las pantallas o niveles del
+    juego: se eligen en el botón del item y se arrastran al lienzo.
+  - La sección **FUNCIONES** del panel derecho tiene los módulos
+    arrastrables del juego. El primero es **egine**, el motor.
+  - En el futuro habrá más botones arrastrables con **partes de código
+    editable dentro del propio botón**: al escribir código en el botón, el
+    botón cambia (ver fase 8).
+- Menú **COMPILE** (entre COLORES e INFO): las dos salidas de compilación.
+- Efecto imán entre elementos, lista de elementos plegable, guardar
+  lógica `.logic`.
+
+### 1.2 Proyecto del juego
+
+- `.logic`: texto plano con el desplazamiento de la vista y cada elemento
+  del lienzo (posición, tamaño, id, plegado, mapa asociado y función).
+- `maps/*.mav`: pantallas/niveles (con sus tiles referenciados).
+- El juego final = proyecto + motor + código de los módulos FUNCIONES.
+
+### 1.3 Motor egine (ensamblador)
+
+Interfaz común (cabecera C) y **dos variantes del núcleo**, una por destino:
+
+| Variante | Destino | Ensamblador |
+|---|---|---|
+| x86, 32 bits | `game.exe` en Windows 2000/XP | MinGW i686, `.s` GNU (o inline asm), MMX/SSE |
+| x86_64 | kernel loboswolfos | `.s` GNU estilo rocky, SSE2 |
+
+**Partes esenciales escritas a mano en ensamblador** (lo que debe correr
+rápido, el resto va encima en C/Rust):
+
+1. **Blit de sprites y tiles**: copia de rectángulos de píxeles al
+   framebuffer, con recorte por bordes (MMX/SSE).
+2. **Render del mapa de tiles**: bucle de las celdas visibles de un `.mav`
+   y volcado de cada tile.
+3. **Colisiones AABB**: rectángulo contra rectángulo y rectángulo contra
+   rejilla de tiles.
+4. **Bucle principal sincronizado**: paso de tiempo fijo por fotograma.
+5. **Entrada**: lectura del estado de teclado y ratón empaquetado en bits.
+
+Sobre ese núcleo, la capa de juego (qué hace cada pantalla, cómo pasa de
+nivel) se define con los elementos del gestor y, en el futuro, el código de
+los botones FUNCIONES.
+
+### 1.4 Kernel loboswolfos
+
+Base: **rocky** (`C:\Users\rdr-ryzen\Desktop\kernel`), un sistema x86_64 en
+Rust + ensamblador que ya arranca por BIOS, tiene framebuffer, entrada
+PS/2, disco y ejecutables propios. De rocky se reutiliza:
+
+- `boot/` (`boot.s`, `bootusb2.s`): arranque BIOS por USB, dos tramos,
+  carga del kernel y salto a modo largo.
+- `kernel/src/*.s` (`bios.s`, `interrupts.s`, `start.s`): el estilo de
+  ensamblador del sistema.
+- Drivers de framebuffer/VGA/VBE, PS/2 (teclado y ratón) y disco ATA.
+- `flashusb/` + `flashear.bat`: la forma de flashear el pendrive desde
+  Windows con la imagen.
+
+loboswolfos es la **reducción** de rocky al juego: sin shell completo, sin
+escritorio Kira; solo lo necesario para levantar framebuffer + entrada +
+disco, cargar el proyecto y ejecutar el motor con él. El kernel rocky del
+escritorio **no se toca**: se trabaja sobre una copia.
+
+## 2. Las dos compilaciones (menú COMPILE)
+
+- **Compilar para Windows**: el editor toma el proyecto activo y el núcleo
+  de 32 bits del motor y produce `game.exe` (Win32, 32 bits). Los mapas y
+  tiles del proyecto se incrustan en el ejecutable.
+- **Compilar para BIOS**: el editor toma el proyecto, el núcleo x86_64 del
+  motor y el kernel loboswolfos, y produce una **imagen de disco USB** con
+  MBR + loader + kernel + juego. Flasheándola a un pendrive, el juego
+  arranca directamente desde la BIOS del PC.
+
+## 3. Fases
+
+| Fase | Entregable | Estado |
+|---|---|---|
+| 0 | Editor con gestor de lógica, sección FUNCIONES y menú COMPILE | **Hecho** |
+| 1 | **egine arrastrable al lienzo**: el botón FUNCIONES se arrastra como elemento del motor y el `.logic` lo guarda | **Hecho (10-11-2026)** |
+| 2 | Cargar `.logic` de vuelta al gestor (hoy solo se guarda) | Pendiente |
+| 3 | Motor mínimo: núcleo ASM 32 bits (blit + tiles) y `game.exe` de prueba que abre una ventana, dibuja un mapa del proyecto y mueve un sprite con el teclado | Pendiente |
+| 4 | **Compilar para Windows** desde el menú COMPILE: genera `game.exe` con el proyecto actual | Pendiente |
+| 5 | Kernel loboswolfos: copia reducida de rocky que arranca por USB con framebuffer y entrada | Pendiente |
+| 6 | Núcleo ASM x86_64 + el mismo juego corriendo sobre loboswolfos | Pendiente |
+| 7 | **Compilar para BIOS** desde el menú COMPILE: genera la imagen USB flasheable (y flashearla con la herramienta de rocky como guía) | Pendiente |
+| 8 | Más botones FUNCIONES arrastrables con **código editable dentro del botón**: al escribir el código, el botón cambia su aspecto; el código pasa a formar parte del juego compilado | Pendiente |
+
+Orden de trabajo por defecto: 1 → 2 → 3 → 4 (primero Windows, que es
+inmediato), y en paralelo cuando toque 5 → 6 → 7. La fase 8 llega cuando
+el motor ya compila.
+
+## 4. Decisiones tomadas
+
+- **10-11-2026** — El motor tiene dos variantes de núcleo en ensamblador
+  (32 bits para `game.exe`, x86_64 para el kernel) con la misma interfaz
+  común definida en C.
+- **10-11-2026** — El plan vive en el repositorio del editor (`PLAN.md`) y
+  se versiona con el código.
+- **10-11-2026** — egine se arrastra al lienzo como elemento del motor
+  (fase 1); un clic sin arrastrar explica cómo usarlo.
+- El kernel loboswolfos se basa en rocky, en copia aparte; el original del
+  escritorio queda intocado.
+- El formato `.logic` sigue en texto plano; los elementos de función
+  añaden su campo propio al final de la línea.
+
+## 5. Pendiente de decidir
+
+- Dónde queda la carpeta del kernel loboswolfos: dentro del repo del editor
+  (p. ej. `loboswolfos/`) o en un repositorio aparte. Se decide al empezar
+  la fase 5.
+- Formato del ejecutable del juego dentro del kernel (binario propio o
+  adaptar el `.rok` de rocky).
+- Sistema de archivos de la imagen USB para el juego (Estrato de rocky,
+  FAT32 u otro).
+- Lenguaje del código de los botones de la fase 8 (texto plano, algo tipo
+  `.rka` de rocky, u otro propio).
+
+## 6. Reglas de trabajo
+
+- Cada fase se entrega como siempre: cambios en `src/` del editor,
+  compilación con `build.bat` (MinGW i686), verificación por píxeles con
+  las flags de prueba (`--gestor`, `--captura`, `--clics`, `--arrastre`...),
+  commit en `main`, push y release `v1.0-beta` actualizada (exe + SHA-256 +
+  nota).
+- Código y comentarios en español sin acentos; las cadenas de la interfaz
+  sí llevan acentos. Compatible con Windows 2000/XP, 32 bits, Win32/GDI.
+- Las partes nuevas que no afecten al editor (motor, kernel) siguen las
+  convenciones de su carpeta.
