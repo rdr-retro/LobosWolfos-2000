@@ -3494,6 +3494,27 @@ static void ui_dibujar_paneles_vacios(void) {
     ui_dibujar_boton_modulos();
 }
 
+/* Mensaje de estado flotante, centrado sobre la barra inferior. En el gestor
+ * se centra en el hueco entre sus paneles laterales. */
+static void ui_dibujar_estado(void) {
+    int margen, ancho, w, x, y;
+    if (!g.estado[0] || GetTickCount() >= g.estado_hasta) return;
+    if (g.vista == VISTA_MODULOS) {
+        margen = modulos_panel_ancho();
+        ancho = g.ancho - margen * 2;
+    } else {
+        margen = SIDEBAR_ANCHO;
+        ancho = ancho_util();
+    }
+    w = texto_ancho(g.estado) + 16;
+    x = margen + (ancho - w) / 2;
+    if (x < margen) x = margen;
+    y = g.alto - BARRA_ABAJO_ALTO - 30;
+    dibujar_rect(x, y, x + w, y + 22, 0x00F4F4F4u);
+    dibujar_marco(x, y, x + w, y + 22, MENU_BORDE);
+    dibujar_texto(x + 8, y + (22 - texto_alto()) / 2, g.estado, TEXTO_UI);
+}
+
 void ui_dibujar(void) {
     int i;
 
@@ -3506,6 +3527,7 @@ void ui_dibujar(void) {
         ui_dibujar_pestanas();
         ui_dibujar_barra_menus();
         ui_dibujar_menu_desplegable();
+        ui_dibujar_estado();
         return;
     }
 
@@ -3532,15 +3554,7 @@ void ui_dibujar(void) {
     ui_dibujar_texturas();
 
     /* Mensaje de estado flotante. */
-    if (g.estado[0] && GetTickCount() < g.estado_hasta) {
-        int w = texto_ancho(g.estado) + 16;
-        int x = SIDEBAR_ANCHO + (ancho_util() - w) / 2;
-        int y = g.alto - BARRA_ABAJO_ALTO - 30;
-        if (x < SIDEBAR_ANCHO) x = SIDEBAR_ANCHO;
-        dibujar_rect(x, y, x + w, y + 22, 0x00F4F4F4u);
-        dibujar_marco(x, y, x + w, y + 22, MENU_BORDE);
-        dibujar_texto(x + 8, y + (22 - texto_alto()) / 2, g.estado, TEXTO_UI);
-    }
+    ui_dibujar_estado();
 
     /* Las opciones se dibujan debajo de la ventana de patron y del visor de
      * tiles; estos dos van por encima. */

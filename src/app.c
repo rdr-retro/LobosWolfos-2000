@@ -1018,6 +1018,28 @@ static void modulos_al_frente(int idx) {
     g.modulos[g.num_modulos - 1] = tmp;
 }
 
+/* Elimina un elemento del lienzo y compacta el array. */
+static void modulos_eliminar(int idx) {
+    char etiqueta[MAPS_NOMBRE_MAX];
+    int i;
+    if (idx < 0 || idx >= g.num_modulos) return;
+    if (g.modulos[idx].mapa[0])
+        recortar_texto(etiqueta, g.modulos[idx].mapa, sizeof(etiqueta));
+    else
+        formatear(etiqueta, sizeof(etiqueta), "Elemento %d", g.modulos[idx].id);
+    for (i = idx; i < g.num_modulos - 1; i++) g.modulos[i] = g.modulos[i + 1];
+    g.num_modulos--;
+    /* La lista no debe quedar desplazada mas alla de su final. */
+    {
+        int orden[MODULOS_MAX], hijos[MODULOS_MAX];
+        int filas = elementos_ordenar_lista(orden, hijos);
+        int maximo = filas - ELEMENTOS_VISIBLES;
+        if (maximo < 0) maximo = 0;
+        if (g.elementos_scroll > maximo) g.elementos_scroll = maximo;
+    }
+    app_estado("Elemento eliminado: %s", etiqueta);
+}
+
 /* Dos elementos estan unidos cuando comparten un lado completo o parcial,
  * que es como los deja el acople magnetico. */
 static int elementos_unidos(const ModuloElemento *a, const ModuloElemento *b) {
@@ -1271,6 +1293,17 @@ static void modulos_pulsar(int x, int y, int boton) {
     }
 
     if (zona_contiene(lienzo, x, y)) {
+        /* Boton derecho: eliminar el rectangulo bajo el cursor. Se ignora
+         * durante un arrastre para no descuadrar el elemento movido. */
+        if (boton == 1) {
+            int idx = (g.modulo_arrastrando == 0) ? modulos_elemento_en(x, y)
+                                                  : -1;
+            if (idx >= 0) {
+                modulos_eliminar(idx);
+                app_invalidar();
+            }
+            return;
+        }
         /* Con el boton izquierdo, si hay un elemento debajo se mueve. */
         if (boton == 0) {
             int idx = modulos_elemento_en(x, y);

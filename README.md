@@ -79,7 +79,8 @@ para insertarlo como elemento con su miniatura y su nombre. Sin item elegido,
 el arrastre inserta un elemento vacío. Si hay más mapas que filas, la rueda
 desplaza la lista y `Escape` la cierra.
 
-Los elementos ya colocados también se pueden arrastrar. Sus lados tienen
+Los elementos ya colocados también se pueden arrastrar, y un clic derecho
+sobre uno de ellos lo elimina. Sus lados tienen
 efecto imán: al acercarlos a otro elemento se acoplan y se alinean,
 mostrando una guía azul. El lienzo no sirve para pintar; es un entorno
 desplazable con rejilla. Arrastra sobre una zona vacía con el botón izquierdo

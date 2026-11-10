@@ -1389,6 +1389,22 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 }
             }
         }
+        /* Clic derecho simulado en el lienzo del gestor: elimina el
+         * rectangulo bajo el cursor. */
+        {
+            char *mborrar_arg = arg_valor(cmd, "--modulos-borrar");
+            if (mborrar_arg) {
+                int dx = 0, dy = 0;
+                if (sscanf(mborrar_arg, "%d,%d", &dx, &dy) == 2 &&
+                    g.vista == VISTA_MODULOS) {
+                    app_mover(dx, dy, MK_RBUTTON);
+                    g.boton_der = 1;
+                    app_pulsar(dx, dy, 1);
+                    g.boton_der = 0;
+                    app_soltar(dx, dy, 1);
+                }
+            }
+        }
         /* Guardado directo del mapa para pruebas, sin dialogo. */
         {
             char *guardar_arg = arg_valor(cmd, "--guardar-mapa");
