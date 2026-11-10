@@ -85,15 +85,20 @@ Zona zona_trabajo(void) {
     return zona_hacer(SIDEBAR_ANCHO, arriba, ancho_util(), alto);
 }
 
-/* Ancho de los paneles laterales del gestor: ambos iguales al derecho. */
+/* Ancho de los paneles laterales del gestor: el izquierdo igual al derecho
+ * del modo pintar y el derecho un poco mas ancho para el item. */
 static int modulos_panel_ancho(void) {
     return sidebar_derecho_ancho();
+}
+
+static int modulos_panel_derecho_ancho(void) {
+    return modulos_panel_ancho() + MODULOS_PANEL_DER_EXTRA;
 }
 
 /* Barra inferior del gestor: entre los dos paneles laterales. */
 static Zona modulos_abajo_zona(void) {
     int panel = modulos_panel_ancho();
-    int ancho = g.ancho - panel * 2;
+    int ancho = g.ancho - panel - modulos_panel_derecho_ancho();
     int alto = BARRA_ABAJO_ALTO < g.alto ? BARRA_ABAJO_ALTO : g.alto;
     if (ancho < MIN_LADO) ancho = MIN_LADO;
     return zona_hacer(panel, g.alto - alto, ancho, alto);
@@ -104,7 +109,7 @@ static Zona modulos_abajo_zona(void) {
 Zona modulos_lienzo_zona(void) {
     Zona abajo = modulos_abajo_zona();
     int panel = modulos_panel_ancho();
-    int ancho = g.ancho - panel * 2;
+    int ancho = g.ancho - panel - modulos_panel_derecho_ancho();
     int alto = abajo.y - AREA_SUP_ALTO;
     if (ancho < MIN_LADO) ancho = MIN_LADO;
     if (alto < MIN_LADO) alto = MIN_LADO;
@@ -113,7 +118,7 @@ Zona modulos_lienzo_zona(void) {
 
 /* Boton rectangular sin nombre del panel derecho del gestor. */
 Zona modulos_boton_zona(void) {
-    int panel = sidebar_derecho_ancho();
+    int panel = modulos_panel_derecho_ancho();
     int x0 = g.ancho - panel;
     int ancho = panel - SIDEBAR_MARGEN * 2;
     if (ancho < 8) ancho = 8;
@@ -3415,14 +3420,16 @@ static void elementos_dibujar_panel(void) {
     }
 }
 
-/* Paneles del gestor de logica: dos laterales iguales y barra inferior,
- * completamente vacios. */
+/* Paneles del gestor de logica: dos laterales (el derecho mas ancho) y
+ * barra inferior, completamente vacios. */
 static void ui_dibujar_paneles_vacios(void) {
     int panel = modulos_panel_ancho();
+    int panel_der = modulos_panel_derecho_ancho();
     Zona sidebar = zona_hacer(0, AREA_SUP_ALTO, panel, g.alto - AREA_SUP_ALTO);
     Zona abajo = modulos_abajo_zona();
-    int x0 = g.ancho - panel;
-    Zona derecha = zona_hacer(x0, AREA_SUP_ALTO, panel, g.alto - AREA_SUP_ALTO);
+    int x0 = g.ancho - panel_der;
+    Zona derecha = zona_hacer(x0, AREA_SUP_ALTO, panel_der,
+                              g.alto - AREA_SUP_ALTO);
 
     /* Barra lateral izquierda. */
     dibujar_rect_z(sidebar, SIDEBAR);
@@ -3451,7 +3458,7 @@ static void ui_dibujar_estado(void) {
     if (!g.estado[0] || GetTickCount() >= g.estado_hasta) return;
     if (g.vista == VISTA_MODULOS) {
         margen = modulos_panel_ancho();
-        ancho = g.ancho - margen * 2;
+        ancho = g.ancho - margen - modulos_panel_derecho_ancho();
     } else {
         margen = SIDEBAR_ANCHO;
         ancho = ancho_util();

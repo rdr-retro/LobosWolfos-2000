@@ -147,6 +147,7 @@ typedef unsigned char  u8;
 #define MODULOS_IMAN           12
 #define MODULOS_REJILLA        0x001A2430u
 #define MODULOS_EJE            0x00304050u
+#define MODULOS_PANEL_DER_EXTRA 40 /* cuanto mas ancho es el panel derecho */
 
 /* Items del gestor: cada item es un mapa .mav de la carpeta `maps`. Las
  * miniaturas se guardan en una cache pequena para no releer el mapa. */
