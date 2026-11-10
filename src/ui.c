@@ -3245,14 +3245,24 @@ static void modulos_dibujar_lienzo(void) {
         int vy1 = vy0 + e->alto;
         int x0 = vx0, y0 = vy0, x1 = vx1, y1 = vy1;
         int completo;
+        u32 fondo = activo ? 0x00E4ECF6u
+                           : (e->funcion >= 0 ? MODULOS_FUNCION_FONDO : BARRA);
         if (!modulos_recortar(lienzo, &x0, &y0, &x1, &y1)) continue;
-        dibujar_rect(x0, y0, x1, y1, activo ? 0x00E4ECF6u : BARRA);
+        dibujar_rect(x0, y0, x1, y1, fondo);
         dibujar_marco(x0, y0, x1, y1,
                       activo ? BOTON_SELECCION : SEPARADOR);
         completo = vx0 >= lienzo.x && vy0 >= lienzo.y &&
                    vx1 <= zona_derecha(lienzo) && vy1 <= zona_abajo(lienzo);
         if (!completo) continue;
-        if (e->mapa[0]) {
+        if (e->funcion >= 0) {
+            /* Elemento de funcion logica del motor (p. ej. egine). */
+            const char *nombre = modulos_funcion_nombre(e->funcion);
+            fuente_dibujar(vx0 + 4, vy0 + 5, "MOTOR", SEPARADOR);
+            fuente_dibujar_escala(
+                vx0 + (e->ancho - fuente_texto_ancho_escala(nombre, 3)) / 2,
+                vy0 + 27, nombre,
+                activo ? 0x00FFFFFFu : MODULOS_FUNCION_TEXTO, 3);
+        } else if (e->mapa[0]) {
             const MiniaturaMapa *m = mapa_miniatura_item(e->mapa);
             int ix = vx0 + 4;
             int iy = vy0 + 4;
@@ -3310,6 +3320,34 @@ static void modulos_dibujar_lienzo(void) {
         }
         modulos_dibujar_guia(lienzo, lx, ly);
     }
+
+    /* Previsualizacion de la funcion que se arrastra desde la seccion
+     * FUNCIONES (egine = el motor), con el mismo acople del iman. */
+    if (g.modulo_arrastrando == 4) {
+        int wx = g.raton_x - lienzo.x - g.pan_x - MODULOS_ELEMENTO_ANCHO / 2;
+        int wy = g.raton_y - lienzo.y - g.pan_y - MODULOS_ELEMENTO_ALTO / 2;
+        int lx = -1, ly = -1;
+        int x0, y0, x1, y1;
+        modulos_acoplar(&wx, &wy, MODULOS_ELEMENTO_ANCHO,
+                        MODULOS_ELEMENTO_ALTO, -1, &lx, &ly);
+        x0 = lienzo.x + g.pan_x + wx;
+        y0 = lienzo.y + g.pan_y + wy;
+        x1 = x0 + MODULOS_ELEMENTO_ANCHO;
+        y1 = y0 + MODULOS_ELEMENTO_ALTO;
+        if (modulos_recortar(lienzo, &x0, &y0, &x1, &y1)) {
+            const char *nombre =
+                modulos_funcion_nombre(g.modulo_funcion_pulsada);
+            dibujar_rect(x0, y0, x1, y1, 0x004A5A6Au);
+            dibujar_marco(x0, y0, x1, y1, BOTON_SELECCION);
+            fuente_dibujar(lienzo.x + g.pan_x + wx + 4,
+                           lienzo.y + g.pan_y + wy + 5, "MOTOR", SEPARADOR);
+            fuente_dibujar_escala(
+                lienzo.x + g.pan_x + wx +
+                    (MODULOS_ELEMENTO_ANCHO - fuente_texto_ancho_escala(nombre, 3)) / 2,
+                lienzo.y + g.pan_y + wy + 27, nombre, 0x00FFFFFFu, 3);
+        }
+        modulos_dibujar_guia(lienzo, lx, ly);
+    }
 }
 
 /* Boton rectangular del panel derecho: muestra el item elegido y se arrastra
@@ -3363,7 +3401,8 @@ void ui_dibujar_funciones_modulos(void) {
         const char *nombre = modulos_funcion_nombre(i);
         Zona z = modulos_funcion_zona(i);
         int hover = zona_contiene(z, g.raton_x, g.raton_y);
-        int pulsado = g.modulo_funcion_pulsada == i && hover;
+        int pulsado = g.modulo_funcion_pulsada == i &&
+                      !g.modulo_funcion_movido && hover;
 
         dibujar_rect_z(z, pulsado ? 0x00D8DEE6u : (hover ? 0x00EDF2F7u : BARRA));
         dibujar_rect(z.x, z.y, zona_derecha(z), z.y + 1, 0x00F8F8F8u);
@@ -3459,7 +3498,11 @@ static void elementos_dibujar_panel(void) {
         marca = hijos[fila];
         z = elemento_fila_zona(i);
         activo = (g.modulo_arrastrando == 3 && idx == g.modulo_drag_i);
-        if (g.modulos[idx].mapa[0])
+        if (g.modulos[idx].funcion >= 0)
+            recortar_texto(etiqueta,
+                           modulos_funcion_nombre(g.modulos[idx].funcion),
+                           sizeof(etiqueta));
+        else if (g.modulos[idx].mapa[0])
             recortar_texto(etiqueta, g.modulos[idx].mapa, sizeof(etiqueta));
         else
             formatear(etiqueta, sizeof(etiqueta), "Elemento %d",

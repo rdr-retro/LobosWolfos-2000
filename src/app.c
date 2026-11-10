@@ -798,6 +798,7 @@ void logica_iniciar(void) {
     g.modulo_snap_linea_y = -1;
     g.hover_modulo_funcion = -1;
     g.modulo_funcion_pulsada = -1;
+    g.modulo_funcion_movido = 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -807,7 +808,9 @@ void logica_iniciar(void) {
  *   LOGIC1
  *   <pan_x> <pan_y>
  *   <num_elementos>
- *   <x> <y> <ancho> <alto> <id> <plegado> "<mapa>"   (una linea por elemento) */
+ *   <x> <y> <ancho> <alto> <id> <plegado> "<mapa>" <funcion>
+ *     (una linea por elemento; funcion es el indice en MODULOS_FUNCIONES,
+ *      -1 = item de mapa) */
 int logica_guardar_archivo(const char *ruta) {
     FILE *f;
     int i;
@@ -819,8 +822,9 @@ int logica_guardar_archivo(const char *ruta) {
     fprintf(f, "%d\n", g.num_modulos);
     for (i = 0; i < g.num_modulos; i++) {
         const ModuloElemento *m = &g.modulos[i];
-        fprintf(f, "%d %d %d %d %d %d \"%s\"\n",
-                m->x, m->y, m->ancho, m->alto, m->id, m->plegado, m->mapa);
+        fprintf(f, "%d %d %d %d %d %d \"%s\" %d\n",
+                m->x, m->y, m->ancho, m->alto, m->id, m->plegado, m->mapa,
+                m->funcion);
     }
     fclose(f);
     return 1;
@@ -1072,7 +1076,10 @@ static int elementos_raiz(int idx) {
 }
 
 /* Inserta un elemento centrado en un punto de pantalla, con acople. */
-void modulos_insertar(int x, int y) {
+/* Cuerpo comun de insercion: coloca un elemento nuevo centrado en (x, y)
+ * del cliente, con el acople del iman. `funcion` es el indice en
+ * MODULOS_FUNCIONES o -1 para un item de mapa. */
+static void modulos_insertar_en(int x, int y, int funcion) {
     Zona lienzo = modulos_lienzo_zona();
     ModuloElemento *e;
     int wx, wy;
@@ -1091,7 +1098,11 @@ void modulos_insertar(int x, int y) {
     e->alto = MODULOS_ELEMENTO_ALTO;
     e->id = g.modulo_siguiente_id++;
     e->plegado = 0;
-    recortar_texto(e->mapa, g.item_mapa, sizeof(e->mapa));
+    e->funcion = funcion;
+    if (funcion >= 0)
+        e->mapa[0] = 0;
+    else
+        recortar_texto(e->mapa, g.item_mapa, sizeof(e->mapa));
     /* Si el elemento cae en un grupo plegado, se despliega para mostrarlo. */
     {
         int raiz = elementos_raiz(g.num_modulos - 1);
@@ -1107,6 +1118,16 @@ void modulos_insertar(int x, int y) {
         if (fila < total && fila >= elementos_visibles())
             g.elementos_scroll = fila - elementos_visibles() + 1;
     }
+}
+
+void modulos_insertar(int x, int y) {
+    modulos_insertar_en(x, y, -1);
+}
+
+/* Inserta un elemento de funcion logica (p. ej. egine, el motor) en el
+ * punto del lienzo donde se ha soltado. */
+void modulos_insertar_funcion(int x, int y, int funcion) {
+    modulos_insertar_en(x, y, funcion);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1197,12 +1218,16 @@ static void modulos_pulsar(int x, int y, int boton) {
         return;
     }
 
-    /* Rectangulos de la seccion FUNCIONES: de momento solo se marcan
-     * pulsados; la funcion todavia no hace nada. */
+    /* Rectangulos de la seccion FUNCIONES: un clic sin arrastre avisa de
+     * como usarlos y un arrastre inserta la funcion en el lienzo. */
     if (boton == 0) {
         int f = modulos_funcion_en(x, y);
         if (f >= 0) {
             g.modulo_funcion_pulsada = f;
+            g.modulo_funcion_x = x;
+            g.modulo_funcion_y = y;
+            g.modulo_funcion_movido = 0;
+            g.hover_modulo_funcion = f;
             app_invalidar();
             return;
         }
@@ -1278,14 +1303,22 @@ static void modulos_pulsar(int x, int y, int boton) {
 }
 
 static void modulos_soltar(int x, int y) {
-    /* Soltar un rectangulo de la seccion FUNCIONES: si sigue encima, avisa
-     * de que la funcion aun no esta hecha. */
+    /* Soltar un rectangulo de la seccion FUNCIONES: si hubo arrastre se
+     * inserta la funcion como elemento del lienzo (egine = el motor); si
+     * fue un clic, recuerda como se usa. */
     if (g.modulo_funcion_pulsada >= 0) {
         int f = g.modulo_funcion_pulsada;
         g.modulo_funcion_pulsada = -1;
-        if (modulos_funcion_en(x, y) == f)
-            app_estado("%s: funcion sin hacer todavia",
+        g.modulo_funcion_movido = 0;
+        if (g.modulo_arrastrando == 4) {
+            g.modulo_arrastrando = 0;
+            g.modulo_snap_linea_x = -1;
+            g.modulo_snap_linea_y = -1;
+            modulos_insertar_funcion(x, y, f);
+        } else if (modulos_funcion_en(x, y) == f) {
+            app_estado("%s: arrastra al lienzo para usarlo",
                        modulos_funcion_nombre(f));
+        }
         app_invalidar();
         return;
     }
@@ -1348,13 +1381,25 @@ static void modulos_mover(int x, int y) {
         }
     }
 
+    /* El mismo umbral al tirar de un rectangulo de la seccion FUNCIONES. */
+    if (g.modulo_funcion_pulsada >= 0 && !g.modulo_funcion_movido) {
+        int dx = x - g.modulo_funcion_x;
+        int dy = y - g.modulo_funcion_y;
+        if (dx * dx + dy * dy >= 16) {
+            g.modulo_funcion_movido = 1;
+            g.modulo_arrastrando = 4;
+            g.modulo_snap_linea_x = -1;
+            g.modulo_snap_linea_y = -1;
+        }
+    }
+
     if (g.modulo_arrastrando == 2) {
         g.pan_x = x - g.modulo_drag_x;
         g.pan_y = y - g.modulo_drag_y;
         app_invalidar();
         return;
     }
-    if (g.modulo_arrastrando == 1) {
+    if (g.modulo_arrastrando == 1 || g.modulo_arrastrando == 4) {
         app_invalidar();
         return;
     }

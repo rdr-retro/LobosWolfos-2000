@@ -76,9 +76,12 @@ para insertarlo como elemento con su miniatura y su nombre. Sin item elegido,
 el arrastre inserta un elemento vacío. Si hay más mapas que filas, la rueda
 desplaza la lista y `Escape` la cierra.
 
-Debajo del botón del item está la sección **FUNCIONES**, con rectángulos para
-las funciones lógicas del gestor. De momento solo existe **egine**, que aún no
-hace nada: al pulsarlo avisa de que la función todavía no está hecha.
+Debajo del botón del item está la sección **FUNCIONES**, con rectángulos
+arrastrables para las funciones lógicas del juego. De momento solo existe
+**egine**, el motor del juego: se arrastra al lienzo para colocarlo como
+elemento (con su banda MOTOR y el nombre en azul); un clic sin arrastrar
+recuerda cómo se usa. La opción **Guardar logica .logic** también guarda la
+función de cada elemento.
 
 Los elementos ya colocados también se pueden arrastrar, y un clic derecho
 sobre uno de ellos lo elimina. Sus lados tienen

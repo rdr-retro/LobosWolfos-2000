@@ -149,6 +149,11 @@ typedef unsigned char  u8;
 #define MODULOS_EJE            0x00304050u
 #define MODULOS_PANEL_DER_EXTRA 40 /* cuanto mas ancho es el panel derecho */
 
+/* Aspecto del elemento de funcion en el lienzo (egine y futuras funciones):
+ * banda superior con la clase de modulo y nombre centrado en azul. */
+#define MODULOS_FUNCION_FONDO  0x00D8E6F8u
+#define MODULOS_FUNCION_TEXTO  0x00183868u
+
 /* Seccion de funciones logicas del panel derecho, debajo del boton del
  * item: un titulo y rectangulos con funciones logicas del gestor. */
 #define MODULOS_FUNCION_TITULO_HUECO 9 /* hueco entre el boton y el titulo */
@@ -602,14 +607,16 @@ typedef struct TileDoc {
 } TileDoc;
 
 /* Elemento insertado en el lienzo del gestor de logica. La posicion se guarda
- * en coordenadas del mundo y se dibuja con el desplazamiento de la vista. Cada
- * elemento es un item: puede estar asociado a un mapa `.mav` de `maps`. */
+ * en coordenadas del mundo y se dibuja con el desplazamiento de la vista.
+ * Cada elemento puede ser un item (un mapa `.mav` de `maps`) o una funcion
+ * logica del motor (ver MODULOS_FUNCIONES en app.c). */
 typedef struct ModuloElemento {
     int x, y;
     int ancho, alto;
     int id; /* orden de creacion, estable al moverlo en el lienzo */
     int plegado; /* solo en la raiz del grupo: lista de hijos oculta */
     char mapa[MAPS_NOMBRE_MAX]; /* nombre del .mav, vacio = elemento vacio */
+    int funcion; /* indice en MODULOS_FUNCIONES, -1 = item de mapa */
 } ModuloElemento;
 
 /* Miniatura de un mapa `.mav` guardada en la cache de items. */
@@ -732,7 +739,7 @@ typedef struct App {
     ModuloElemento modulos[MODULOS_MAX];
     int num_modulos;
     int modulo_arrastrando; /* 0 = nada, 1 = elemento nuevo, 2 = paneo,
-                             * 3 = mover un elemento existente */
+                             * 3 = mover un elemento existente, 4 = funcion FUNCIONES */
     int modulo_drag_x, modulo_drag_y;
     int modulo_drag_i;
     int modulo_elem_off_x, modulo_elem_off_y;
@@ -740,6 +747,8 @@ typedef struct App {
     int hover_modulo_boton;
     int hover_modulo_funcion;   /* funcion bajo el raton, -1 = ninguna */
     int modulo_funcion_pulsada; /* funcion pulsada, -1 = ninguna */
+    int modulo_funcion_x, modulo_funcion_y;
+    int modulo_funcion_movido;
 
     /* Item elegido (mapa .mav de la carpeta `maps`) y selector de items. */
     char item_mapa[MAPS_NOMBRE_MAX];
@@ -1153,6 +1162,7 @@ int  elementos_visibles(void);
 void modulos_acoplar(int *x, int *y, int ancho, int alto, int ignorar,
                      int *linea_x, int *linea_y);
 void modulos_insertar(int x, int y);
+void modulos_insertar_funcion(int x, int y, int funcion);
 int  elementos_ordenar_lista(int *orden, int *hijos);
 void logica_iniciar(void);
 int  sidebar_derecho_ancho(void);
