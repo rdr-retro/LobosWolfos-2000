@@ -1265,6 +1265,11 @@ void dialogo_guardar_logica(void);
 void dialogo_abrir_logica(void);
 int  logica_guardar_archivo(const char *ruta);
 int  logica_cargar_archivo(const char *ruta);
+int  logica_guardar_memoria(char **datos, int *largo);
+
+/* Menu COMPILE (compilar.c) */
+int  compilar_windows(const char *ruta);
+void dialogo_compilar_windows(void);
 void dialogo_elegir_color(int para_fondo);
 int  dialogo_elegir_color_valor(u32 inicial, u32 *salida);
 int  dialogo_confirmar(const char *titulo, const char *mensaje);

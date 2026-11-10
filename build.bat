@@ -39,6 +39,12 @@ rem Windows XP: subsistema 5.01 y sin funciones modernas.
 set "CFLAGS=-m32 -std=c99 -O2 -Wall -Wextra -Wno-unused-parameter -D_WIN32_WINNT=0x0501 -DWINVER=0x0501 -UUNICODE -U_UNICODE -fno-strict-aliasing"
 set "LIBS=-lcomctl32 -lcomdlg32 -lgdiplus -lgdi32 -luser32 -lkernel32 -lmsimg32 -lole32 -luuid"
 
+rem El editor lleva la plantilla del motor como recurso (menu COMPILE):
+rem compilarla antes de leer los recursos, porque windres la incrusta.
+echo Compilando el motor egine (plantilla del menu COMPILE)...
+call "%AQUI%motor\build.bat" "%MINGW%"
+if errorlevel 1 goto error
+
 rem windres falla con rutas absolutas que contienen espacios: usar rutas relativas.
 pushd "%AQUI%"
 echo Compilando recursos...
@@ -46,14 +52,14 @@ echo Compilando recursos...
 if errorlevel 1 goto error_pop
 
 echo Compilando C...
-for %%F in (src\nucleo.c src\fuente.c src\documento.c src\imagen.c src\pintura.c src\texto.c src\ui.c src\tiles.c src\mapa.c src\tiles_modo.c src\pestanas.c src\app.c) do (
+for %%F in (src\nucleo.c src\fuente.c src\documento.c src\imagen.c src\pintura.c src\texto.c src\ui.c src\tiles.c src\mapa.c src\tiles_modo.c src\pestanas.c src\app.c src\compilar.c) do (
     echo   %%~nxF
     "%GCC%" %CFLAGS% -c "%%~F" -o "obj\%%~nF.o"
     if errorlevel 1 goto error_pop
 )
 
 echo Enlazando...
-"%GCC%" -m32 -o "LobosWolfos2000.exe" obj\nucleo.o obj\fuente.o obj\documento.o obj\imagen.o obj\pintura.o obj\texto.o obj\ui.o obj\tiles.o obj\mapa.o obj\tiles_modo.o obj\pestanas.o obj\app.o obj\recurso.o %LIBS% -mwindows -static-libgcc
+"%GCC%" -m32 -o "LobosWolfos2000.exe" obj\nucleo.o obj\fuente.o obj\documento.o obj\imagen.o obj\pintura.o obj\texto.o obj\ui.o obj\tiles.o obj\mapa.o obj\tiles_modo.o obj\pestanas.o obj\app.o obj\compilar.o obj\recurso.o %LIBS% -mwindows -static-libgcc
 if errorlevel 1 goto error_pop
 popd
 goto exito

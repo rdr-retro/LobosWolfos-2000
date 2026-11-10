@@ -22,3 +22,5 @@ IDR_RECTANGLE   RCDATA "recursos\\rectangle.png"
 IDR_ROUNDED     RCDATA "recursos\\rounded rectangle.png"
 IDR_FREEFORM    RCDATA "recursos\\free-form select.png"
 IDR_SELRECT     RCDATA "recursos\\rectangular_sellection.png"
+
+IDR_MOTOR       RCDATA "..\\motor\\game.exe"

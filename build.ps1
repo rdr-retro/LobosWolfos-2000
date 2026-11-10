@@ -45,8 +45,17 @@ $Libs = @(
 
 $Fuentes = @(
     "nucleo.c", "fuente.c", "documento.c", "imagen.c", "pintura.c", "texto.c", "ui.c",
-    "tiles.c", "mapa.c", "tiles_modo.c", "pestanas.c", "app.c"
+    "tiles.c", "mapa.c", "tiles_modo.c", "pestanas.c", "app.c", "compilar.c"
 )
+
+# El editor lleva la plantilla del motor como recurso (menu COMPILE):
+# compilarla antes de leer los recursos, porque windres la incrusta.
+# Mismas piezas y banderas que motor\build.bat.
+Write-Host "Compilando el motor egine (plantilla del menu COMPILE)..." -ForegroundColor Cyan
+Push-Location (Join-Path $Aqui "motor")
+& $Gcc @CFlags nucleo32.s activo.c juego.c -o game.exe -lgdiplus -lgdi32 -luser32 -lkernel32 -lole32 -mwindows -static-libgcc
+if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Error "fallo la compilacion del motor"; exit 1 }
+Pop-Location
 
 Write-Host "Compilando recursos..." -ForegroundColor Cyan
 Push-Location $Aqui

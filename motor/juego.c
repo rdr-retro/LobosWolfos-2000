@@ -344,6 +344,12 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     juego.entrada = tecla; /* en captura se mantiene pulsada */
     sprite_crear();
 
+    /* Proyecto incrustado (fase 4): si este exe fue compilado por el
+     * editor lleva el proyecto pegado al final. Sin rutas explicitas
+     * en la linea de comandos, el proyecto sale del propio exe. */
+    if (!ruta_logica && !ruta_mapa && activo_blob_cargar() > 0)
+        ruta_logica = "proyecto.logic";
+
     if (ruta_mapa) {
         if (!activo_cargar_mapa(ruta_mapa, &juego.mapa)) {
             char msg[512];

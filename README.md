@@ -64,6 +64,10 @@ lógica o el primero que haya en `maps/`) y lo dibuja con el **núcleo en
 ensamblador** (`motor/nucleo32.s`: limpiar y blit con MMX, render del mapa y
 colisiones AABB). Mueve el sprite con los cursores o `WASD`; `Escape` cierra.
 
+Si el ejecutable fue producido por **Compilar para Windows** del editor, el
+proyecto va incrustado al final del propio `.exe` (pie `LGB1`) y el motor lo
+carga desde ahí sin tocar el disco: funciona igual en cualquier carpeta.
+
 Para pruebas automáticas sin ventana (captura determinista a BMP):
 
 ```bat
@@ -146,8 +150,14 @@ carpeta `tiles_dir` junto al `.mav`, después junto al propio `.mav` y por
 último en la carpeta `tiles` del ejecutable.
 
 El menú **COMPILE** de la barra de menús, entre **COLORES** e **INFO**, ofrece
-**Compilar para BIOS** y **Compilar para Windows**. De momento no hacen nada: al
-elegirlas avisan de que la compilación todavía no está hecha.
+**Compilar para BIOS** y **Compilar para Windows**. **Compilar para Windows**
+toma el proyecto activo — la lógica del gestor, los mapas que usan sus
+elementos y los tiles de esos mapas — y produce un `game.exe` autónomo de 32
+bits: el proyecto entero viaja incrustado dentro del propio ejecutable, así
+el juego funciona en cualquier carpeta sin necesidad de `maps/` ni `tiles/`.
+La plantilla del motor viaja dentro del propio editor, por lo que compilar
+no requiere tener MinGW instalado. **Compilar para BIOS** todavía no está
+hecha y avisa de ello al elegirla.
 
 ## Atajos
 
@@ -166,14 +176,16 @@ elegirlas avisan de que la compilación todavía no está hecha.
 
 ## Estructura
 
-- `src/` — código fuente C y recursos de la interfaz.
+- `src/` — código fuente C y recursos de la interfaz. `src/compilar.c` es el
+  menú COMPILE (compilar el proyecto para Windows).
 - `motor/` — motor egine: núcleo en ensamblador 32 bits (`nucleo32.s`),
   interfaz común (`motor.h`), carga del proyecto (`activo.c`) y `juego.c`
   (`game.exe`).
 - `recursos/` — iconos e imágenes de las herramientas.
 - `tiles/` — carpeta donde se guardan los mosaicos.
 - `maps/` — mapas `.mav` (pantallas del juego).
-- `build.bat` / `build.ps1` — scripts de compilación.
+- `build.bat` / `build.ps1` — scripts de compilación. El del editor compila
+  primero el motor, porque su plantilla viaja incrustada como recurso.
 
 ## Licencia
 

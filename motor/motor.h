@@ -110,6 +110,12 @@ int activo_cargar_proyecto(const char *ruta_logic, MotorMapa *m,
 int activo_gdiplus_iniciar(void);
 void activo_gdiplus_terminar(void);
 
+/* Lee el proyecto incrustado (pie LGB1) del final del propio
+ * ejecutable y lo registra como archivos virtuales: a partir de aqui,
+ * la carga del proyecto no toca el disco. Devuelve el numero de
+ * archivos virtuales; 0 si el exe no lleva blob. */
+int activo_blob_cargar(void);
+
 /* Guarda un framebuffer como BMP de 24 bits (para --captura). */
 int activo_guardar_bmp(const char *ruta, const u32 *pixeles,
                        int ancho, int alto);

@@ -65,20 +65,163 @@ void activo_gdiplus_terminar(void) {
     gdiplus_ok = 0;
 }
 
-/* Carga un PNG (o BMP) en una MotorImagen. Devuelve 0 si falla; los
- * pixeles quedan en 0xAARRGGBB, igual que el framebuffer del editor. */
-static int cargar_imagen(const char *ruta, MotorImagen *img) {
-    WCHAR wruta[MAX_PATH * 2];
-    void *bmp = NULL;
+/* Decodifica desde memoria (IStream), para los PNG del proyecto
+ * incrustado: asi el juego compilado no toca el disco. */
+__declspec(dllimport) int WINAPI GdipCreateBitmapFromStream(void *stream,
+                                                            void **bitmap);
+
+/* ------------------------------------------------------------------ */
+/* Proyecto incrustado (blob LGB1 al final del propio ejecutable)      */
+/* ------------------------------------------------------------------ */
+/* El editor compila el juego pegando el proyecto al final del exe del
+ * motor:
+ *
+ *   [exe del motor][entradas del blob]["LGB1" u32 tam_blob u32]
+ *
+ * Cada entrada del blob es: u32 largo_nombre, u32 largo_datos, los
+ * bytes del nombre y los bytes del archivo. Aqui se registran como
+ * archivos virtuales y las funciones de carga de abajo (leer_archivo,
+ * archivo_existe, cargar_imagen) los consultan antes que el disco, asi
+ * el game.exe compilado funciona en cualquier carpeta sin depender de
+ * maps/ ni tiles/. */
+
+typedef struct EntradaVirtual {
+    char *nombre;
+    unsigned char *datos;
+    int largo;
+    struct EntradaVirtual *sig;
+} EntradaVirtual;
+
+static EntradaVirtual *g_virtuales = NULL;
+
+/* Nombre base de una ruta (tras la ultima barra). */
+static const char *nombre_base(const char *ruta) {
+    const char *p = strrchr(ruta, '\\');
+    const char *q = strrchr(ruta, '/');
+    if (q && (!p || q > p)) p = q;
+    return p ? p + 1 : ruta;
+}
+
+/* Busca un archivo del proyecto incrustado: primero por la ruta
+ * completa y luego por nombre de archivo (dentro del blob las carpetas
+ * no importan). */
+static EntradaVirtual *virtual_buscar(const char *ruta) {
+    EntradaVirtual *e;
+    if (!ruta || !ruta[0]) return NULL;
+    for (e = g_virtuales; e; e = e->sig)
+        if (strcmp(e->nombre, ruta) == 0) return e;
+    {
+        const char *base = nombre_base(ruta);
+        for (e = g_virtuales; e; e = e->sig)
+            if (strcmp(nombre_base(e->nombre), base) == 0) return e;
+    }
+    return NULL;
+}
+
+#pragma pack(push, 1)
+typedef struct {
+    u32 largo_nombre;
+    u32 largo_datos;
+} CabeceraEntrada;
+#pragma pack(pop)
+
+/* Registra un archivo virtual (copia nombre y datos). */
+static int virtual_agregar(const char *nombre, const unsigned char *datos,
+                           int largo) {
+    EntradaVirtual *e = (EntradaVirtual *)calloc(1, sizeof(*e));
+    if (!e) return 0;
+    e->nombre = (char *)malloc(strlen(nombre) + 1);
+    e->datos = (unsigned char *)malloc(largo > 0 ? (size_t)largo : 1);
+    if (!e->nombre || !e->datos) {
+        free(e->nombre);
+        free(e->datos);
+        free(e);
+        return 0;
+    }
+    strcpy(e->nombre, nombre);
+    if (largo > 0) memcpy(e->datos, datos, (size_t)largo);
+    e->largo = largo;
+    e->sig = g_virtuales;
+    g_virtuales = e;
+    return 1;
+}
+
+/* Parsea las entradas de un blob y las registra como virtuales.
+ * Devuelve el numero de entradas registradas. */
+static int blob_parsear(const unsigned char *datos, int largo) {
+    int pos = 0, num = 0;
+    while (pos + (int)sizeof(CabeceraEntrada) <= largo) {
+        CabeceraEntrada cab;
+        char nombre[256];
+        int ln, ld;
+        memcpy(&cab, datos + pos, sizeof(cab));
+        pos += (int)sizeof(cab);
+        ln = (int)cab.largo_nombre;
+        ld = (int)cab.largo_datos;
+        if (ln <= 0 || ln > 200 || ld < 0 || ld > 16 * 1024 * 1024 ||
+            pos + ln + ld > largo) break;
+        memcpy(nombre, datos + pos, (size_t)ln);
+        nombre[ln] = '\0';
+        pos += ln;
+        if (!virtual_agregar(nombre, datos + pos, ld)) break;
+        pos += ld;
+        num++;
+    }
+    return num;
+}
+
+/* Lee el pie LGB1 del final del propio ejecutable y registra su blob
+ * como archivos virtuales. Devuelve el numero de archivos; 0 si este
+ * exe no lleva proyecto incrustado o el pie no es valido. */
+int activo_blob_cargar(void) {
+    char ruta[MAX_PATH];
+    FILE *f;
+    long tam;
+    unsigned char pie[8];
+    u32 largo_blob;
+    unsigned char *blob;
+    int num;
+
+    GetModuleFileNameA(NULL, ruta, sizeof(ruta));
+    ruta[sizeof(ruta) - 1] = '\0';
+    f = fopen(ruta, "rb");
+    if (!f) return 0;
+    fseek(f, 0, SEEK_END);
+    tam = ftell(f);
+    if (tam < 16) { fclose(f); return 0; }
+    fseek(f, tam - 8, SEEK_SET);
+    if (fread(pie, 1, 8, f) != 8 || memcmp(pie, "LGB1", 4) != 0) {
+        fclose(f);
+        return 0;
+    }
+    memcpy(&largo_blob, pie + 4, 4);
+    if (largo_blob == 0 || (long)largo_blob > tam - 8) {
+        fclose(f);
+        return 0;
+    }
+    blob = (unsigned char *)malloc(largo_blob);
+    if (!blob) { fclose(f); return 0; }
+    fseek(f, tam - 8 - (long)largo_blob, SEEK_SET);
+    if (fread(blob, 1, largo_blob, f) != largo_blob) {
+        free(blob);
+        fclose(f);
+        return 0;
+    }
+    fclose(f);
+    num = blob_parsear(blob, (int)largo_blob);
+    free(blob);
+    return num;
+}
+
+/* Extrae los pixeles de un bitmap GDI+ ya decodificado y lo libera.
+ * Los pixeles quedan en 0xAARRGGBB, igual que el framebuffer. */
+static int extraer_pixeles(void *bmp, MotorImagen *img) {
     GpRect rect;
     GpBitmapData datos;
     UINT w, h;
     int y;
 
     memset(img, 0, sizeof(*img));
-    if (!ruta || !ruta[0] || !gdiplus_ok) return 0;
-    MultiByteToWideChar(CP_ACP, 0, ruta, -1, wruta, MAX_PATH * 2);
-    if (GdipCreateBitmapFromFile(wruta, &bmp) != 0 || !bmp) return 0;
     if (GdipGetImageWidth(bmp, &w) != 0 || GdipGetImageHeight(bmp, &h) != 0 ||
         w == 0 || h == 0 || w > 8192 || h > 8192) {
         GdipDisposeImage(bmp);
@@ -106,14 +249,63 @@ static int cargar_imagen(const char *ruta, MotorImagen *img) {
     return img->pixeles != NULL;
 }
 
+/* Carga un PNG (o BMP) en una MotorImagen. Devuelve 0 si falla; los
+ * pixeles quedan en 0xAARRGGBB, igual que el framebuffer del editor.
+ * Si el archivo vive en el proyecto incrustado se decodifica desde
+ * memoria con un IStream, sin tocar el disco. */
+static int cargar_imagen(const char *ruta, MotorImagen *img) {
+    WCHAR wruta[MAX_PATH * 2];
+    void *bmp = NULL;
+    EntradaVirtual *v;
+
+    if (!ruta || !ruta[0] || !gdiplus_ok) return 0;
+    v = virtual_buscar(ruta);
+    if (v) {
+        HGLOBAL h;
+        void *p;
+        IStream *stream = NULL;
+        if (v->largo <= 0) return 0;
+        h = GlobalAlloc(GMEM_MOVEABLE, (SIZE_T)v->largo);
+        if (!h) return 0;
+        p = GlobalLock(h);
+        if (!p) { GlobalFree(h); return 0; }
+        memcpy(p, v->datos, (size_t)v->largo);
+        GlobalUnlock(h);
+        if (CreateStreamOnHGlobal(h, TRUE, &stream) != 0 || !stream) {
+            GlobalFree(h);
+            return 0;
+        }
+        if (GdipCreateBitmapFromStream(stream, &bmp) != 0 || !bmp) {
+            stream->lpVtbl->Release(stream);
+            return 0;
+        }
+        stream->lpVtbl->Release(stream);
+        return extraer_pixeles(bmp, img);
+    }
+    MultiByteToWideChar(CP_ACP, 0, ruta, -1, wruta, MAX_PATH * 2);
+    if (GdipCreateBitmapFromFile(wruta, &bmp) != 0 || !bmp) return 0;
+    return extraer_pixeles(bmp, img);
+}
+
 /* ------------------------------------------------------------------ */
 /* Utilidades de archivos y rutas                                      */
 /* ------------------------------------------------------------------ */
 
 static char *leer_archivo(const char *ruta, int *largo) {
-    FILE *f = fopen(ruta, "rb");
+    FILE *f;
     char *texto;
     long n;
+    EntradaVirtual *v = virtual_buscar(ruta);
+
+    if (v) { /* proyecto incrustado: copiar a memoria */
+        texto = (char *)malloc((size_t)v->largo + 1);
+        if (!texto) return NULL;
+        if (v->largo > 0) memcpy(texto, v->datos, (size_t)v->largo);
+        texto[v->largo] = '\0';
+        *largo = v->largo;
+        return texto;
+    }
+    f = fopen(ruta, "rb");
     if (!f) return NULL;
     fseek(f, 0, SEEK_END);
     n = ftell(f);
@@ -133,7 +325,10 @@ static char *leer_archivo(const char *ruta, int *largo) {
 }
 
 static int archivo_existe(const char *ruta) {
-    DWORD atributos = GetFileAttributesA(ruta);
+    DWORD atributos;
+    if (virtual_buscar(ruta)) return 1; /* proyecto incrustado */
+    if (!ruta || !ruta[0]) return 0;
+    atributos = GetFileAttributesA(ruta);
     return atributos != INVALID_FILE_ATTRIBUTES &&
            (atributos & FILE_ATTRIBUTE_DIRECTORY) == 0;
 }

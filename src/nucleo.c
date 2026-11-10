@@ -1488,6 +1488,22 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 logica_guardar_archivo(logic_ruta);
             }
         }
+        /* Compilacion directa para Windows (pruebas sin dialogo, fase
+         * 4): escribe el game.exe del proyecto activo en la ruta dada. */
+        {
+            char *comp_arg = arg_valor(cmd, "--compilar-windows");
+            if (comp_arg) {
+                char comp_ruta[MAX_PATH];
+                int n = 0;
+                while (comp_arg[n] && comp_arg[n] != ' ' &&
+                       comp_arg[n] != '\t' && n < MAX_PATH - 1) {
+                    comp_ruta[n] = comp_arg[n];
+                    n++;
+                }
+                comp_ruta[n] = 0;
+                if (comp_ruta[0]) compilar_windows(comp_ruta);
+            }
+        }
         /* Posicion final del raton: actualiza tambien el hover, como un
          * movimiento real, para capturar resaltes y cursores. */
         if (raton_arg) {

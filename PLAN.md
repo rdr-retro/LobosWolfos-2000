@@ -109,7 +109,7 @@ escritorio **no se toca**: se trabaja sobre una copia.
 | 1 | **egine arrastrable al lienzo**: el botón FUNCIONES se arrastra como elemento del motor y el `.logic` lo guarda | **Hecho (10-11-2026)** |
 | 2 | **Cargar `.logic` de vuelta al gestor**: la fila **Abrir lógica .logic** del menú ARCHIVO sustituye la lógica activa | **Hecho (10-11-2026)** |
 | 3 | Motor mínimo: núcleo ASM 32 bits (blit + tiles) y `game.exe` de prueba que abre una ventana, dibuja un mapa del proyecto y mueve un sprite con el teclado | **Hecho (10-11-2026)** |
-| 4 | **Compilar para Windows** desde el menú COMPILE: genera `game.exe` con el proyecto actual | Pendiente |
+| 4 | **Compilar para Windows** desde el menú COMPILE: genera `game.exe` con el proyecto actual | **Hecho (10-11-2026)** |
 | 5 | Kernel loboswolfos: copia reducida de rocky que arranca por USB con framebuffer y entrada | Pendiente |
 | 6 | Núcleo ASM x86_64 + el mismo juego corriendo sobre loboswolfos | Pendiente |
 | 7 | **Compilar para BIOS** desde el menú COMPILE: genera la imagen USB flasheable (y flashearla con la herramienta de rocky como guía) | Pendiente |
@@ -155,6 +155,21 @@ el motor ya compila.
   `--flag` en vez de devolver todo el resto de la línea, y copia el
   resultado a un buffer estático rotatorio (16 x MAX_PATH) en lugar de
   cortar la propia línea de comandos.
+- **10-11-2026** — El proyecto compilado viaja **pegado al final del propio
+  exe**: `[exe del motor][entradas del blob]["LGB1" u32 tam_blob u32]`. El
+  motor lee el pie al arrancar (`activo_blob_cargar`), registra las entradas
+  como archivos virtuales y la carga (`.logic`, `.mav`, PNG) los consulta
+  antes que el disco, así el `game.exe` resultante es autónomo: funciona en
+  cualquier carpeta sin `maps/` ni `tiles/`.
+- **10-11-2026** — La plantilla `motor/game.exe` viaja incrustada en el
+  editor como recurso RCDATA (`IDR_MOTOR`); `build.bat` compila el motor
+  antes de los recursos, porque windres la lee. Compilar es copiar la
+  plantilla y pegarle el blob del proyecto (sin recompilar nada).
+- **10-11-2026** — El blob registra `proyecto.logic` (la lógica activa
+  serializada en memoria), cada `maps\*.mav` referenciado por un elemento y
+  los PNG que usan esos mapas, resueltos con el mismo orden de búsqueda del
+  motor. Los PNG virtuales se decodifican desde memoria con
+  `GdipCreateBitmapFromStream` sobre un IStream (`-lole32` en el enlace).
 - El formato `.logic` sigue en texto plano; los elementos de función
   añaden su campo propio al final de la línea.
 

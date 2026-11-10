@@ -240,10 +240,9 @@ static void ejecutar_menu(int menu, int opcion) {
         case 4: accion_capa(opcion); break;
         case 5: accion_colores(opcion); break;
         case 6:
-            /* COMPILE: las dos opciones aun no hacen nada. */
-            app_estado(opcion == 0
-                          ? "Compilar para BIOS: sin hacer todavia"
-                          : "Compilar para Windows: sin hacer todavia");
+            /* COMPILE: solo Compilar para Windows (fase 4). */
+            if (opcion == 1) dialogo_compilar_windows();
+            else app_estado("Compilar para BIOS: sin hacer todavia");
             break;
         case 7:
             g.info_visible = 1;
@@ -813,23 +812,48 @@ void logica_iniciar(void) {
  *   <x> <y> <ancho> <alto> <id> <plegado> "<mapa>" <funcion>
  *     (una linea por elemento; funcion es el indice en MODULOS_FUNCIONES,
  *      -1 = item de mapa) */
-int logica_guardar_archivo(const char *ruta) {
-    FILE *f;
+/* Serializa la logica activa en un buffer de memoria con el mismo
+ * formato que el archivo .logic. El llamador libera el buffer con
+ * free. Devuelve 0 sin memoria. */
+int logica_guardar_memoria(char **datos, int *largo) {
+    char *buf;
+    int capacidad = 64 + g.num_modulos * 160;
+    int n = 0;
     int i;
 
-    f = fopen(ruta, "wb");
-    if (!f) return 0;
-    fprintf(f, "LOGIC1\n");
-    fprintf(f, "%d %d\n", g.pan_x, g.pan_y);
-    fprintf(f, "%d\n", g.num_modulos);
+    if (!datos || !largo) return 0;
+    buf = (char *)malloc(capacidad);
+    if (!buf) return 0;
+    n += sprintf(buf + n, "LOGIC1\n");
+    n += sprintf(buf + n, "%d %d\n", g.pan_x, g.pan_y);
+    n += sprintf(buf + n, "%d\n", g.num_modulos);
     for (i = 0; i < g.num_modulos; i++) {
         const ModuloElemento *m = &g.modulos[i];
-        fprintf(f, "%d %d %d %d %d %d \"%s\" %d\n",
-                m->x, m->y, m->ancho, m->alto, m->id, m->plegado, m->mapa,
-                m->funcion);
+        n += sprintf(buf + n, "%d %d %d %d %d %d \"%s\" %d\n",
+                     m->x, m->y, m->ancho, m->alto, m->id, m->plegado,
+                     m->mapa, m->funcion);
     }
-    fclose(f);
+    *datos = buf;
+    *largo = n;
     return 1;
+}
+
+int logica_guardar_archivo(const char *ruta) {
+    char *datos = NULL;
+    int largo = 0;
+    FILE *f;
+    int ok;
+
+    if (!logica_guardar_memoria(&datos, &largo)) return 0;
+    f = fopen(ruta, "wb");
+    if (!f) {
+        free(datos);
+        return 0;
+    }
+    ok = fwrite(datos, 1, (size_t)largo, f) == (size_t)largo;
+    fclose(f);
+    free(datos);
+    return ok;
 }
 
 /* Carga una logica guardada (LOGIC1). Sustituye la logica activa por la

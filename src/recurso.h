@@ -24,4 +24,6 @@
 #define IDR_FREEFORM   124
 #define IDR_SELRECT    125
 
+#define IDR_MOTOR      126 /* plantilla game.exe del motor egine */
+
 #endif
