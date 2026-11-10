@@ -138,7 +138,7 @@ typedef unsigned char  u8;
 #define CONFIRMAR_ALTO    132
 #define PANEL_DERECHO_MARGEN_INFERIOR 12
 
-/* Gestor de escenas: lienzo desplazable, boton de insercion y escenas. */
+/* Gestor de logica: lienzo desplazable, boton de insercion y elementos. */
 #define MODULOS_MAX            128
 #define MODULOS_CUADRICULA     32
 #define MODULOS_ELEMENTO_ANCHO 96
@@ -158,18 +158,11 @@ typedef unsigned char  u8;
 #define SELECTOR_MAPA_FILA_ALTO 44
 #define SELECTOR_MAPA_ANCHO    288
 
-/* Escenas: cada una guarda la configuracion de rectangulos del lienzo. */
-#define ESCENAS_MAX            16
-#define ESCENA_FILA_ALTO       24
-#define ESCENA_FILA_HUECO      2
-#define ESCENA_TITULO_ALTO     24
-#define ESCENA_NUEVA_ALTO      24
-
-/* Lista de elementos del lienzo, encima de la lista de escenas. */
+/* Lista de elementos del lienzo: ocupa todo el panel izquierdo del gestor
+ * (el numero de filas visibles depende del alto de la ventana). */
 #define ELEMENTO_TITULO_ALTO   22
 #define ELEMENTO_FILA_ALTO     20
 #define ELEMENTO_FILA_HUECO    2
-#define ELEMENTOS_VISIBLES     6
 
 #define SIDEBAR_DERECHO_ANCHO \
     (((SIDEBAR_MARGEN * 2 + TILES_REJILLA_ANCHO + TILES_SCROLL_HUECO + TILES_SCROLL_ANCHO) > (SIDEBAR_ANCHO * 2)) \
@@ -601,7 +594,7 @@ typedef struct TileDoc {
     Documento doc;
 } TileDoc;
 
-/* Elemento insertado en el lienzo del gestor de escenas. La posicion se guarda
+/* Elemento insertado en el lienzo del gestor de logica. La posicion se guarda
  * en coordenadas del mundo y se dibuja con el desplazamiento de la vista. Cada
  * elemento es un item: puede estar asociado a un mapa `.mav` de `maps`. */
 typedef struct ModuloElemento {
@@ -611,14 +604,6 @@ typedef struct ModuloElemento {
     int plegado; /* solo en la raiz del grupo: lista de hijos oculta */
     char mapa[MAPS_NOMBRE_MAX]; /* nombre del .mav, vacio = elemento vacio */
 } ModuloElemento;
-
-/* Escena: configuracion de rectangulos del lienzo, con su vista. */
-typedef struct Escena {
-    char nombre[32];
-    ModuloElemento elementos[MODULOS_MAX];
-    int num_elementos;
-    int pan_x, pan_y;
-} Escena;
 
 /* Miniatura de un mapa `.mav` guardada en la cache de items. */
 typedef struct MiniaturaMapa {
@@ -735,7 +720,7 @@ typedef struct App {
     int mapa_tile_sel;
     char mapa_ruta[MAX_PATH];
 
-    /* Gestor de escenas: elementos insertados en el lienzo y estado del
+    /* Gestor de logica: elementos insertados en el lienzo y estado del
      * arrastre. El desplazamiento de la vista usa pan_x/pan_y. */
     ModuloElemento modulos[MODULOS_MAX];
     int num_modulos;
@@ -760,14 +745,7 @@ typedef struct App {
     MiniaturaMapa miniaturas[MINIATURAS_MAX];
     int num_miniaturas;
 
-    /* Escenas creadas y escena activa. La escena activa se edita en
-     * modulos/num_modulos y se guarda al cambiar o crear otra. */
-    Escena escenas[ESCENAS_MAX];
-    int num_escenas;
-    int escena_activa;    /* indice en escenas[], -1 si no hay ninguna */
-    int escena_siguiente; /* numero para el nombre de la proxima escena */
-    int hover_escena;     /* fila de escena bajo el cursor, -1 ninguna */
-    int hover_escena_nueva;
+    /* Lista de elementos del gestor y desplazamiento de la vista unica. */
     int elementos_scroll; /* primer elemento visible de la lista */
     int modulo_siguiente_id; /* id del proximo elemento insertado */
 
@@ -1157,15 +1135,12 @@ void dibujar_miniatura(int x, int y, int ancho, int alto,
                        const u32 *pixeles, int pix_w, int pix_h);
 Zona elementos_lista_zona(void);
 Zona elemento_fila_zona(int indice);
-Zona escena_nueva_zona(void);
-Zona escena_fila_zona(int indice);
+int  elementos_visibles(void);
 void modulos_acoplar(int *x, int *y, int ancho, int alto, int ignorar,
                      int *linea_x, int *linea_y);
 void modulos_insertar(int x, int y);
 int  elementos_ordenar_lista(int *orden, int *hijos);
-void escenas_iniciar(void);
-void escenas_nueva(void);
-void escenas_activar(int indice);
+void logica_iniciar(void);
 int  sidebar_derecho_ancho(void);
 Zona herramienta_zona(int indice);
 Zona panel_textura_zona(void);
@@ -1262,8 +1237,8 @@ void dialogo_guardar_png(void);
 void dialogo_exportar_bmp(void);
 void dialogo_abrir_mapa(void);
 void dialogo_guardar_mapa(void);
-void dialogo_guardar_escena(void);
-int  escena_guardar_archivo(const char *ruta);
+void dialogo_guardar_logica(void);
+int  logica_guardar_archivo(const char *ruta);
 void dialogo_elegir_color(int para_fondo);
 int  dialogo_elegir_color_valor(u32 inicial, u32 *salida);
 int  dialogo_confirmar(const char *titulo, const char *mensaje);

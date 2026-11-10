@@ -20,8 +20,8 @@ para cargar y guardar PNG.
   rejilla. Los items son mapas `.mav` de la carpeta `maps` junto al ejecutable:
   se eligen con un clic y se muestran con miniatura y nombre. Los elementos se
   pueden mover y se acoplan entre sí por sus lados con efecto imán. El panel
-  izquierdo lista los elementos del lienzo y las escenas creadas; cada escena
-  guarda su configuración de rectángulos.
+  izquierdo lista los elementos del lienzo; hay una sola lógica y se guarda
+  como archivo `.logic`.
 - Apertura y exportación de PNG/BMP y mapas `.mav`.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
 
@@ -58,18 +58,15 @@ lógica**, que abre un espacio de trabajo con los paneles izquierdo, derecho e
 inferior (los dos laterales del mismo ancho), manteniendo las pestañas y la
 barra de menús. Al elegir **Gestor de lógica** de nuevo se vuelve a Pintar.
 
-El panel izquierdo muestra, de arriba abajo, la lista de elementos del lienzo
-(`Elemento 1`, `Elemento 2`…) y la lista de escenas creadas. Los elementos
-unidos entre sí por el efecto imán aparecen indentados bajo el elemento del
-grupo al que pertenecen; la flecha del grupo permite plegar o desplegar sus
-hijos en la lista. Cada escena es una configuración de rectángulos del lienzo:
-al pulsar una escena se carga en el lienzo, y el botón **Nueva escena** guarda
-la actual y crea otra vacía. Si hay más de seis elementos, la rueda sobre la
-lista los desplaza.
+El panel izquierdo muestra la lista de elementos del lienzo (`Elemento 1`,
+`Elemento 2`…) y ocupa todo el panel. Los elementos unidos entre sí por el
+efecto imán aparecen indentados bajo el elemento del grupo al que pertenecen;
+la flecha del grupo permite plegar o desplegar sus hijos en la lista. Si hay
+más elementos que filas visibles, la rueda sobre la lista los desplaza.
 
-La opción **Guardar escena .cene** del menú **ARCHIVO** exporta la escena activa
-a un archivo de texto con su nombre, su desplazamiento y cada elemento
-(posición, tamaño, identificador, estado plegado y mapa asociado).
+La opción **Guardar logica .logic** del menú **ARCHIVO** exporta la lógica a
+un archivo de texto con su desplazamiento y cada elemento (posición, tamaño,
+identificador, estado plegado y mapa asociado).
 
 Dentro del gestor, el panel derecho contiene el botón del **item**. Un clic
 (sin arrastrar) abre el selector de items: la lista de mapas `.mav` de la

@@ -74,7 +74,7 @@ static void accion_archivo(int opcion) {
     int fila = opcion;
     if (!modo_mapa) {
         /* Sin editor de mapas las filas son: Abrir, Borrar, PNG, BMP y
-         * Guardar escena. */
+         * Guardar logica. */
         switch (fila) {
             case 0: dialogo_abrir_imagen(); return;
             case 1: fila = 3; break;
@@ -100,7 +100,7 @@ static void accion_archivo(int opcion) {
             break;
         case 4: dialogo_guardar_png(); break;
         case 5: dialogo_exportar_bmp(); break;
-        case 6: dialogo_guardar_escena(); break;
+        case 6: dialogo_guardar_logica(); break;
         default: break;
     }
 }
@@ -158,7 +158,7 @@ static void accion_modo(int opcion) {
             }
             break;
         case 4:
-            /* Gestor de logica: panel de elementos y escenas. */
+            /* Gestor de logica: panel de elementos. */
             app_alternar_gestor_modulos();
             break;
         default:
@@ -777,115 +777,40 @@ int clic_pestanas(int x, int y, int boton) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Gestor de logica: lista del panel izquierdo                        */
+/* Gestor de logica: elementos del panel izquierdo                     */
 /* ------------------------------------------------------------------ */
-static void escenas_reset_arrastre(void) {
+/* Reinicia la logica unica: sin elementos y con la vista centrada. */
+void logica_iniciar(void) {
+    g.elementos_scroll = 0;
+    g.num_modulos = 0;
+    g.modulo_siguiente_id = 1;
+    g.pan_x = 0;
+    g.pan_y = 0;
     g.modulo_arrastrando = 0;
     g.modulo_drag_i = -1;
     g.modulo_snap_linea_x = -1;
     g.modulo_snap_linea_y = -1;
 }
 
-/* Guarda en la escena activa la configuracion actual del lienzo. */
-static void escenas_guardar_activa(void) {
-    Escena *e;
-    if (g.escena_activa < 0 || g.escena_activa >= g.num_escenas) return;
-    e = &g.escenas[g.escena_activa];
-    memcpy(e->elementos, g.modulos, sizeof(ModuloElemento) * g.num_modulos);
-    e->num_elementos = g.num_modulos;
-    e->pan_x = g.pan_x;
-    e->pan_y = g.pan_y;
-}
-
-/* Carga en el lienzo la configuracion de la escena activa. */
-static void escenas_cargar_activa(void) {
-    Escena *e;
-    int i;
-    if (g.escena_activa < 0 || g.escena_activa >= g.num_escenas) return;
-    e = &g.escenas[g.escena_activa];
-    memcpy(g.modulos, e->elementos, sizeof(ModuloElemento) * e->num_elementos);
-    g.num_modulos = e->num_elementos;
-    g.pan_x = e->pan_x;
-    g.pan_y = e->pan_y;
-    g.modulo_siguiente_id = 1;
-    for (i = 0; i < g.num_modulos; i++)
-        if (g.modulos[i].id >= g.modulo_siguiente_id)
-            g.modulo_siguiente_id = g.modulos[i].id + 1;
-}
-
-/* Reinicia la lista de escenas y crea la primera vacia. */
-void escenas_iniciar(void) {
-    g.num_escenas = 0;
-    g.escena_activa = -1;
-    g.escena_siguiente = 1;
-    g.hover_escena = -1;
-    g.hover_escena_nueva = 0;
-    g.elementos_scroll = 0;
-    g.num_modulos = 0;
-    g.modulo_siguiente_id = 1;
-    g.pan_x = 0;
-    g.pan_y = 0;
-    escenas_reset_arrastre();
-    escenas_nueva();
-}
-
-/* Guarda la escena actual y crea otra vacia con su propia vista. */
-void escenas_nueva(void) {
-    Escena *e;
-    if (g.num_escenas >= ESCENAS_MAX) return;
-    escenas_guardar_activa();
-    e = &g.escenas[g.num_escenas];
-    memset(e, 0, sizeof(*e));
-    formatear(e->nombre, sizeof(e->nombre), "Escena %d", g.escena_siguiente++);
-    g.escena_activa = g.num_escenas++;
-    g.num_modulos = 0;
-    g.modulo_siguiente_id = 1;
-    g.pan_x = 0;
-    g.pan_y = 0;
-    g.hover_escena = -1;
-    g.hover_escena_nueva = 0;
-    g.elementos_scroll = 0;
-    escenas_reset_arrastre();
-}
-
-/* Cambia de escena: guarda la actual y carga la elegida. */
-void escenas_activar(int indice) {
-    if (indice < 0 || indice >= g.num_escenas || indice == g.escena_activa)
-        return;
-    escenas_guardar_activa();
-    g.escena_activa = indice;
-    escenas_cargar_activa();
-    g.hover_escena = indice;
-    g.hover_escena_nueva = 0;
-    g.elementos_scroll = 0;
-    escenas_reset_arrastre();
-}
-
 /* ------------------------------------------------------------------ */
-/* Archivo de escena (.cene)                                           */
+/* Archivo de logica (.logic)                                          */
 /* ------------------------------------------------------------------ */
-/* Formato de texto, una escena por archivo:
- *   CENE1
- *   <nombre>
+/* Formato de texto, una logica por archivo:
+ *   LOGIC1
  *   <pan_x> <pan_y>
  *   <num_elementos>
  *   <x> <y> <ancho> <alto> <id> <plegado> "<mapa>"   (una linea por elemento) */
-int escena_guardar_archivo(const char *ruta) {
+int logica_guardar_archivo(const char *ruta) {
     FILE *f;
-    Escena *e;
     int i;
 
-    escenas_guardar_activa();
-    if (g.escena_activa < 0 || g.escena_activa >= g.num_escenas) return 0;
-    e = &g.escenas[g.escena_activa];
     f = fopen(ruta, "wb");
     if (!f) return 0;
-    fprintf(f, "CENE1\n");
-    fprintf(f, "%s\n", e->nombre);
-    fprintf(f, "%d %d\n", e->pan_x, e->pan_y);
-    fprintf(f, "%d\n", e->num_elementos);
-    for (i = 0; i < e->num_elementos; i++) {
-        const ModuloElemento *m = &e->elementos[i];
+    fprintf(f, "LOGIC1\n");
+    fprintf(f, "%d %d\n", g.pan_x, g.pan_y);
+    fprintf(f, "%d\n", g.num_modulos);
+    for (i = 0; i < g.num_modulos; i++) {
+        const ModuloElemento *m = &g.modulos[i];
         fprintf(f, "%d %d %d %d %d %d \"%s\"\n",
                 m->x, m->y, m->ancho, m->alto, m->id, m->plegado, m->mapa);
     }
@@ -893,35 +818,26 @@ int escena_guardar_archivo(const char *ruta) {
     return 1;
 }
 
-/* Dialogo para guardar la escena activa como .cene. */
-void dialogo_guardar_escena(void) {
+/* Dialogo para guardar la logica activa como .logic. */
+void dialogo_guardar_logica(void) {
     char ruta[MAX_PATH];
     OPENFILENAMEA ofn;
-    Escena *e;
 
-    if (g.escena_activa < 0 || g.escena_activa >= g.num_escenas) {
-        dialogo_error("No hay ninguna escena para guardar.");
-        return;
-    }
-    escenas_guardar_activa();
-    e = &g.escenas[g.escena_activa];
-    ruta[0] = '\0';
-    _snprintf(ruta, MAX_PATH, "%s.cene", e->nombre);
-    ruta[MAX_PATH - 1] = 0;
+    strcpy(ruta, "logica.logic");
     memset(&ofn, 0, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = g.hwnd;
-    ofn.lpstrFilter = "Escena (*.cene)\0*.cene\0Todos los archivos\0*.*\0\0";
+    ofn.lpstrFilter = "Logica (*.logic)\0*.logic\0Todos los archivos\0*.*\0\0";
     ofn.lpstrFile = ruta;
     ofn.nMaxFile = MAX_PATH;
-    ofn.lpstrDefExt = "cene";
+    ofn.lpstrDefExt = "logic";
     ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY |
                 OFN_OVERWRITEPROMPT;
     if (!GetSaveFileNameA(&ofn)) return;
-    if (escena_guardar_archivo(ruta))
-        app_estado("Escena guardada: %s", ruta);
+    if (logica_guardar_archivo(ruta))
+        app_estado("Logica guardada: %s", ruta);
     else
-        dialogo_error("No se pudo guardar la escena.");
+        dialogo_error("No se pudo guardar la logica.");
     app_invalidar();
 }
 
@@ -1033,7 +949,7 @@ static void modulos_eliminar(int idx) {
     {
         int orden[MODULOS_MAX], hijos[MODULOS_MAX];
         int filas = elementos_ordenar_lista(orden, hijos);
-        int maximo = filas - ELEMENTOS_VISIBLES;
+        int maximo = filas - elementos_visibles();
         if (maximo < 0) maximo = 0;
         if (g.elementos_scroll > maximo) g.elementos_scroll = maximo;
     }
@@ -1175,13 +1091,13 @@ void modulos_insertar(int x, int y) {
     }
     /* La lista muestra el elemento recien anadido, aunque quede dentro de
      * un grupo y no al final. */
-    if (g.num_modulos > ELEMENTOS_VISIBLES) {
+    if (g.num_modulos > elementos_visibles()) {
         int orden[MODULOS_MAX], hijos[MODULOS_MAX];
         int fila, total = elementos_ordenar_lista(orden, hijos);
         for (fila = 0; fila < total; fila++)
             if (orden[fila] == g.num_modulos - 1) break;
-        if (fila < total && fila >= ELEMENTOS_VISIBLES)
-            g.elementos_scroll = fila - ELEMENTOS_VISIBLES + 1;
+        if (fila < total && fila >= elementos_visibles())
+            g.elementos_scroll = fila - elementos_visibles() + 1;
     }
 }
 
@@ -1249,7 +1165,7 @@ static void modulos_pulsar(int x, int y, int boton) {
         return;
     }
 
-    /* Panel izquierdo: lista de elementos (plegar grupos) y escenas. */
+    /* Panel izquierdo: lista de elementos (plegar grupos). */
     if (boton == 0) {
         Zona lista = elementos_lista_zona();
         if (zona_contiene(lista, x, y)) {
@@ -1258,37 +1174,19 @@ static void modulos_pulsar(int x, int y, int boton) {
             int paso = ELEMENTO_FILA_ALTO + ELEMENTO_FILA_HUECO;
             int fila = (y - lista.y) / paso;
             int visible = fila + g.elementos_scroll;
-            if (fila >= 0 && fila < ELEMENTOS_VISIBLES && visible < filas &&
+            if (fila >= 0 && fila < elementos_visibles() && visible < filas &&
                 hijos[visible] == 1 &&
                 x < elemento_fila_zona(fila).x + 20) {
                 int idx = orden[visible];
                 int maximo;
                 g.modulos[idx].plegado = !g.modulos[idx].plegado;
                 filas = elementos_ordenar_lista(orden, hijos);
-                maximo = filas - ELEMENTOS_VISIBLES;
+                maximo = filas - elementos_visibles();
                 if (maximo < 0) maximo = 0;
                 if (g.elementos_scroll > maximo) g.elementos_scroll = maximo;
                 app_invalidar();
             }
             return;
-        }
-
-        {
-            int i;
-            if (zona_contiene(escena_nueva_zona(), x, y)) {
-                escenas_nueva();
-                app_invalidar();
-                return;
-            }
-            for (i = 0; i < g.num_escenas; i++) {
-                if (zona_abajo(escena_fila_zona(i)) >
-                    escena_nueva_zona().y - 4) break;
-                if (zona_contiene(escena_fila_zona(i), x, y)) {
-                    escenas_activar(i);
-                    app_invalidar();
-                    return;
-                }
-            }
         }
     }
 
@@ -1418,25 +1316,6 @@ static void modulos_mover(int x, int y) {
         return;
     }
 
-    /* Hover de la lista de escenas del panel izquierdo. */
-    {
-        int i, h = -1, hn;
-        for (i = 0; i < g.num_escenas; i++) {
-            if (zona_abajo(escena_fila_zona(i)) >
-                escena_nueva_zona().y - 4) break;
-            if (zona_contiene(escena_fila_zona(i), x, y)) {
-                h = i;
-                break;
-            }
-        }
-        hn = zona_contiene(escena_nueva_zona(), x, y);
-        if (h != g.hover_escena || hn != g.hover_escena_nueva) {
-            g.hover_escena = h;
-            g.hover_escena_nueva = hn;
-            app_invalidar();
-        }
-    }
-
     hover = zona_contiene(modulos_boton_zona(), x, y);
     if (hover != g.hover_modulo_boton) {
         g.hover_modulo_boton = hover;
@@ -1465,7 +1344,7 @@ static void modulos_rueda(int x, int y, int delta, int ctrl) {
     if (zona_contiene(elementos_lista_zona(), x, y)) {
         int orden[MODULOS_MAX], hijos[MODULOS_MAX];
         int filas = elementos_ordenar_lista(orden, hijos);
-        int maximo = filas - ELEMENTOS_VISIBLES;
+        int maximo = filas - elementos_visibles();
         int scroll = g.elementos_scroll + (delta > 0 ? -1 : 1);
         if (maximo < 0) maximo = 0;
         if (scroll < 0) scroll = 0;

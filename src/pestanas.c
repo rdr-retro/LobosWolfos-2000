@@ -68,8 +68,6 @@ static void preparar_cambio(void) {
     g.modulo_snap_linea_x = -1;
     g.modulo_snap_linea_y = -1;
     g.hover_modulo_boton = 0;
-    g.hover_escena = -1;
-    g.hover_escena_nueva = 0;
 }
 
 static void limpiar_estado_transitorio(void) {
@@ -262,7 +260,7 @@ const char *pestanas_titulo(int indice) {
         tiles = g.pestanas[indice].modo_tiles;
     }
     if (vista == VISTA_MAPA) return "Mapa";
-    if (vista == VISTA_MODULOS) return "Escenas";
+    if (vista == VISTA_MODULOS) return "Logica";
     if (tiles) return "Tiles";
     if (patron) return "Patron";
     return "Pintar";

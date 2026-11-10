@@ -401,6 +401,15 @@ void app_redimensionar(int ancho, int alto) {
     g.pix_alto = alto;
     if (g.pixeles) memset(g.pixeles, 0, (size_t)ancho * alto * sizeof(u32));
     lienzo_actualizar();
+    /* La lista de elementos del gestor puede mostrar menos filas tras
+     * reducir el alto de la ventana: el scroll no debe pasarse del final. */
+    {
+        int orden[MODULOS_MAX], hijos[MODULOS_MAX];
+        int filas = elementos_ordenar_lista(orden, hijos);
+        int maximo = filas - elementos_visibles();
+        if (maximo < 0) maximo = 0;
+        if (g.elementos_scroll > maximo) g.elementos_scroll = maximo;
+    }
 }
 
 static void crear_fuentes(void) {
@@ -658,7 +667,7 @@ int app_iniciar(void) {
     tiles_modo_iniciar();
     texto_iniciar();
     pestanas_iniciar();
-    escenas_iniciar();
+    logica_iniciar();
 
     crear_fuentes();
     cargar_iconos();
@@ -721,7 +730,7 @@ static void reemplazar_documento(Documento *nuevo, const char *ruta) {
     pila_limpiar(&g.rehacer);
     seleccion_limpiar(&g.sel);
     tiles_modo_limpiar();
-    escenas_iniciar();
+    logica_iniciar();
     if (ruta && ruta[0])
         recortar_texto(g.doc_ruta, ruta, sizeof(g.doc_ruta));
     else
@@ -800,8 +809,6 @@ void app_cambiar_vista(Vista vista) {
     g.modulo_boton_movido = 0;
     g.selector_mapa_abierto = 0;
     g.selector_mapa_hover = -1;
-    g.hover_escena = -1;
-    g.hover_escena_nueva = 0;
     app_actualizar_titulo();
     app_invalidar();
 }
@@ -815,7 +822,7 @@ void app_alternar_mapa(void) {
     }
 }
 
-/* Gestor de logica: espacio de trabajo con la lista de escenas en el panel
+/* Gestor de logica: espacio de trabajo con la lista de elementos en el panel
  * izquierdo. Elegirlo de nuevo en el menu MODO vuelve a Pintar. */
 void app_alternar_gestor_modulos(void) {
     if (g.vista == VISTA_MODULOS) {
@@ -835,7 +842,6 @@ void app_alternar_gestor_modulos(void) {
     g.capa_menu_abierto = -1;
     g.confirmar_borrado = 0;
     g.confirmar_tile = -1;
-    if (g.num_escenas == 0) escenas_iniciar();
     app_cambiar_vista(VISTA_MODULOS);
 }
 
@@ -1431,20 +1437,20 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 }
             }
         }
-        /* Guardado directo de la escena activa (pruebas sin dialogo). Va
+        /* Guardado directo de la logica activa (pruebas sin dialogo). Va
          * despues de los clics para poder comprobar el estado plegado. */
         {
-            char *cene_arg = arg_valor(cmd, "--guardar-escena");
-            if (cene_arg) {
-                char cene_ruta[MAX_PATH];
+            char *logic_arg = arg_valor(cmd, "--guardar-logica");
+            if (logic_arg) {
+                char logic_ruta[MAX_PATH];
                 int n = 0;
-                while (cene_arg[n] && cene_arg[n] != ' ' && cene_arg[n] != '\t' &&
-                       n < MAX_PATH - 1) {
-                    cene_ruta[n] = cene_arg[n];
+                while (logic_arg[n] && logic_arg[n] != ' ' &&
+                       logic_arg[n] != '\t' && n < MAX_PATH - 1) {
+                    logic_ruta[n] = logic_arg[n];
                     n++;
                 }
-                cene_ruta[n] = 0;
-                escena_guardar_archivo(cene_ruta);
+                logic_ruta[n] = 0;
+                logica_guardar_archivo(logic_ruta);
             }
         }
         /* Posicion final del raton: actualiza tambien el hover, como un
