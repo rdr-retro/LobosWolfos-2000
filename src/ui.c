@@ -121,6 +121,30 @@ Zona modulos_boton_zona(void) {
                       ancho, MODULOS_BOTON_ALTO);
 }
 
+/* Panel flotante del selector de items, centrado en el lienzo del gestor. */
+Zona selector_mapa_zona(void) {
+    Zona lienzo = modulos_lienzo_zona();
+    int filas = g.selector_mapa_num;
+    int ancho = SELECTOR_MAPA_ANCHO;
+    int alto;
+    if (filas > SELECTOR_MAPA_FILAS) filas = SELECTOR_MAPA_FILAS;
+    if (filas < 1) filas = 1;
+    alto = 30 + filas * SELECTOR_MAPA_FILA_ALTO + 8;
+    if (ancho > lienzo.ancho - 16) ancho = lienzo.ancho - 16;
+    if (alto > lienzo.alto - 16) alto = lienzo.alto - 16;
+    if (ancho < 80) ancho = 80;
+    if (alto < 40) alto = 40;
+    return zona_hacer(lienzo.x + (lienzo.ancho - ancho) / 2,
+                      lienzo.y + (lienzo.alto - alto) / 2, ancho, alto);
+}
+
+/* Fila del selector de items; `indice` es la fila visible, no el mapa. */
+Zona selector_mapa_fila_zona(int indice) {
+    Zona z = selector_mapa_zona();
+    return zona_hacer(z.x + 6, z.y + 30 + indice * SELECTOR_MAPA_FILA_ALTO,
+                      z.ancho - 12, SELECTOR_MAPA_FILA_ALTO - 4);
+}
+
 /* Bloque de filas de la lista de elementos del lienzo. */
 Zona elementos_lista_zona(void) {
     int panel = modulos_panel_ancho();
@@ -3053,6 +3077,128 @@ static void modulos_dibujar_guia(Zona lienzo, int linea_x, int linea_y) {
     }
 }
 
+/* Dibuja una imagen escalada y centrada dentro de una caja, sin salir de la
+ * ventana. Se usa para las miniaturas de los items. */
+void dibujar_miniatura(int x, int y, int ancho, int alto,
+                       const u32 *pixeles, int pix_w, int pix_h) {
+    int tw, th, ox, oy, dx, dy;
+    if (!pixeles || pix_w < 1 || pix_h < 1 || ancho < 1 || alto < 1) return;
+    if ((long long)pix_w * alto > (long long)pix_h * ancho) {
+        tw = ancho;
+        th = (int)((long long)pix_h * ancho / pix_w);
+    } else {
+        th = alto;
+        tw = (int)((long long)pix_w * alto / pix_h);
+    }
+    if (tw < 1) tw = 1;
+    if (th < 1) th = 1;
+    ox = x + (ancho - tw) / 2;
+    oy = y + (alto - th) / 2;
+    for (dy = 0; dy < th; dy++) {
+        int sy = (int)((long long)dy * pix_h / th);
+        if (sy >= pix_h) sy = pix_h - 1;
+        for (dx = 0; dx < tw; dx++) {
+            int sx = (int)((long long)dx * pix_w / tw);
+            u32 c;
+            if (sx >= pix_w) sx = pix_w - 1;
+            c = pixeles[(size_t)sy * pix_w + sx];
+            if ((c >> 24) == 0) continue;
+            dibujar_pixel(ox + dx, oy + dy, c & 0x00FFFFFFu);
+        }
+    }
+}
+
+/* Texto de una linea recortado con puntos suspensivos si no cabe. */
+static void texto_recortado(int x, int y, const char *texto, u32 color,
+                            int max_ancho) {
+    char buf[128];
+    int n, largo, recortado = 0;
+    if (!texto || !texto[0] || max_ancho < 4) return;
+    recortar_texto(buf, texto, sizeof(buf));
+    largo = (int)strlen(buf);
+    n = largo;
+    while (n > 0 && fuente_texto_ancho(buf) > max_ancho) {
+        buf[n - 1] = '\0';
+        n--;
+        recortado = 1;
+    }
+    if (recortado && n > 3) {
+        buf[n - 1] = '.';
+        buf[n - 2] = '.';
+        buf[n - 3] = '.';
+    }
+    if (n > 0) fuente_dibujar(x, y, buf, color);
+}
+
+/* Panel flotante con la lista de mapas .mav de la carpeta `maps`. */
+void ui_dibujar_selector_mapa(void) {
+    Zona z;
+    int i, filas;
+    char titulo[64];
+
+    if (!g.selector_mapa_abierto) return;
+    z = selector_mapa_zona();
+
+    /* Sombra y marco del panel. */
+    dibujar_rect(z.x + 4, z.y + 4, zona_derecha(z) + 4, zona_abajo(z) + 4,
+                 0x00081018u);
+    dibujar_rect_z(z, MENU_FONDO);
+    dibujar_marco_z(z, MENU_BORDE);
+
+    formatear(titulo, sizeof(titulo), "ITEMS  (%d)", g.selector_mapa_num);
+    fuente_dibujar(z.x + 10, z.y + 9, titulo, MENU_TEXTO);
+    dibujar_rect(z.x + 1, z.y + 26, zona_derecha(z) - 1, z.y + 27, MENU_BORDE);
+
+    filas = g.selector_mapa_num;
+    if (filas > SELECTOR_MAPA_FILAS) filas = SELECTOR_MAPA_FILAS;
+    if (filas < 1) filas = 1;
+
+    if (g.selector_mapa_num == 0) {
+        fuente_dibujar(z.x + 10, z.y + 38, "Sin mapas .mav en la carpeta maps",
+                       SEPARADOR);
+        return;
+    }
+
+    for (i = 0; i < filas; i++) {
+        int idx = g.selector_mapa_scroll + i;
+        Zona fila;
+        int activo, hover;
+        if (idx >= g.selector_mapa_num) break;
+        fila = selector_mapa_fila_zona(i);
+        hover = (idx == g.selector_mapa_hover);
+        activo = (strcmp(g.selector_mapas[idx], g.item_mapa) == 0);
+        dibujar_rect_z(fila, activo ? 0x00D8E6F8u
+                                    : (hover ? 0x00E8EDF3u : MENU_FONDO));
+        dibujar_marco_z(fila, activo ? BOTON_SELECCION : BARRA_BORDE);
+        dibujar_rect(fila.x + 5, fila.y + 4, fila.x + 53, fila.y + 36,
+                     MAPA_FONDO);
+        {
+            const MiniaturaMapa *m = mapa_miniatura_item(g.selector_mapas[idx]);
+            if (m)
+                dibujar_miniatura(fila.x + 5, fila.y + 4, 48, 32,
+                                  m->pixeles, m->ancho, m->alto);
+            else
+                dibujar_marco(fila.x + 5, fila.y + 4, fila.x + 53,
+                              fila.y + 36, MAPA_REJILLA);
+        }
+        texto_recortado(fila.x + 60, fila.y + (fila.alto - 7) / 2,
+                        g.selector_mapas[idx],
+                        activo ? 0x00183868u : TEXTO_UI,
+                        zona_derecha(fila) - fila.x - 66);
+    }
+
+    /* Indicador de desplazamiento cuando hay mas mapas que filas. */
+    if (g.selector_mapa_num > SELECTOR_MAPA_FILAS) {
+        int alto = zona_abajo(z) - z.y - 36;
+        int y0 = z.y + 30 + g.selector_mapa_scroll * alto / g.selector_mapa_num;
+        int y1 = y0 + alto * SELECTOR_MAPA_FILAS / g.selector_mapa_num;
+        dibujar_rect(zona_derecha(z) - 5, z.y + 30, zona_derecha(z) - 2,
+                     zona_abajo(z) - 6, 0x00E0E0E0u);
+        dibujar_rect(zona_derecha(z) - 5, y0, zona_derecha(z) - 2,
+                     y1 < y0 + 8 ? y0 + 8 : y1, SEPARADOR);
+    }
+}
+
 /* Lienzo desplazable del gestor: rejilla y elementos insertados. */
 static void modulos_dibujar_lienzo(void) {
     Zona lienzo = modulos_lienzo_zona();
@@ -3063,14 +3209,39 @@ static void modulos_dibujar_lienzo(void) {
     for (i = 0; i < g.num_modulos; i++) {
         ModuloElemento *e = &g.modulos[i];
         int activo = (g.modulo_arrastrando == 3 && i == g.modulo_drag_i);
-        int x0 = lienzo.x + g.pan_x + e->x;
-        int y0 = lienzo.y + g.pan_y + e->y;
-        int x1 = x0 + e->ancho;
-        int y1 = y0 + e->alto;
+        int vx0 = lienzo.x + g.pan_x + e->x;
+        int vy0 = lienzo.y + g.pan_y + e->y;
+        int vx1 = vx0 + e->ancho;
+        int vy1 = vy0 + e->alto;
+        int x0 = vx0, y0 = vy0, x1 = vx1, y1 = vy1;
+        int completo;
         if (!modulos_recortar(lienzo, &x0, &y0, &x1, &y1)) continue;
         dibujar_rect(x0, y0, x1, y1, activo ? 0x00E4ECF6u : BARRA);
         dibujar_marco(x0, y0, x1, y1,
                       activo ? BOTON_SELECCION : SEPARADOR);
+        completo = vx0 >= lienzo.x && vy0 >= lienzo.y &&
+                   vx1 <= zona_derecha(lienzo) && vy1 <= zona_abajo(lienzo);
+        if (!completo) continue;
+        if (e->mapa[0]) {
+            const MiniaturaMapa *m = mapa_miniatura_item(e->mapa);
+            int ix = vx0 + 4;
+            int iy = vy0 + 4;
+            int iw = e->ancho - 8;
+            int ih = e->alto - 18;
+            if (ih < 8) ih = e->alto - 8;
+            dibujar_rect(ix, iy, ix + iw, iy + ih, MAPA_FONDO);
+            if (m)
+                dibujar_miniatura(ix, iy, iw, ih, m->pixeles, m->ancho, m->alto);
+            else
+                dibujar_marco(ix, iy, ix + iw, iy + ih, MAPA_REJILLA);
+            texto_recortado(vx0 + 4, vy0 + e->alto - 11, e->mapa,
+                            activo ? 0x00183868u : TEXTO_UI, e->ancho - 8);
+        } else {
+            char etiqueta[32];
+            formatear(etiqueta, sizeof(etiqueta), "Elemento %d", e->id);
+            fuente_dibujar(vx0 + (e->ancho - fuente_texto_ancho(etiqueta)) / 2,
+                           vy0 + (e->alto - 7) / 2, etiqueta, TEXTO_UI);
+        }
     }
 
     /* Guias del elemento que se esta moviendo. */
@@ -3094,23 +3265,59 @@ static void modulos_dibujar_lienzo(void) {
         if (modulos_recortar(lienzo, &x0, &y0, &x1, &y1)) {
             dibujar_rect(x0, y0, x1, y1, 0x004A5A6Au);
             dibujar_marco(x0, y0, x1, y1, BOTON_SELECCION);
+            if (g.item_mapa[0]) {
+                const MiniaturaMapa *m = mapa_miniatura_item(g.item_mapa);
+                int ix = lienzo.x + g.pan_x + wx + 4;
+                int iy = lienzo.y + g.pan_y + wy + 4;
+                int iw = MODULOS_ELEMENTO_ANCHO - 8;
+                int ih = MODULOS_ELEMENTO_ALTO - 18;
+                if (m)
+                    dibujar_miniatura(ix, iy, iw, ih, m->pixeles,
+                                      m->ancho, m->alto);
+                dibujar_rect(ix, iy + ih, ix + iw, iy + ih + 11, 0x004A5A6Au);
+                texto_recortado(ix, iy + ih + 2, g.item_mapa, 0x00FFFFFFu, iw);
+            }
         }
         modulos_dibujar_guia(lienzo, lx, ly);
     }
 }
 
-/* Boton rectangular sin nombre que se arrastra al lienzo. */
+/* Boton rectangular del panel derecho: muestra el item elegido y se arrastra
+ * al lienzo. Un clic sin arrastrar abre el selector de mapas. */
 static void ui_dibujar_boton_modulos(void) {
     Zona b = modulos_boton_zona();
     int hover = zona_contiene(b, g.raton_x, g.raton_y);
+    int pulsado = g.modulo_boton_pulsado && !g.modulo_boton_movido;
 
-    dibujar_rect_z(b, hover ? 0x00EDF2F7u : BARRA);
+    dibujar_rect_z(b, pulsado ? 0x00D8DEE6u : (hover ? 0x00EDF2F7u : BARRA));
     dibujar_rect(b.x, b.y, zona_derecha(b), b.y + 1, 0x00F8F8F8u);
     dibujar_rect(b.x, b.y, b.x + 1, zona_abajo(b), 0x00F8F8F8u);
     dibujar_rect(b.x, zona_abajo(b) - 1, zona_derecha(b), zona_abajo(b),
                  SEPARADOR);
     dibujar_rect(zona_derecha(b) - 1, b.y, zona_derecha(b), zona_abajo(b),
                  SEPARADOR);
+
+    if (g.item_mapa[0]) {
+        const MiniaturaMapa *m = mapa_miniatura_item(g.item_mapa);
+        int ix = b.x + 6, iy = b.y + 6;
+        int iw = 50, ih = b.alto - 12;
+        dibujar_rect(ix, iy, ix + iw, iy + ih, MAPA_FONDO);
+        if (m)
+            dibujar_miniatura(ix, iy, iw, ih, m->pixeles, m->ancho, m->alto);
+        else
+            dibujar_marco(ix, iy, ix + iw, iy + ih, MAPA_REJILLA);
+        fuente_dibujar(b.x + 62, b.y + 8, "ITEM", TEXTO_UI);
+        texto_recortado(b.x + 62, b.y + 21, g.item_mapa, TEXTO_UI,
+                        b.ancho - 68);
+        texto_recortado(b.x + 62, b.y + 37, "Clic / arrastrar", SEPARADOR,
+                        b.ancho - 68);
+    } else {
+        const char *l1 = "SIN ITEM";
+        const char *l2 = "Clic para elegir";
+        fuente_dibujar(b.x + (b.ancho - fuente_texto_ancho(l1)) / 2,
+                       b.y + 16, l1, TEXTO_UI);
+        texto_recortado(b.x + 8, b.y + 32, l2, SEPARADOR, b.ancho - 16);
+    }
 }
 
 /* Distancia de un punto a un segmento. */
@@ -3194,7 +3401,11 @@ static void elementos_dibujar_panel(void) {
         marca = hijos[fila];
         z = elemento_fila_zona(i);
         activo = (g.modulo_arrastrando == 3 && idx == g.modulo_drag_i);
-        formatear(etiqueta, sizeof(etiqueta), "Elemento %d", g.modulos[idx].id);
+        if (g.modulos[idx].mapa[0])
+            recortar_texto(etiqueta, g.modulos[idx].mapa, sizeof(etiqueta));
+        else
+            formatear(etiqueta, sizeof(etiqueta), "Elemento %d",
+                      g.modulos[idx].id);
         dibujar_rect_z(z, activo ? BOTON_SELECCION : BARRA);
         dibujar_marco_z(z, activo ? BOTON_SELECCION : BARRA_BORDE);
         tx = z.x + 6;
@@ -3211,8 +3422,9 @@ static void elementos_dibujar_panel(void) {
             dibujar_rect(z.x + 8, cy, z.x + 16, cy + 1, BARRA_BORDE);
             tx = z.x + 20;
         }
-        fuente_dibujar(tx, z.y + (z.alto - 7) / 2, etiqueta,
-                       activo ? 0x00FFFFFFu : TEXTO_UI);
+        texto_recortado(tx, z.y + (z.alto - 7) / 2, etiqueta,
+                        activo ? 0x00FFFFFFu : TEXTO_UI,
+                        zona_derecha(z) - tx - 4);
     }
 }
 
@@ -3290,6 +3502,7 @@ void ui_dibujar(void) {
         dibujar_rect(0, 0, g.ancho, g.alto, FONDO);
         ui_dibujar_paneles_vacios();
         modulos_dibujar_lienzo();
+        ui_dibujar_selector_mapa();
         ui_dibujar_pestanas();
         ui_dibujar_barra_menus();
         ui_dibujar_menu_desplegable();

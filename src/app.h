@@ -148,6 +148,16 @@ typedef unsigned char  u8;
 #define MODULOS_REJILLA        0x001A2430u
 #define MODULOS_EJE            0x00304050u
 
+/* Items del gestor: cada item es un mapa .mav de la carpeta `maps`. Las
+ * miniaturas se guardan en una cache pequena para no releer el mapa. */
+#define CARPETA_MAPS_TEXTO     "maps"
+#define MINIATURAS_MAX         64
+#define MAPS_LISTA_MAX         64
+#define MAPS_NOMBRE_MAX        64
+#define SELECTOR_MAPA_FILAS    5
+#define SELECTOR_MAPA_FILA_ALTO 44
+#define SELECTOR_MAPA_ANCHO    288
+
 /* Escenas: cada una guarda la configuracion de rectangulos del lienzo. */
 #define ESCENAS_MAX            16
 #define ESCENA_FILA_ALTO       24
@@ -592,12 +602,14 @@ typedef struct TileDoc {
 } TileDoc;
 
 /* Elemento insertado en el lienzo del gestor de escenas. La posicion se guarda
- * en coordenadas del mundo y se dibuja con el desplazamiento de la vista. */
+ * en coordenadas del mundo y se dibuja con el desplazamiento de la vista. Cada
+ * elemento es un item: puede estar asociado a un mapa `.mav` de `maps`. */
 typedef struct ModuloElemento {
     int x, y;
     int ancho, alto;
     int id; /* orden de creacion, estable al moverlo en el lienzo */
     int plegado; /* solo en la raiz del grupo: lista de hijos oculta */
+    char mapa[MAPS_NOMBRE_MAX]; /* nombre del .mav, vacio = elemento vacio */
 } ModuloElemento;
 
 /* Escena: configuracion de rectangulos del lienzo, con su vista. */
@@ -607,6 +619,13 @@ typedef struct Escena {
     int num_elementos;
     int pan_x, pan_y;
 } Escena;
+
+/* Miniatura de un mapa `.mav` guardada en la cache de items. */
+typedef struct MiniaturaMapa {
+    char nombre[MAPS_NOMBRE_MAX];
+    int ancho, alto;
+    u32 *pixeles;
+} MiniaturaMapa;
 
 /* ------------------------------------------------------------------ */
 /* Estado global                                                       */
@@ -727,6 +746,19 @@ typedef struct App {
     int modulo_elem_off_x, modulo_elem_off_y;
     int modulo_snap_linea_x, modulo_snap_linea_y; /* mundo, -1 = ninguna */
     int hover_modulo_boton;
+
+    /* Item elegido (mapa .mav de la carpeta `maps`) y selector de items. */
+    char item_mapa[MAPS_NOMBRE_MAX];
+    char selector_mapas[MAPS_LISTA_MAX][MAPS_NOMBRE_MAX];
+    int selector_mapa_num;
+    int selector_mapa_abierto;
+    int selector_mapa_scroll;
+    int selector_mapa_hover;
+    int modulo_boton_pulsado;
+    int modulo_boton_x, modulo_boton_y;
+    int modulo_boton_movido;
+    MiniaturaMapa miniaturas[MINIATURAS_MAX];
+    int num_miniaturas;
 
     /* Escenas creadas y escena activa. La escena activa se edita en
      * modulos/num_modulos y se guarda al cambiar o crear otra. */
@@ -1029,6 +1061,15 @@ int  mapa_guardar(const char *ruta);
 int  mapa_cargar(const char *ruta);
 void mapa_coord(int x, int y, int *cx, int *cy);
 
+/* Items del gestor: mapas .mav de la carpeta `maps`. */
+void carpeta_maps(char *dst, int tam);
+int  mapa_listar_mapas(char nombres[][MAPS_NOMBRE_MAX], int maximo);
+u32 *mapa_miniatura(const char *ruta, int caja_w, int caja_h,
+                    int *out_w, int *out_h);
+const MiniaturaMapa *mapa_miniatura_item(const char *nombre);
+void mapa_miniaturas_liberar(void);
+void mapa_miniaturas_olvidar(const char *nombre);
+
 /* Modo tiles */
 void tiles_modo_iniciar(void);
 void tiles_modo_liberar(void);
@@ -1105,6 +1146,15 @@ Zona barra_abajo_zona(void);
 Zona zona_trabajo(void);
 Zona modulos_lienzo_zona(void);
 Zona modulos_boton_zona(void);
+Zona selector_mapa_zona(void);
+Zona selector_mapa_fila_zona(int indice);
+void selector_mapa_abrir(void);
+void selector_mapa_cerrar(void);
+void selector_mapa_elegir(int indice);
+int  selector_mapa_en(int x, int y);
+void ui_dibujar_selector_mapa(void);
+void dibujar_miniatura(int x, int y, int ancho, int alto,
+                       const u32 *pixeles, int pix_w, int pix_h);
 Zona elementos_lista_zona(void);
 Zona elemento_fila_zona(int indice);
 Zona escena_nueva_zona(void);

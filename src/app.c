@@ -14,8 +14,10 @@ static int ruta_existe(const char *ruta) {
     return ruta && ruta[0] && GetFileAttributesA(ruta) != INVALID_FILE_ATTRIBUTES;
 }
 
+/* Los mapas se guardan siempre en la carpeta `maps` junto al ejecutable. */
 static int pedir_ruta_mapa(char *ruta) {
     OPENFILENAMEA ofn;
+    char carpeta[MAX_PATH];
     ruta[0] = '\0';
     if (g.mapa_ruta[0]) {
         const char *p = g.mapa_ruta, *nombre = p;
@@ -28,12 +30,15 @@ static int pedir_ruta_mapa(char *ruta) {
     } else {
         strcpy(ruta, "mapa.mav");
     }
+    carpeta_maps(carpeta, sizeof(carpeta));
+    crear_carpeta(carpeta);
     memset(&ofn, 0, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = g.hwnd;
     ofn.lpstrFilter = "Mapa de tiles (*.mav)\0*.mav\0Todos los archivos\0*.*\0\0";
     ofn.lpstrFile = ruta;
     ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrInitialDir = carpeta;
     ofn.lpstrDefExt = "mav";
     ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT;
     return GetSaveFileNameA(&ofn) != 0;
@@ -864,7 +869,7 @@ void escenas_activar(int indice) {
  *   <nombre>
  *   <pan_x> <pan_y>
  *   <num_elementos>
- *   <x> <y> <ancho> <alto> <id> <plegado>   (una linea por elemento) */
+ *   <x> <y> <ancho> <alto> <id> <plegado> "<mapa>"   (una linea por elemento) */
 int escena_guardar_archivo(const char *ruta) {
     FILE *f;
     Escena *e;
@@ -881,8 +886,8 @@ int escena_guardar_archivo(const char *ruta) {
     fprintf(f, "%d\n", e->num_elementos);
     for (i = 0; i < e->num_elementos; i++) {
         const ModuloElemento *m = &e->elementos[i];
-        fprintf(f, "%d %d %d %d %d %d\n",
-                m->x, m->y, m->ancho, m->alto, m->id, m->plegado);
+        fprintf(f, "%d %d %d %d %d %d \"%s\"\n",
+                m->x, m->y, m->ancho, m->alto, m->id, m->plegado, m->mapa);
     }
     fclose(f);
     return 1;
@@ -1140,6 +1145,7 @@ void modulos_insertar(int x, int y) {
     e->alto = MODULOS_ELEMENTO_ALTO;
     e->id = g.modulo_siguiente_id++;
     e->plegado = 0;
+    recortar_texto(e->mapa, g.item_mapa, sizeof(e->mapa));
     /* Si el elemento cae en un grupo plegado, se despliega para mostrarlo. */
     {
         int raiz = elementos_raiz(g.num_modulos - 1);
@@ -1157,15 +1163,66 @@ void modulos_insertar(int x, int y) {
     }
 }
 
+/* ------------------------------------------------------------------ */
+/* Selector de items: lista de mapas .mav de la carpeta `maps`         */
+/* ------------------------------------------------------------------ */
+void selector_mapa_abrir(void) {
+    g.selector_mapa_num = mapa_listar_mapas(g.selector_mapas, MAPS_LISTA_MAX);
+    g.selector_mapa_scroll = 0;
+    g.selector_mapa_hover = -1;
+    g.selector_mapa_abierto = 1;
+    app_invalidar();
+}
+
+void selector_mapa_cerrar(void) {
+    g.selector_mapa_abierto = 0;
+    g.selector_mapa_hover = -1;
+    app_invalidar();
+}
+
+void selector_mapa_elegir(int indice) {
+    if (indice < 0 || indice >= g.selector_mapa_num) return;
+    recortar_texto(g.item_mapa, g.selector_mapas[indice], sizeof(g.item_mapa));
+    g.selector_mapa_abierto = 0;
+    g.selector_mapa_hover = -1;
+    app_estado("Item: %s", g.item_mapa);
+    app_invalidar();
+}
+
+/* Fila del selector bajo el cursor; devuelve el indice real de la lista. */
+int selector_mapa_en(int x, int y) {
+    int i;
+    if (!g.selector_mapa_abierto) return -1;
+    if (!zona_contiene(selector_mapa_zona(), x, y)) return -1;
+    for (i = 0; i < SELECTOR_MAPA_FILAS; i++) {
+        int idx = g.selector_mapa_scroll + i;
+        if (idx >= g.selector_mapa_num) break;
+        if (zona_contiene(selector_mapa_fila_zona(i), x, y)) return idx;
+    }
+    return -1;
+}
+
 static void modulos_pulsar(int x, int y, int boton) {
     Zona lienzo = modulos_lienzo_zona();
 
-    /* Boton del panel derecho: empieza el arrastre de un elemento nuevo. */
+    /* El selector de items esta por encima del resto del gestor. */
+    if (g.selector_mapa_abierto) {
+        if (boton == 0) {
+            int idx = selector_mapa_en(x, y);
+            if (idx >= 0) selector_mapa_elegir(idx);
+            else if (!zona_contiene(selector_mapa_zona(), x, y))
+                selector_mapa_cerrar();
+        }
+        return;
+    }
+
+    /* Boton del panel derecho: un clic elige item y un arrastre lo inserta. */
     if (boton == 0 && zona_contiene(modulos_boton_zona(), x, y)) {
-        g.modulo_arrastrando = 1;
+        g.modulo_boton_pulsado = 1;
+        g.modulo_boton_x = x;
+        g.modulo_boton_y = y;
+        g.modulo_boton_movido = 0;
         g.hover_modulo_boton = 1;
-        g.modulo_snap_linea_x = -1;
-        g.modulo_snap_linea_y = -1;
         app_invalidar();
         return;
     }
@@ -1247,6 +1304,22 @@ static void modulos_pulsar(int x, int y, int boton) {
 }
 
 static void modulos_soltar(int x, int y) {
+    if (g.modulo_boton_pulsado) {
+        int era_clic = !g.modulo_boton_movido;
+        g.modulo_boton_pulsado = 0;
+        g.modulo_boton_movido = 0;
+        if (era_clic) {
+            /* Sin movimiento: el clic abre el selector de items. */
+            if (zona_contiene(modulos_boton_zona(), x, y))
+                selector_mapa_abrir();
+            g.modulo_arrastrando = 0;
+            g.modulo_snap_linea_x = -1;
+            g.modulo_snap_linea_y = -1;
+            app_invalidar();
+            return;
+        }
+    }
+
     if (g.modulo_arrastrando == 1) {
         modulos_insertar(x, y);
         g.modulo_arrastrando = 0;
@@ -1266,6 +1339,28 @@ static void modulos_soltar(int x, int y) {
 
 static void modulos_mover(int x, int y) {
     int hover;
+
+    /* Selector de items abierto: solo se actualiza la fila resaltada. */
+    if (g.selector_mapa_abierto) {
+        int h = selector_mapa_en(x, y);
+        if (h != g.selector_mapa_hover) {
+            g.selector_mapa_hover = h;
+            app_invalidar();
+        }
+        return;
+    }
+
+    /* Umbral de clic frente a arrastre al tirar del boton del panel derecho. */
+    if (g.modulo_boton_pulsado && !g.modulo_boton_movido) {
+        int dx = x - g.modulo_boton_x;
+        int dy = y - g.modulo_boton_y;
+        if (dx * dx + dy * dy >= 16) {
+            g.modulo_boton_movido = 1;
+            g.modulo_arrastrando = 1;
+            g.modulo_snap_linea_x = -1;
+            g.modulo_snap_linea_y = -1;
+        }
+    }
 
     if (g.modulo_arrastrando == 2) {
         g.pan_x = x - g.modulo_drag_x;
@@ -1317,6 +1412,22 @@ static void modulos_mover(int x, int y) {
 }
 
 static void modulos_rueda(int x, int y, int delta, int ctrl) {
+    /* Rueda sobre el selector de items: desplaza la lista de mapas. */
+    if (g.selector_mapa_abierto) {
+        if (zona_contiene(selector_mapa_zona(), x, y)) {
+            int maximo = g.selector_mapa_num - SELECTOR_MAPA_FILAS;
+            int scroll = g.selector_mapa_scroll + (delta > 0 ? -1 : 1);
+            if (maximo < 0) maximo = 0;
+            if (scroll < 0) scroll = 0;
+            if (scroll > maximo) scroll = maximo;
+            if (scroll != g.selector_mapa_scroll) {
+                g.selector_mapa_scroll = scroll;
+                g.selector_mapa_hover = -1;
+                app_invalidar();
+            }
+        }
+        return;
+    }
     /* Rueda sobre la lista de elementos: desplaza la lista. */
     if (zona_contiene(elementos_lista_zona(), x, y)) {
         int orden[MODULOS_MAX], hijos[MODULOS_MAX];
@@ -1676,6 +1787,10 @@ void app_tecla(int vk, int ctrl, int shift) {
         app_invalidar();
         return;
     }
+    if (g.selector_mapa_abierto && vk == VK_ESCAPE) {
+        selector_mapa_cerrar();
+        return;
+    }
     if (ctrl && vk == 'T') { pestanas_nueva_modo(); return; }
     if (ctrl && vk == 'W') { pestanas_cerrar(g.pestana_activa); return; }
     if (ctrl && vk == VK_TAB) { pestanas_avanzar(shift ? -1 : 1); return; }
@@ -1720,14 +1835,18 @@ void dialogo_guardar_mapa(void) {
 
 void dialogo_abrir_mapa(void) {
     char ruta[MAX_PATH];
+    char carpeta[MAX_PATH];
     OPENFILENAMEA ofn;
     ruta[0] = '\0';
+    carpeta_maps(carpeta, sizeof(carpeta));
+    crear_carpeta(carpeta);
     memset(&ofn, 0, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = g.hwnd;
     ofn.lpstrFilter = "Mapa Lua (*.mav)\0*.mav\0Todos los archivos\0*.*\0\0";
     ofn.lpstrFile = ruta;
     ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrInitialDir = carpeta;
     ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
     if (!GetOpenFileNameA(&ofn)) return;
     if (mapa_cargar(ruta)) {

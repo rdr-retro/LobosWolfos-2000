@@ -26,12 +26,18 @@ void mapa_iniciar(void) {
     mapa_origen_iniciado = 0;
 }
 
-static void mapa_vaciar(void) {
+static void mapa_vaciar_mapa(Mapa *m) {
     int i;
-    for (i = 0; i < g.mapa.num; i++) {
-        if (g.mapa.celdas[i].pixeles) free(g.mapa.celdas[i].pixeles);
+    if (!m) return;
+    for (i = 0; i < m->num; i++) {
+        if (m->celdas[i].pixeles) free(m->celdas[i].pixeles);
+        m->celdas[i].pixeles = NULL;
     }
-    g.mapa.num = 0;
+    m->num = 0;
+}
+
+static void mapa_vaciar(void) {
+    mapa_vaciar_mapa(&g.mapa);
 }
 
 void mapa_liberar(void) {
@@ -637,19 +643,20 @@ static int resolver_imagen_mapa(const char *mapa_ruta, const char *tiles_dir,
     return archivo_existe(dst);
 }
 
-int mapa_cargar(const char *ruta) {
+/* Rellena `m` con las celdas de un `.mav`. No vacia `m`: el llamador decide. */
+static int mapa_parsear(const char *ruta, Mapa *m) {
     char *contenido;
     int largo = 0;
     const char *p;
     int lado = MAPA_LADO_INICIAL;
     char tiles_dir[128];
-    if (!ruta) return 0;
+    if (!ruta || !m) return 0;
     if (!leer_archivo(ruta, &contenido, &largo)) return 0;
     if (!contenido) return 0;
 
-    mapa_vaciar();
+    m->num = 0;
     extraer_entero_lua(contenido, "tile_size", &lado);
-    g.mapa.lado = limitar(lado, MAPA_LADO_MIN, MAPA_LADO_MAX);
+    m->lado = limitar(lado, MAPA_LADO_MIN, MAPA_LADO_MAX);
     if (!extraer_cadena_lua(contenido, "tiles_dir", tiles_dir, sizeof(tiles_dir)))
         recortar_texto(tiles_dir, "tiles", sizeof(tiles_dir));
     if (!tiles_dir[0]) recortar_texto(tiles_dir, "tiles", sizeof(tiles_dir));
@@ -674,9 +681,9 @@ int mapa_cargar(const char *ruta) {
                         extraer_cadena_lua(bloque, "image", imagen, sizeof(imagen))) {
                         if (!extraer_entero_lua(bloque, "w", &w)) w = 1;
                         if (!extraer_entero_lua(bloque, "h", &h)) h = 1;
-                        if (g.mapa.num < MAX_CELDAS) {
+                        if (m->num < MAX_CELDAS) {
                             char ruta_img[MAX_PATH];
-                            TileMapa *t = &g.mapa.celdas[g.mapa.num++];
+                            TileMapa *t = &m->celdas[m->num++];
                             memset(t, 0, sizeof(*t));
                             t->x = x;
                             t->y = y;
@@ -703,4 +710,211 @@ int mapa_cargar(const char *ruta) {
     }
     free(contenido);
     return 1;
+}
+
+int mapa_cargar(const char *ruta) {
+    mapa_vaciar();
+    g.mapa.lado = MAPA_LADO_INICIAL;
+    return mapa_parsear(ruta, &g.mapa);
+}
+
+/* ------------------------------------------------------------------ */
+/* Items: mapas .mav de la carpeta `maps` junto al ejecutable          */
+/* ------------------------------------------------------------------ */
+void carpeta_maps(char *dst, int tam) {
+    char exe[MAX_PATH];
+    if (!dst || tam <= 0) return;
+    dst[0] = '\0';
+    obtener_ruta_exe(exe, sizeof(exe));
+    unir_ruta(dst, tam, exe, CARPETA_MAPS_TEXTO);
+}
+
+int mapa_listar_mapas(char nombres[][MAPS_NOMBRE_MAX], int maximo) {
+    char carpeta[MAX_PATH];
+    char patron[MAX_PATH];
+    WIN32_FIND_DATAA datos;
+    HANDLE busqueda;
+    int n = 0, i, j;
+
+    if (!nombres || maximo < 1) return 0;
+    carpeta_maps(carpeta, sizeof(carpeta));
+    crear_carpeta(carpeta);
+    formatear(patron, sizeof(patron), "%s\\*.mav", carpeta);
+    busqueda = FindFirstFileA(patron, &datos);
+    if (busqueda == INVALID_HANDLE_VALUE) return 0;
+    do {
+        if (datos.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        if (n >= maximo) break;
+        recortar_texto(nombres[n], datos.cFileName, MAPS_NOMBRE_MAX);
+        n++;
+    } while (FindNextFileA(busqueda, &datos));
+    FindClose(busqueda);
+
+    /* Orden alfabetico sin distinguir mayusculas. */
+    for (i = 1; i < n; i++) {
+        char tmp[MAPS_NOMBRE_MAX];
+        recortar_texto(tmp, nombres[i], sizeof(tmp));
+        j = i - 1;
+        while (j >= 0 && _stricmp(nombres[j], tmp) > 0) {
+            recortar_texto(nombres[j + 1], nombres[j], MAPS_NOMBRE_MAX);
+            j--;
+        }
+        recortar_texto(nombres[j + 1], tmp, MAPS_NOMBRE_MAX);
+    }
+    return n;
+}
+
+/* Pinta una miniatura del mapa completo en un buffer opaco del tamano que
+ * quepa en `caja_w` x `caja_h`, conservando la proporcion. */
+u32 *mapa_miniatura(const char *ruta, int caja_w, int caja_h,
+                    int *out_w, int *out_h) {
+    Mapa *m;
+    u32 *dst;
+    int i, minx, miny, maxx, maxy, lado, world_w, world_h;
+    int tw, th;
+    double fx, fy, escala;
+
+    if (out_w) *out_w = 0;
+    if (out_h) *out_h = 0;
+    if (!ruta || caja_w < 1 || caja_h < 1) return NULL;
+
+    m = (Mapa *)calloc(1, sizeof(Mapa));
+    if (!m) return NULL;
+    m->lado = MAPA_LADO_INICIAL;
+    if (!mapa_parsear(ruta, m) || m->num <= 0) {
+        mapa_vaciar_mapa(m);
+        free(m);
+        return NULL;
+    }
+
+    minx = maxx = m->celdas[0].x;
+    miny = maxy = m->celdas[0].y;
+    for (i = 1; i < m->num; i++) {
+        if (m->celdas[i].x < minx) minx = m->celdas[i].x;
+        if (m->celdas[i].x > maxx) maxx = m->celdas[i].x;
+        if (m->celdas[i].y < miny) miny = m->celdas[i].y;
+        if (m->celdas[i].y > maxy) maxy = m->celdas[i].y;
+    }
+    lado = m->lado;
+    if (lado < MAPA_LADO_MIN) lado = MAPA_LADO_MIN;
+    world_w = (maxx - minx + 1) * lado;
+    world_h = (maxy - miny + 1) * lado;
+    if (world_w < 1) world_w = 1;
+    if (world_h < 1) world_h = 1;
+
+    fx = (double)caja_w / (double)world_w;
+    fy = (double)caja_h / (double)world_h;
+    escala = fx < fy ? fx : fy;
+    tw = (int)((double)world_w * escala + 0.5);
+    th = (int)((double)world_h * escala + 0.5);
+    if (tw < 1) tw = 1;
+    if (th < 1) th = 1;
+    if (tw > caja_w) tw = caja_w;
+    if (th > caja_h) th = caja_h;
+
+    dst = (u32 *)malloc((size_t)tw * (size_t)th * sizeof(u32));
+    if (!dst) {
+        mapa_vaciar_mapa(m);
+        free(m);
+        return NULL;
+    }
+    for (i = 0; i < tw * th; i++)
+        dst[i] = 0xFF000000u | (MAPA_FONDO & 0x00FFFFFFu);
+
+    for (i = 0; i < m->num; i++) {
+        TileMapa *t = &m->celdas[i];
+        int cx = t->x - minx;
+        int cy = t->y - miny;
+        int x0 = (int)((long long)cx * lado * tw / world_w);
+        int x1 = (int)((long long)(cx + 1) * lado * tw / world_w);
+        int y0 = (int)((long long)cy * lado * th / world_h);
+        int y1 = (int)((long long)(cy + 1) * lado * th / world_h);
+        int px, py;
+
+        if (x1 <= x0) x1 = x0 + 1;
+        if (y1 <= y0) y1 = y0 + 1;
+        if (x0 < 0) x0 = 0;
+        if (y0 < 0) y0 = 0;
+        if (x1 > tw) x1 = tw;
+        if (y1 > th) y1 = th;
+        if (x0 >= x1 || y0 >= y1) continue;
+
+        if (!t->pixeles || t->ancho < 1 || t->alto < 1) {
+            for (py = y0; py < y1; py++)
+                for (px = x0; px < x1; px++)
+                    dst[(size_t)py * tw + px] =
+                        0xFF000000u | (MAPA_CELDA & 0x00FFFFFFu);
+            continue;
+        }
+        for (py = y0; py < y1; py++) {
+            int sy = (py - y0) * t->alto / (y1 - y0);
+            if (sy >= t->alto) sy = t->alto - 1;
+            for (px = x0; px < x1; px++) {
+                int sx = (px - x0) * t->ancho / (x1 - x0);
+                u32 c;
+                if (sx >= t->ancho) sx = t->ancho - 1;
+                c = t->pixeles[(size_t)sy * t->ancho + sx];
+                if ((c >> 24) == 0) continue;
+                dst[(size_t)py * tw + px] = 0xFF000000u | (c & 0x00FFFFFFu);
+            }
+        }
+    }
+
+    mapa_vaciar_mapa(m);
+    free(m);
+    if (out_w) *out_w = tw;
+    if (out_h) *out_h = th;
+    return dst;
+}
+
+/* Devuelve la miniatura cacheada de un item; la genera si no existe. */
+const MiniaturaMapa *mapa_miniatura_item(const char *nombre) {
+    char carpeta[MAX_PATH];
+    char ruta[MAX_PATH];
+    u32 *pix;
+    int w = 0, h = 0, i;
+    MiniaturaMapa *m;
+
+    if (!nombre || !nombre[0]) return NULL;
+    for (i = 0; i < g.num_miniaturas; i++) {
+        if (_stricmp(g.miniaturas[i].nombre, nombre) == 0)
+            return &g.miniaturas[i];
+    }
+    if (g.num_miniaturas >= MINIATURAS_MAX) {
+        mapa_miniaturas_olvidar(g.miniaturas[0].nombre);
+    }
+    carpeta_maps(carpeta, sizeof(carpeta));
+    unir_ruta(ruta, sizeof(ruta), carpeta, nombre);
+    pix = mapa_miniatura(ruta, 48, 40, &w, &h);
+    if (!pix) return NULL;
+    m = &g.miniaturas[g.num_miniaturas];
+    memset(m, 0, sizeof(*m));
+    recortar_texto(m->nombre, nombre, sizeof(m->nombre));
+    m->ancho = w;
+    m->alto = h;
+    m->pixeles = pix;
+    g.num_miniaturas++;
+    return m;
+}
+
+void mapa_miniaturas_olvidar(const char *nombre) {
+    int i;
+    if (!nombre || !nombre[0]) return;
+    for (i = 0; i < g.num_miniaturas; i++) {
+        if (_stricmp(g.miniaturas[i].nombre, nombre) == 0) {
+            if (g.miniaturas[i].pixeles) free(g.miniaturas[i].pixeles);
+            g.miniaturas[i] = g.miniaturas[g.num_miniaturas - 1];
+            g.num_miniaturas--;
+            return;
+        }
+    }
+}
+
+void mapa_miniaturas_liberar(void) {
+    int i;
+    for (i = 0; i < g.num_miniaturas; i++) {
+        if (g.miniaturas[i].pixeles) free(g.miniaturas[i].pixeles);
+        g.miniaturas[i].pixeles = NULL;
+    }
+    g.num_miniaturas = 0;
 }

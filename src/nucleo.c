@@ -660,6 +660,10 @@ int app_iniciar(void) {
     unir_ruta(carpeta, sizeof(carpeta), carpeta, "tiles");
     crear_carpeta(carpeta);
 
+    /* Los items del gestor son mapas .mav de la carpeta `maps`. */
+    carpeta_maps(carpeta, sizeof(carpeta));
+    crear_carpeta(carpeta);
+
     /* El lienzo inicial de 80x80 arranca al 1000% (zoom 13), centrado en el
      * area de trabajo y recortado si no cabe. El ajuste exacto se hace al
      * conocer el tamano (app_redimensionar). */
@@ -675,6 +679,7 @@ void app_terminar(void) {
     doc_liberar(&g.doc);
     seleccion_liberar(&g.sel);
     mapa_liberar();
+    mapa_miniaturas_liberar();
     tiles_modo_liberar();
     texto_terminar();
     tiles_liberar();
@@ -783,6 +788,10 @@ void app_cambiar_vista(Vista vista) {
     g.modulo_snap_linea_x = -1;
     g.modulo_snap_linea_y = -1;
     g.hover_modulo_boton = 0;
+    g.modulo_boton_pulsado = 0;
+    g.modulo_boton_movido = 0;
+    g.selector_mapa_abierto = 0;
+    g.selector_mapa_hover = -1;
     g.hover_escena = -1;
     g.hover_escena_nueva = 0;
     app_actualizar_titulo();
@@ -1250,6 +1259,20 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
         }
         if (strstr(cmd, "--tiles") != NULL) tiles_modo_entrar();
         if (strstr(cmd, "--gestor") != NULL) g.vista = VISTA_MODULOS;
+        /* Item de prueba del gestor: nombre de un .mav de la carpeta maps. */
+        {
+            char *item_arg = arg_valor(cmd, "--item-mapa");
+            if (item_arg) {
+                int n = 0;
+                while (item_arg[n] && item_arg[n] != ' ' &&
+                       item_arg[n] != '\t' && n < MAPS_NOMBRE_MAX - 1) {
+                    g.item_mapa[n] = item_arg[n];
+                    n++;
+                }
+                g.item_mapa[n] = 0;
+            }
+        }
+        if (strstr(cmd, "--selector-mapa") != NULL) selector_mapa_abrir();
         /* Elementos de prueba del gestor: "x,y;x,y". */
         {
             char *mods_arg = arg_valor(cmd, "--modulos");

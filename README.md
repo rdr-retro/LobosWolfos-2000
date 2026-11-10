@@ -16,10 +16,12 @@ para cargar y guardar PNG.
 - Pestañas de modo: Pintar, Tiles, Mapa y patrón comparten el mismo documento;
   cada pestaña conserva su vista, zoom y desplazamiento.
 - Gestor de escenas: paneles izquierdo, derecho e inferior (los laterales del
-  mismo ancho), un botón rectangular arrastrable y un lienzo desplazable con
-  rejilla. Los elementos se pueden mover y se acoplan entre sí por sus lados con
-  efecto imán. El panel izquierdo lista los elementos del lienzo y las escenas
-  creadas; cada escena guarda su configuración de rectángulos.
+  mismo ancho), un botón de item arrastrable y un lienzo desplazable con
+  rejilla. Los items son mapas `.mav` de la carpeta `maps` junto al ejecutable:
+  se eligen con un clic y se muestran con miniatura y nombre. Los elementos se
+  pueden mover y se acoplan entre sí por sus lados con efecto imán. El panel
+  izquierdo lista los elementos del lienzo y las escenas creadas; cada escena
+  guarda su configuración de rectángulos.
 - Apertura y exportación de PNG/BMP y mapas `.mav`.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
 
@@ -67,15 +69,22 @@ lista los desplaza.
 
 La opción **Guardar escena .cene** del menú **ARCHIVO** exporta la escena activa
 a un archivo de texto con su nombre, su desplazamiento y cada elemento
-(posición, tamaño, identificador y estado plegado).
+(posición, tamaño, identificador, estado plegado y mapa asociado).
 
-Dentro del gestor, el panel derecho contiene un botón rectangular sin nombre:
-arrástralo hasta el lienzo para insertar un elemento. Los elementos ya colocados
-también se pueden arrastrar. Sus lados tienen efecto imán: al acercarlos a otro
-elemento se acoplan y se alinean, mostrando una guía azul. El lienzo no sirve
-para pintar; es un entorno desplazable con rejilla. Arrastra sobre una zona vacía
-con el botón izquierdo o central para mover la vista, o usa la rueda para
-desplazarte en vertical (`Ctrl+rueda` en horizontal).
+Dentro del gestor, el panel derecho contiene el botón del **item**. Un clic
+(sin arrastrar) abre el selector de items: la lista de mapas `.mav` de la
+carpeta `maps` junto al ejecutable, cada uno con su miniatura y su nombre.
+Elige uno con un clic y el botón pasa a mostrarlo; arrástralo hasta el lienzo
+para insertarlo como elemento con su miniatura y su nombre. Sin item elegido,
+el arrastre inserta un elemento vacío. Si hay más mapas que filas, la rueda
+desplaza la lista y `Escape` la cierra.
+
+Los elementos ya colocados también se pueden arrastrar. Sus lados tienen
+efecto imán: al acercarlos a otro elemento se acoplan y se alinean,
+mostrando una guía azul. El lienzo no sirve para pintar; es un entorno
+desplazable con rejilla. Arrastra sobre una zona vacía con el botón izquierdo
+o central para mover la vista, o usa la rueda para desplazarte en vertical
+(`Ctrl+rueda` en horizontal).
 
 El **Editor de mapas** del menú **MODO** pide un archivo `.mav` y muestra una
 rejilla infinita de celdas. El clic izquierdo coloca el tile elegido en el panel
@@ -86,9 +95,11 @@ cambia el tamaño de celda entre 8 y 128 píxeles manteniendo bajo el cursor el
 mismo punto del mapa. Los ejes, las etiquetas de coordenadas y el panel de estado
 indican la celda actual. Los tiles conservan su proporción dentro de la celda.
 **ARCHIVO > Guardar mapa .mav** guarda el mapa en formato Lua para Love2D; al
-volver a entrar se conserva el mapa que ya está en memoria. Las imágenes se
-buscan primero en la carpeta `tiles_dir` junto al `.mav`, después junto al propio
-`.mav` y por último en la carpeta `tiles` del ejecutable.
+volver a entrar se conserva el mapa que ya está en memoria. Los mapas se guardan
+por defecto en la carpeta `maps` junto al ejecutable (la misma que usa el
+selector de items del gestor de escenas). Las imágenes se buscan primero en la
+carpeta `tiles_dir` junto al `.mav`, después junto al propio `.mav` y por
+último en la carpeta `tiles` del ejecutable.
 
 ## Atajos
 
