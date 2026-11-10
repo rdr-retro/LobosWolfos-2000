@@ -102,7 +102,10 @@ más elementos que filas visibles, la rueda sobre la lista los desplaza.
 
 La opción **Guardar logica .logic** del menú **ARCHIVO** exporta la lógica a
 un archivo de texto con su desplazamiento y cada elemento (posición, tamaño,
-identificador, estado plegado y mapa asociado).
+identificador, estado plegado, mapa asociado y función). La opción **Abrir
+lógica .logic**, justo encima, carga uno de esos archivos de vuelta: la
+lógica del archivo sustituye a la activa y la vista entra al gestor para
+verla cargada.
 
 Dentro del gestor, el panel derecho contiene el botón del **item**. Un clic
 (sin arrastrar) abre el selector de items: la lista de mapas `.mav` de la
@@ -117,7 +120,7 @@ arrastrables para las funciones lógicas del juego. De momento solo existe
 **egine**, el motor del juego: se arrastra al lienzo para colocarlo como
 elemento (con su banda MOTOR y el nombre en azul); un clic sin arrastrar
 recuerda cómo se usa. La opción **Guardar logica .logic** también guarda la
-función de cada elemento.
+función de cada elemento, y **Abrir lógica .logic** la recupera al cargar.
 
 Los elementos ya colocados también se pueden arrastrar, y un clic derecho
 sobre uno de ellos lo elimina. Sus lados tienen

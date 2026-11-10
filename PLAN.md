@@ -107,7 +107,7 @@ escritorio **no se toca**: se trabaja sobre una copia.
 |---|---|---|
 | 0 | Editor con gestor de lógica, sección FUNCIONES y menú COMPILE | **Hecho** |
 | 1 | **egine arrastrable al lienzo**: el botón FUNCIONES se arrastra como elemento del motor y el `.logic` lo guarda | **Hecho (10-11-2026)** |
-| 2 | Cargar `.logic` de vuelta al gestor (hoy solo se guarda) | Pendiente |
+| 2 | **Cargar `.logic` de vuelta al gestor**: la fila **Abrir lógica .logic** del menú ARCHIVO sustituye la lógica activa | **Hecho (10-11-2026)** |
 | 3 | Motor mínimo: núcleo ASM 32 bits (blit + tiles) y `game.exe` de prueba que abre una ventana, dibuja un mapa del proyecto y mueve un sprite con el teclado | **Hecho (10-11-2026)** |
 | 4 | **Compilar para Windows** desde el menú COMPILE: genera `game.exe` con el proyecto actual | Pendiente |
 | 5 | Kernel loboswolfos: copia reducida de rocky que arranca por USB con framebuffer y entrada | Pendiente |
@@ -143,6 +143,18 @@ el motor ya compila.
   y `tiles/`), no desde `motor/`. El punto de aparición del sprite se busca
   en espiral con margen de 8 px (el mapa puede tener celda sólida en el
   origen) y la cámara se centra en el sprite.
+- **10-11-2026** — Fila nueva **Abrir lógica .logic** en el menú ARCHIVO
+  (cuarta sin editor de mapas, sexta con él; "Guardar logica" pasa a la
+  última). Al abrir, la lógica del archivo sustituye la activa y la vista
+  entra al gestor si no estaba ya en él.
+- **10-11-2026** — El cargador acepta las líneas antiguas sin campo función
+  como items de mapa, sanea los tamaños degenerados (vuelven a 96x64) y
+  reasigna los ids menores o iguales que cero; el siguiente id queda por
+  encima del mayor cargado.
+- **10-11-2026** — `arg_valor` corta el valor sin comillas en el siguiente
+  `--flag` en vez de devolver todo el resto de la línea, y copia el
+  resultado a un buffer estático rotatorio (16 x MAX_PATH) en lugar de
+  cortar la propia línea de comandos.
 - El formato `.logic` sigue en texto plano; los elementos de función
   añaden su campo propio al final de la línea.
 

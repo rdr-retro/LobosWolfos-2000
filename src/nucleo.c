@@ -1158,7 +1158,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 /* Valor de un argumento de linea de comandos: `--nombre valor` o
  * `--nombre=valor`, con comillas opcionales. Devuelve un puntero dentro de
  * `cmd` (que es modificable). */
+/* Devuelve el valor del argumento `nombre` tal como llega en la linea de
+ * comandos. El valor se copia a un buffer estatico rotatorio (se mantienen
+ * hasta 16 valores vivos a la vez): entre comillas se toma hasta la
+ * comilla de cierre, y sin comillas hasta el siguiente argumento que
+ * empiece por "--" o el final de la linea. Asi `--captura ruta.bmp
+ * --gestor` no arrastra las flags siguientes dentro del valor. */
 static char *arg_valor(char *cmd, const char *nombre) {
+    static char bufs[16][MAX_PATH];
+    static int buf_i = 0;
     char *p = cmd;
     size_t n = strlen(nombre);
     if (!p) return NULL;
@@ -1167,20 +1175,30 @@ static char *arg_valor(char *cmd, const char *nombre) {
         if (!*p) break;
         if (_strnicmp(p, nombre, n) == 0 &&
             (p[n] == '=' || p[n] == ' ' || p[n] == '\t' || p[n] == 0)) {
+            const char *inicio, *fin;
             p += n;
             while (*p == ' ' || *p == '\t') p++;
             if (*p == '=') {
                 p++;
                 while (*p == ' ' || *p == '\t') p++;
             }
+            inicio = p;
             if (*p == '"') {
-                char *fin;
-                p++;
-                fin = strchr(p, '"');
-                if (fin) *fin = 0;
-                return p;
+                inicio = p + 1;
+                fin = strchr(inicio, '"');
+                if (!fin) fin = inicio + strlen(inicio);
+            } else {
+                fin = strstr(p, " --");
+                if (!fin) fin = p + strlen(p);
             }
-            return p;
+            n = (size_t)(fin - inicio);
+            if (n >= MAX_PATH) n = MAX_PATH - 1;
+            {
+                char *dst = bufs[buf_i++ & 15];
+                memcpy(dst, inicio, n);
+                dst[n] = 0;
+                return dst;
+            }
         }
         if (*p == '"') {
             p++;
@@ -1299,6 +1317,23 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                     p += n;
                     while (*p == ';' || *p == ' ' || *p == ',') p++;
                 }
+            }
+        }
+        /* Logica cargada de un .logic para pruebas (fase 2): sustituye la
+         * logica activa y muestra el gestor, como el dialogo. */
+        {
+            char *cargar_arg = arg_valor(cmd, "--abrir-logica");
+            if (cargar_arg) {
+                char logic_ruta[MAX_PATH];
+                int n = 0;
+                while (cargar_arg[n] && cargar_arg[n] != ' ' &&
+                       cargar_arg[n] != '\t' && n < MAX_PATH - 1) {
+                    logic_ruta[n] = cargar_arg[n];
+                    n++;
+                }
+                logic_ruta[n] = 0;
+                if (logic_ruta[0] && logica_cargar_archivo(logic_ruta))
+                    g.vista = VISTA_MODULOS;
             }
         }
         if (strstr(cmd, "--info") != NULL) g.info_visible = 1;

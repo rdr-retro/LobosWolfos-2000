@@ -73,14 +73,15 @@ static void accion_archivo(int opcion) {
     int modo_mapa = (g.vista == VISTA_MAPA);
     int fila = opcion;
     if (!modo_mapa) {
-        /* Sin editor de mapas las filas son: Abrir, Borrar, PNG, BMP y
-         * Guardar logica. */
+        /* Sin editor de mapas las filas son: Abrir, Borrar, PNG, BMP,
+         * Abrir logica y Guardar logica. */
         switch (fila) {
             case 0: dialogo_abrir_imagen(); return;
             case 1: fila = 3; break;
             case 2: fila = 4; break;
             case 3: fila = 5; break;
             case 4: fila = 6; break;
+            case 5: fila = 7; break;
             default: return;
         }
     }
@@ -100,7 +101,8 @@ static void accion_archivo(int opcion) {
             break;
         case 4: dialogo_guardar_png(); break;
         case 5: dialogo_exportar_bmp(); break;
-        case 6: dialogo_guardar_logica(); break;
+        case 6: dialogo_abrir_logica(); break;
+        case 7: dialogo_guardar_logica(); break;
         default: break;
     }
 }
@@ -830,6 +832,89 @@ int logica_guardar_archivo(const char *ruta) {
     return 1;
 }
 
+/* Carga una logica guardada (LOGIC1). Sustituye la logica activa por la
+ * del archivo y devuelve 1; 0 si no se puede leer o el formato no es
+ * LOGIC1. El campo del mapa y el de la funcion se toman de entre
+ * comillas y del numero final: las lineas antiguas sin funcion (fase 0)
+ * se aceptan como items de mapa, igual que un nombre vacio. */
+int logica_cargar_archivo(const char *ruta) {
+    FILE *f;
+    char linea[512];
+    int pan_x, pan_y, num, i, max_id;
+
+    f = fopen(ruta, "rb");
+    if (!f) return 0;
+    if (!fgets(linea, sizeof(linea), f) ||
+        strncmp(linea, "LOGIC1", 6) != 0 ||
+        !fgets(linea, sizeof(linea), f) ||
+        sscanf(linea, "%d %d", &pan_x, &pan_y) != 2 ||
+        !fgets(linea, sizeof(linea), f)) {
+        fclose(f);
+        return 0;
+    }
+    num = atoi(linea);
+    if (num < 0 || num > MODULOS_MAX) {
+        fclose(f);
+        return 0;
+    }
+
+    logica_iniciar();
+    g.pan_x = pan_x;
+    g.pan_y = pan_y;
+
+    max_id = 0;
+    for (i = 0; i < num; i++) {
+        ModuloElemento *e;
+        char mapa[MAPS_NOMBRE_MAX];
+        int x, y, ancho, alto, id, plegado, funcion;
+        const char *q1, *q2;
+
+        if (!fgets(linea, sizeof(linea), f)) break;
+        if (sscanf(linea, "%d %d %d %d %d %d",
+                   &x, &y, &ancho, &alto, &id, &plegado) != 6) continue;
+
+        mapa[0] = 0;
+        q1 = strchr(linea, '"');
+        if (q1) {
+            q2 = strchr(q1 + 1, '"');
+            if (q2) {
+                int n = (int)(q2 - q1 - 1);
+                if (n >= MAPS_NOMBRE_MAX) n = MAPS_NOMBRE_MAX - 1;
+                if (n > 0) memcpy(mapa, q1 + 1, (size_t)n);
+                mapa[n] = 0;
+            }
+        }
+        funcion = -1;
+        if (q1 && strchr(q1 + 1, '"')) {
+            const char *fin = strchr(q1 + 1, '"') + 1;
+            while (*fin == ' ' || *fin == '\t') fin++;
+            if (*fin == '-' || (*fin >= '0' && *fin <= '9'))
+                funcion = atoi(fin);
+        }
+        if (funcion >= modulos_funciones_num()) funcion = -1;
+
+        /* Tamanos degenerados vuelven al estandar del gestor. */
+        if (ancho < 8 || ancho > 4096) ancho = MODULOS_ELEMENTO_ANCHO;
+        if (alto < 8 || alto > 4096) alto = MODULOS_ELEMENTO_ALTO;
+        if (id <= 0) id = max_id + 1;
+        if (id > max_id) max_id = id;
+        plegado = plegado ? 1 : 0;
+
+        e = &g.modulos[g.num_modulos++];
+        e->x = x;
+        e->y = y;
+        e->ancho = ancho;
+        e->alto = alto;
+        e->id = id;
+        e->plegado = plegado;
+        e->funcion = funcion;
+        recortar_texto(e->mapa, mapa, sizeof(e->mapa));
+    }
+    fclose(f);
+    g.modulo_siguiente_id = max_id + 1;
+    return 1;
+}
+
 /* Dialogo para guardar la logica activa como .logic. */
 void dialogo_guardar_logica(void) {
     char ruta[MAX_PATH];
@@ -850,6 +935,32 @@ void dialogo_guardar_logica(void) {
         app_estado("Logica guardada: %s", ruta);
     else
         dialogo_error("No se pudo guardar la logica.");
+    app_invalidar();
+}
+
+/* Dialogo para abrir una logica .logic: sustituye la logica activa y
+ * entra al gestor para verla cargada. */
+void dialogo_abrir_logica(void) {
+    char ruta[MAX_PATH];
+    OPENFILENAMEA ofn;
+
+    strcpy(ruta, "logica.logic");
+    memset(&ofn, 0, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = g.hwnd;
+    ofn.lpstrFilter = "Logica (*.logic)\0*.logic\0Todos los archivos\0*.*\0\0";
+    ofn.lpstrFile = ruta;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrDefExt = "logic";
+    ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST |
+                OFN_HIDEREADONLY;
+    if (!GetOpenFileNameA(&ofn)) return;
+    if (logica_cargar_archivo(ruta)) {
+        if (g.vista != VISTA_MODULOS) app_alternar_gestor_modulos();
+        app_estado("Logica cargada: %s", ruta);
+    } else {
+        dialogo_error("No se pudo abrir la logica.");
+    }
     app_invalidar();
 }
 
