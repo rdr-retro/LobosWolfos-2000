@@ -103,6 +103,10 @@ selector de items del gestor de lógica). Las imágenes se buscan primero en la
 carpeta `tiles_dir` junto al `.mav`, después junto al propio `.mav` y por
 último en la carpeta `tiles` del ejecutable.
 
+El menú **COMPILE** de la barra de menús, entre **COLORES** e **INFO**, ofrece
+**Compilar para BIOS** y **Compilar para Windows**. De momento no hacen nada: al
+elegirlas avisan de que la compilación todavía no está hecha.
+
 ## Atajos
 
 | Atajo | Acción |

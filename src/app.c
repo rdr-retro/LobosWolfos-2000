@@ -238,6 +238,12 @@ static void ejecutar_menu(int menu, int opcion) {
         case 4: accion_capa(opcion); break;
         case 5: accion_colores(opcion); break;
         case 6:
+            /* COMPILE: las dos opciones aun no hacen nada. */
+            app_estado(opcion == 0
+                          ? "Compilar para BIOS: sin hacer todavia"
+                          : "Compilar para Windows: sin hacer todavia");
+            break;
+        case 7:
             g.info_visible = 1;
             app_invalidar();
             break;
@@ -722,7 +728,7 @@ int clic_lienzo(int x, int y) {
 /* Entrada principal                                                   */
 /* ------------------------------------------------------------------ */
 static void clic_etiqueta_menu(int menu) {
-    if (menu == 6) {
+    if (menu == 7) {
         g.menu_abierto = -1;
         g.textura_menu_abierto = 0;
         g.info_visible = 1;

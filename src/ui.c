@@ -4,10 +4,10 @@
  * ========================================================================== */
 #include "app.h"
 
-#define MENU_TOTAL 7
+#define MENU_TOTAL 8
 static const char *MENU_ETIQUETAS[MENU_TOTAL] = {
     "ARCHIVO", "MODO", "EDITAR",
-    "SELECCIONAR", "CAPA", "COLORES", "INFO"
+    "SELECCIONAR", "CAPA", "COLORES", "COMPILE", "INFO"
 };
 
 #define MENU_MARGEN 6
@@ -689,6 +689,9 @@ static const char *SELECCIONAR_TEXTO[3] = {
 static const char *SELECCIONAR_ATAJO[3] = {
     "Ctrl+A", "May\u00fas+Ctrl+A", "Ctrl+I"
 };
+static const char *COMPILE_TEXTO[2] = {
+    "Compilar para BIOS", "Compilar para Windows"
+};
 
 #define MENU_ARCHIVO_ANCHO  210
 #define MENU_ARCHIVO_ALTO   166
@@ -702,6 +705,7 @@ int menu_num_filas(int menu) {
         case 1: return 5;
         case 2: return 5;
         case 3: return 3;
+        case 6: return 2;
         default: return 0;
     }
 }
@@ -747,6 +751,16 @@ Zona menu_panel_zona(int menu) {
             if (ancho > interior) ancho = interior;
             return zona_hacer(etiqueta.x, zona_abajo(etiqueta), ancho,
                               3 + MENU_FILA_ALTO * 3 + 3);
+        case 6:
+            interior = texto_menu_ancho(COMPILE_TEXTO[0]);
+            if (texto_menu_ancho(COMPILE_TEXTO[1]) > interior)
+                interior = texto_menu_ancho(COMPILE_TEXTO[1]);
+            ancho = interior + 8 + 8;
+            interior = g.ancho - etiqueta.x - 2;
+            if (interior < 80) interior = 80;
+            if (ancho > interior) ancho = interior;
+            return zona_hacer(etiqueta.x, zona_abajo(etiqueta), ancho,
+                              3 + MENU_FILA_ALTO * 2 + 3);
         default:
             return zona_vacia();
     }
@@ -791,6 +805,8 @@ int menu_fila_activa(int menu, int fila) {
             if (fila == 0) return 1;
             if (fila == 1 || fila == 2) return g.sel.activa;
             return 0;
+        case 6:
+            return 1;
         default:
             return 0;
     }
@@ -1193,6 +1209,10 @@ void ui_dibujar_menu_desplegable(void) {
             case 3:
                 dibujar_fila_menu(z, SELECCIONAR_TEXTO[i], SELECCIONAR_ATAJO[i], hover,
                                   activo, 0x00909090u);
+                break;
+            case 6:
+                dibujar_fila_menu(z, COMPILE_TEXTO[i], NULL, hover, activo,
+                                  0x00909090u);
                 break;
             default:
                 break;
