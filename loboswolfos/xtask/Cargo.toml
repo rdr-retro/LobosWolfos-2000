@@ -1,0 +1,5 @@
+[package]
+name = "loboswolfos-xtask"
+version = "0.1.0"
+edition = "2021"
+description = "Constructor de la imagen USB de loboswolfos: compila el arranque y el kernel y monta loboswolfos.img"

@@ -82,6 +82,38 @@ directo), `--captura ruta`, `--fotogramas N` y `--tecla nombre`
 aparte siguiendo las instrucciones de su cabecera y se ejecuta desde la raíz
 del proyecto.
 
+## Kernel loboswolfos (`loboswolfos/`)
+
+El kernel propio del proyecto — la reducción de **rocky** a lo que el juego
+necesita — vive en `loboswolfos/`, junto al motor. Arranca desde la BIOS de
+un PC (MBR + segundo tramo en ensamblador), levanta un modo VESA VBE con
+framebuffer lineal (1024x768 a 32 bits o el primero disponible), activa la
+entrada PS/2 (teclado y ratón) y el reloj de 100 Hz, y dibuja la pantalla de
+prueba del motor directamente sobre el framebuffer con la fuente ROM del BIOS.
+
+Compilarlo y probarlo requiere Rust (destino `x86_64-unknown-none`) y QEMU.
+Desde la raíz del proyecto:
+
+```bat
+cargo run --manifest-path loboswolfos\xtask\Cargo.toml -- build
+cargo run --manifest-path loboswolfos\xtask\Cargo.toml -- run
+```
+
+`run` abre QEMU con ventana: la pantalla de prueba muestra el círculo que
+late con el reloj, la barra de tics de la IRQ0, la última tecla pulsada y el
+cursor del ratón. Otros comandos del constructor:
+
+- `run-serial` — QEMU sin ventana, con la serie por la consola (Ctrl+C para
+  salir).
+- `probar [segundos]` — prueba automática: QEMU sin ventana volcando la
+  serie a `loboswolfos\build\serial.log`, que se imprime al terminar.
+- `clean` — borra los destinos de compilación y la imagen.
+
+`build` genera `loboswolfos\loboswolfos.img`, la imagen USB de 32 MiB con el
+trazado final: MBR en LBA 0, segundo tramo en 1..4, kernel en 5.. y la zona
+del juego reservada en LBA 2048 (la usará la fase 6). El ensamblador de
+arranque es el de rocky (`bootusb.s`, `bootusb2.s`) sin cambios de trazado.
+
 ## Uso
 
 Ejecuta `LobosWolfos2000.exe`. Los tiles que guardes se almacenan en la carpeta
@@ -181,6 +213,9 @@ hecha y avisa de ello al elegirla.
 - `motor/` — motor egine: núcleo en ensamblador 32 bits (`nucleo32.s`),
   interfaz común (`motor.h`), carga del proyecto (`activo.c`) y `juego.c`
   (`game.exe`).
+- `loboswolfos/` — kernel propio (reducción de rocky) para arrancar el juego
+  desde la BIOS: arranque en ensamblador (`boot/`), kernel Rust `no_std`
+  (`kernel/`) y el constructor de la imagen (`xtask/`).
 - `recursos/` — iconos e imágenes de las herramientas.
 - `tiles/` — carpeta donde se guardan los mosaicos.
 - `maps/` — mapas `.mav` (pantallas del juego).

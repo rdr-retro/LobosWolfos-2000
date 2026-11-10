@@ -3,6 +3,11 @@ obj/
 *.o
 *.exe
 
+# Compilacion de loboswolfos (Rust: crates del kernel y del arranque)
+target/
+loboswolfos/build/
+*.img
+
 # Archivos temporales de la aplicacion
 pid.txt
 

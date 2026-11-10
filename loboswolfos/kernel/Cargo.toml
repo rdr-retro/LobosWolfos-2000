@@ -1,0 +1,18 @@
+[package]
+name = "loboswolfos-kernel"
+version = "0.1.0"
+edition = "2021"
+description = "loboswolfos - kernel x86_64 de LobosWolfos 2000 (no_std), reduccion de rocky para el motor de juegos"
+
+[[bin]]
+name = "loboswolfos"
+path = "src/main.rs"
+
+[profile.release]
+panic = "abort"
+# El kernel y su BSS deben quedar por debajo de la pila persistente de
+# 3-4 MiB (ver kernel.ld); el tamano manda mas que la velocidad.
+opt-level = "z"
+lto = true
+codegen-units = 1
+debug = false

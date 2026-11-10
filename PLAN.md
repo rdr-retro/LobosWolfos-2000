@@ -78,8 +78,8 @@ Base: **rocky** (`C:\Users\rdr-ryzen\Desktop\kernel`), un sistema x86_64 en
 Rust + ensamblador que ya arranca por BIOS, tiene framebuffer, entrada
 PS/2, disco y ejecutables propios. De rocky se reutiliza:
 
-- `boot/` (`boot.s`, `bootusb2.s`): arranque BIOS por USB, dos tramos,
-  carga del kernel y salto a modo largo.
+- `boot/` (`bootusb.s`, `bootusb2.s`): arranque BIOS por USB, dos tramos,
+  carga del kernel y salto a modo largo (ya copiado a `loboswolfos/boot/`).
 - `kernel/src/*.s` (`bios.s`, `interrupts.s`, `start.s`): el estilo de
   ensamblador del sistema.
 - Drivers de framebuffer/VGA/VBE, PS/2 (teclado y ratón) y disco ATA.
@@ -110,7 +110,7 @@ escritorio **no se toca**: se trabaja sobre una copia.
 | 2 | **Cargar `.logic` de vuelta al gestor**: la fila **Abrir lógica .logic** del menú ARCHIVO sustituye la lógica activa | **Hecho (10-11-2026)** |
 | 3 | Motor mínimo: núcleo ASM 32 bits (blit + tiles) y `game.exe` de prueba que abre una ventana, dibuja un mapa del proyecto y mueve un sprite con el teclado | **Hecho (10-11-2026)** |
 | 4 | **Compilar para Windows** desde el menú COMPILE: genera `game.exe` con el proyecto actual | **Hecho (10-11-2026)** |
-| 5 | Kernel loboswolfos: copia reducida de rocky que arranca por USB con framebuffer y entrada | Pendiente |
+| 5 | Kernel loboswolfos: copia reducida de rocky que arranca por USB con framebuffer y entrada | **Hecho (10-11-2026)** |
 | 6 | Núcleo ASM x86_64 + el mismo juego corriendo sobre loboswolfos | Pendiente |
 | 7 | **Compilar para BIOS** desde el menú COMPILE: genera la imagen USB flasheable (y flashearla con la herramienta de rocky como guía) | Pendiente |
 | 8 | Más botones FUNCIONES arrastrables con **código editable dentro del botón**: al escribir el código, el botón cambia su aspecto; el código pasa a formar parte del juego compilado | Pendiente |
@@ -172,16 +172,53 @@ el motor ya compila.
   `GdipCreateBitmapFromStream` sobre un IStream (`-lole32` en el enlace).
 - El formato `.logic` sigue en texto plano; los elementos de función
   añaden su campo propio al final de la línea.
+- **10-11-2026 (fase 5)** — El kernel loboswolfos vive **dentro del repo del
+  editor**, en `loboswolfos/` (el mismo patrón que `motor/`), para que la
+  fase 7 («Compilar para BIOS») pueda invocarlo por ruta relativa. Del build
+  solo se versiona la fuente: `target/`, `loboswolfos/build/` y `*.img`
+  quedan ignorados.
+- **10-11-2026 (fase 5)** — Copias de rocky: del **rocky actual**, el
+  arranque completo (`bootusb.s`, `bootusb2.s`, sus linkers, `kernel.ld`,
+  `start.s`) y el par `bios.rs`/`bios.s`/`pit.rs` endurecido del reloj; de la
+  snapshot `20261015-entrada-ps2-ok`, los drivers `cpu`, `serial`, `sync`,
+  `vga`, `gfx`, `interrupts.s`, `idt`, `pic`, `cmos`, `ps2`, `input` y
+  `mouse`. El original de rocky no se toca.
+- **10-11-2026 (fase 5)** — Layout de la imagen USB, idéntico trazado que
+  rocky: LBA 0 = MBR, 1..4 = tramo 2 (el MBR lee 4 sectores a 0x8000),
+  5.. = kernel (copiado a 0x100000) y **2048.. = zona del juego** (la
+  usará la fase 6). Imagen de 32 MiB con una sola particion tipo 0x83
+  que cubre la zona del juego.
+- **10-11-2026 (fase 5)** — El bloque `RKYCFG` se reutiliza tal cual
+  (u16 kernel_sectores + u32 juego_lba + u32 juego_sectores detras de la
+  marca): los campos que en rocky apuntaban al volumen Estrato apuntan
+  ahora a la zona del juego, y el tramo 2 los deja heredados en el boot
+  info de 0x7E00. **Sin FS de momento**: la zona del juego es una particion
+  cruda.
+- **10-11-2026 (fase 5)** — El kernel va **sin `alloc`**: `Canvas::new`
+  dibuja directo sobre el LFB, el informe PS/2 imprime con `match` directo
+  (sin `format!`), la consola no tiene terminal virtual y
+  `bios::set_text_mode` no restaura pantalla (no hay escritorio que
+  restaurar).
+- **10-11-2026 (fase 5)** — Las flags de compilacion del kernel y el
+  arranque viajan por `CARGO_ENCODED_RUSTFLAGS` (separadas por `\x1f`): la
+  ruta de este repo lleva espacios («GreenBlue kit») y con `RUSTFLAGS`
+  normal cargo las parte por espacios y rompe el `-Clink-arg` del linker.
+- **10-11-2026 (fase 5)** — Constructor propio (`loboswolfos/xtask`, estilo
+  rocky) con comandos `build | run | run-serial | probar [segundos] |
+  clean`. `probar` es la verificacion del kernel: QEMU sin ventana con la
+  serie a `loboswolfos/build/serial.log`. Verificada la fase 5 en QEMU:
+  arranque completo, VBE 1024x768 a 32 bpp, reloj a 100 Hz y entrada en
+  vivo (eco de teclado y movimiento + botones del raton inyectados por el
+  monitor).
 
 ## 5. Pendiente de decidir
 
-- Dónde queda la carpeta del kernel loboswolfos: dentro del repo del editor
-  (p. ej. `loboswolfos/`) o en un repositorio aparte. Se decide al empezar
-  la fase 5.
 - Formato del ejecutable del juego dentro del kernel (binario propio o
-  adaptar el `.rok` de rocky).
+  adaptar el `.rok` de rocky). Se decide en la fase 6, junto con el contenido
+  de la zona del juego en LBA 2048.
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,
-  FAT32 u otro).
+  FAT32 u otro). Hoy no hay ninguno: la zona del juego es una particion cruda
+  apuntada por el bloque RKYCFG.
 - Lenguaje del código de los botones de la fase 8 (texto plano, algo tipo
   `.rka` de rocky, u otro propio).
 

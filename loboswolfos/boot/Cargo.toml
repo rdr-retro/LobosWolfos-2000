@@ -1,0 +1,18 @@
+[package]
+name = "loboswolfos-boot"
+version = "0.1.0"
+edition = "2021"
+description = "Arranque BIOS por USB de loboswolfos: MBR y segundo tramo (copiados de rocky)"
+
+[[bin]]
+name = "bootusb"
+path = "src/bin/bootusb.rs"
+
+[[bin]]
+name = "bootusb2"
+path = "src/bin/bootusb2.rs"
+
+[profile.release]
+panic = "abort"
+opt-level = 1
+lto = false
