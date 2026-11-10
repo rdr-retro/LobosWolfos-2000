@@ -51,6 +51,11 @@ Interfaz común (cabecera C) y **dos variantes del núcleo**, una por destino:
 | x86, 32 bits | `game.exe` en Windows 2000/XP | MinGW i686, `.s` GNU (o inline asm), MMX/SSE |
 | x86_64 | kernel loboswolfos | `.s` GNU estilo rocky, SSE2 |
 
+La variante de 32 bits ya está implementada (`motor/nucleo32.s`): limpiar
+con MMX, blit opaco con recorte, blit con máscara alpha, render del mapa
+con el sello del tile igual que el editor y colisiones AABB. La x86_64
+llega con la fase 6.
+
 **Partes esenciales escritas a mano en ensamblador** (lo que debe correr
 rápido, el resto va encima en C/Rust):
 
@@ -103,7 +108,7 @@ escritorio **no se toca**: se trabaja sobre una copia.
 | 0 | Editor con gestor de lógica, sección FUNCIONES y menú COMPILE | **Hecho** |
 | 1 | **egine arrastrable al lienzo**: el botón FUNCIONES se arrastra como elemento del motor y el `.logic` lo guarda | **Hecho (10-11-2026)** |
 | 2 | Cargar `.logic` de vuelta al gestor (hoy solo se guarda) | Pendiente |
-| 3 | Motor mínimo: núcleo ASM 32 bits (blit + tiles) y `game.exe` de prueba que abre una ventana, dibuja un mapa del proyecto y mueve un sprite con el teclado | Pendiente |
+| 3 | Motor mínimo: núcleo ASM 32 bits (blit + tiles) y `game.exe` de prueba que abre una ventana, dibuja un mapa del proyecto y mueve un sprite con el teclado | **Hecho (10-11-2026)** |
 | 4 | **Compilar para Windows** desde el menú COMPILE: genera `game.exe` con el proyecto actual | Pendiente |
 | 5 | Kernel loboswolfos: copia reducida de rocky que arranca por USB con framebuffer y entrada | Pendiente |
 | 6 | Núcleo ASM x86_64 + el mismo juego corriendo sobre loboswolfos | Pendiente |
@@ -123,8 +128,21 @@ el motor ya compila.
   se versiona con el código.
 - **10-11-2026** — egine se arrastra al lienzo como elemento del motor
   (fase 1); un clic sin arrastrar explica cómo usarlo.
-- El kernel loboswolfos se basa en rocky, en copia aparte; el original del
+- **10-11-2026** — El kernel loboswolfos se basa en rocky, en copia aparte; el original del
   escritorio queda intocado.
+- **10-11-2026** — Ensamblador del núcleo en sintaxis AT&T (gnu as), convención
+  cdecl y símbolos con guion bajo (`_motor_blit`) en PE de 32 bits. Bug
+  corregido en la fase 3: las bases de punteros de blit y mapa se calculaban
+  en píxeles sin escalar a bytes (faltaba el `*4`); detectado con gdb (el
+  primer `movq` escribía en `fb+1950` bytes en vez de `fb+7800`) y corregido
+  con `leal (base, offset, 4)`.
+- **10-11-2026** — `motor/prueba.c` queda versionado como banco de pruebas
+  de consola del núcleo; se compila aparte (ver su cabecera) y se lanza desde
+  la raíz del repo para que resuelva `maps/` y `tiles/`.
+- **10-11-2026** — `game.exe` se lanza desde la raíz del repo (cwd con `maps/`
+  y `tiles/`), no desde `motor/`. El punto de aparición del sprite se busca
+  en espiral con margen de 8 px (el mapa puede tener celda sólida en el
+  origen) y la cámara se centra en el sprite.
 - El formato `.logic` sigue en texto plano; los elementos de función
   añaden su campo propio al final de la línea.
 

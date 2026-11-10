@@ -42,6 +42,42 @@ También se puede compilar desde PowerShell:
 .\build.ps1
 ```
 
+## Motor egine (`motor/game.exe`)
+
+El motor del juego tiene su propia carpeta `motor/` y se compila aparte, desde
+ella:
+
+```bat
+cd motor
+build.bat [ruta\a\mingw32\bin]
+```
+
+El resultado es `motor/game.exe` (Win32, 32 bits). Lánzalo **desde la raíz del
+proyecto** (la carpeta con `maps/` y `tiles/`), no desde `motor/`:
+
+```bat
+motor\game.exe
+```
+
+Abre una ventana de 640x480, carga el mapa del proyecto (el del `.logic` de la
+lógica o el primero que haya en `maps/`) y lo dibuja con el **núcleo en
+ensamblador** (`motor/nucleo32.s`: limpiar y blit con MMX, render del mapa y
+colisiones AABB). Mueve el sprite con los cursores o `WASD`; `Escape` cierra.
+
+Para pruebas automáticas sin ventana (captura determinista a BMP):
+
+```bat
+motor\game.exe --captura captura.bmp --fotogramas 60 --tecla derecha
+```
+
+Opciones: `--logica ruta` (proyecto `.logic`), `--mapa ruta` (un `.mav`
+directo), `--captura ruta`, `--fotogramas N` y `--tecla nombre`
+(izquierda/derecha/arriba/abajo/saltar).
+
+`motor/prueba.c` es un banco de pruebas de consola del núcleo; se compila
+aparte siguiendo las instrucciones de su cabecera y se ejecuta desde la raíz
+del proyecto.
+
 ## Uso
 
 Ejecuta `LobosWolfos2000.exe`. Los tiles que guardes se almacenan en la carpeta
@@ -128,8 +164,12 @@ elegirlas avisan de que la compilación todavía no está hecha.
 ## Estructura
 
 - `src/` — código fuente C y recursos de la interfaz.
+- `motor/` — motor egine: núcleo en ensamblador 32 bits (`nucleo32.s`),
+  interfaz común (`motor.h`), carga del proyecto (`activo.c`) y `juego.c`
+  (`game.exe`).
 - `recursos/` — iconos e imágenes de las herramientas.
 - `tiles/` — carpeta donde se guardan los mosaicos.
+- `maps/` — mapas `.mav` (pantallas del juego).
 - `build.bat` / `build.ps1` — scripts de compilación.
 
 ## Licencia
