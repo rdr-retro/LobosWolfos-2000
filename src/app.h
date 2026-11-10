@@ -149,6 +149,12 @@ typedef unsigned char  u8;
 #define MODULOS_EJE            0x00304050u
 #define MODULOS_PANEL_DER_EXTRA 40 /* cuanto mas ancho es el panel derecho */
 
+/* Seccion de funciones logicas del panel derecho, debajo del boton del
+ * item: un titulo y rectangulos con funciones logicas del gestor. */
+#define MODULOS_FUNCION_TITULO_HUECO 9 /* hueco entre el boton y el titulo */
+#define MODULOS_FUNCION_ALTO        24 /* alto de cada rectangulo */
+#define MODULOS_FUNCION_HUECO        5 /* hueco tras el titulo y entre rects */
+
 /* Items del gestor: cada item es un mapa .mav de la carpeta `maps`. Las
  * miniaturas se guardan en una cache pequena para no releer el mapa. */
 #define CARPETA_MAPS_TEXTO     "maps"
@@ -732,6 +738,8 @@ typedef struct App {
     int modulo_elem_off_x, modulo_elem_off_y;
     int modulo_snap_linea_x, modulo_snap_linea_y; /* mundo, -1 = ninguna */
     int hover_modulo_boton;
+    int hover_modulo_funcion;   /* funcion bajo el raton, -1 = ninguna */
+    int modulo_funcion_pulsada; /* funcion pulsada, -1 = ninguna */
 
     /* Item elegido (mapa .mav de la carpeta `maps`) y selector de items. */
     char item_mapa[MAPS_NOMBRE_MAX];
@@ -1125,6 +1133,10 @@ Zona barra_abajo_zona(void);
 Zona zona_trabajo(void);
 Zona modulos_lienzo_zona(void);
 Zona modulos_boton_zona(void);
+Zona modulos_funcion_zona(int indice);
+int  modulos_funciones_num(void);
+const char *modulos_funcion_nombre(int indice);
+int  modulos_funcion_en(int x, int y);
 Zona selector_mapa_zona(void);
 Zona selector_mapa_fila_zona(int indice);
 void selector_mapa_abrir(void);
@@ -1132,6 +1144,7 @@ void selector_mapa_cerrar(void);
 void selector_mapa_elegir(int indice);
 int  selector_mapa_en(int x, int y);
 void ui_dibujar_selector_mapa(void);
+void ui_dibujar_funciones_modulos(void);
 void dibujar_miniatura(int x, int y, int ancho, int alto,
                        const u32 *pixeles, int pix_w, int pix_h);
 Zona elementos_lista_zona(void);

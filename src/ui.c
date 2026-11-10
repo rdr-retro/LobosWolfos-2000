@@ -126,6 +126,25 @@ Zona modulos_boton_zona(void) {
                       ancho, MODULOS_BOTON_ALTO);
 }
 
+/* Titulo de la seccion de funciones logicas, bajo el boton del item. */
+static Zona modulos_funciones_titulo_zona(void) {
+    Zona b = modulos_boton_zona();
+    return zona_hacer(b.x, zona_abajo(b) + MODULOS_FUNCION_TITULO_HUECO,
+                      b.ancho, 7);
+}
+
+/* Rectangulo de la funcion logica `indice` de la seccion del panel
+ * derecho; los rectangulos se apilan hacia abajo con un hueco entre
+ * ellos. */
+Zona modulos_funcion_zona(int indice) {
+    Zona t = modulos_funciones_titulo_zona();
+    Zona b = modulos_boton_zona();
+    int y0 = zona_abajo(t) + MODULOS_FUNCION_HUECO;
+    return zona_hacer(b.x,
+                      y0 + indice * (MODULOS_FUNCION_ALTO + MODULOS_FUNCION_HUECO),
+                      b.ancho, MODULOS_FUNCION_ALTO);
+}
+
 /* Panel flotante del selector de items, centrado en el lienzo del gestor. */
 Zona selector_mapa_zona(void) {
     Zona lienzo = modulos_lienzo_zona();
@@ -3311,6 +3330,33 @@ static void ui_dibujar_boton_modulos(void) {
     }
 }
 
+/* Seccion FUNCIONES del panel derecho, bajo el boton del item: rectangulos
+ * con las funciones logicas del gestor. De momento solo hay una ("egine")
+ * y todavia no hace nada. */
+void ui_dibujar_funciones_modulos(void) {
+    Zona t = modulos_funciones_titulo_zona();
+    int i;
+
+    fuente_dibujar(t.x, t.y, "FUNCIONES", TEXTO_UI);
+
+    for (i = 0; i < modulos_funciones_num(); i++) {
+        const char *nombre = modulos_funcion_nombre(i);
+        Zona z = modulos_funcion_zona(i);
+        int hover = zona_contiene(z, g.raton_x, g.raton_y);
+        int pulsado = g.modulo_funcion_pulsada == i && hover;
+
+        dibujar_rect_z(z, pulsado ? 0x00D8DEE6u : (hover ? 0x00EDF2F7u : BARRA));
+        dibujar_rect(z.x, z.y, zona_derecha(z), z.y + 1, 0x00F8F8F8u);
+        dibujar_rect(z.x, z.y, z.x + 1, zona_abajo(z), 0x00F8F8F8u);
+        dibujar_rect(z.x, zona_abajo(z) - 1, zona_derecha(z), zona_abajo(z),
+                     SEPARADOR);
+        dibujar_rect(zona_derecha(z) - 1, z.y, zona_derecha(z), zona_abajo(z),
+                     SEPARADOR);
+        fuente_dibujar(z.x + (z.ancho - fuente_texto_ancho(nombre)) / 2,
+                       z.y + (z.alto - 7) / 2, nombre, TEXTO_UI);
+    }
+}
+
 /* Distancia de un punto a un segmento. */
 static float punto_segmento(float px, float py, float ax, float ay,
                             float bx, float by) {
@@ -3449,6 +3495,9 @@ static void ui_dibujar_paneles_vacios(void) {
 
     /* Boton de insercion en el panel derecho. */
     ui_dibujar_boton_modulos();
+
+    /* Seccion de funciones logicas bajo el boton. */
+    ui_dibujar_funciones_modulos();
 }
 
 /* Mensaje de estado flotante, centrado sobre la barra inferior. En el gestor

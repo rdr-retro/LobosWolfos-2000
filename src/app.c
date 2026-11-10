@@ -790,6 +790,8 @@ void logica_iniciar(void) {
     g.modulo_drag_i = -1;
     g.modulo_snap_linea_x = -1;
     g.modulo_snap_linea_y = -1;
+    g.hover_modulo_funcion = -1;
+    g.modulo_funcion_pulsada = -1;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1140,6 +1142,30 @@ int selector_mapa_en(int x, int y) {
     return -1;
 }
 
+/* ------------------------------------------------------------------ */
+/* Funciones logicas del panel derecho                                  */
+/* ------------------------------------------------------------------ */
+/* Rectangulos de la seccion FUNCIONES del panel derecho. Por ahora solo
+ * hay una ("egine") y todavia no hace nada. */
+static const char *MODULOS_FUNCIONES[] = { "egine" };
+
+int modulos_funciones_num(void) {
+    return (int)(sizeof(MODULOS_FUNCIONES) / sizeof(MODULOS_FUNCIONES[0]));
+}
+
+const char *modulos_funcion_nombre(int indice) {
+    if (indice < 0 || indice >= modulos_funciones_num()) return "";
+    return MODULOS_FUNCIONES[indice];
+}
+
+/* Rectangulo de funcion bajo el cursor; -1 si no hay ninguno. */
+int modulos_funcion_en(int x, int y) {
+    int i;
+    for (i = 0; i < modulos_funciones_num(); i++)
+        if (zona_contiene(modulos_funcion_zona(i), x, y)) return i;
+    return -1;
+}
+
 static void modulos_pulsar(int x, int y, int boton) {
     Zona lienzo = modulos_lienzo_zona();
 
@@ -1163,6 +1189,17 @@ static void modulos_pulsar(int x, int y, int boton) {
         g.hover_modulo_boton = 1;
         app_invalidar();
         return;
+    }
+
+    /* Rectangulos de la seccion FUNCIONES: de momento solo se marcan
+     * pulsados; la funcion todavia no hace nada. */
+    if (boton == 0) {
+        int f = modulos_funcion_en(x, y);
+        if (f >= 0) {
+            g.modulo_funcion_pulsada = f;
+            app_invalidar();
+            return;
+        }
     }
 
     /* Panel izquierdo: lista de elementos (plegar grupos). */
@@ -1235,6 +1272,18 @@ static void modulos_pulsar(int x, int y, int boton) {
 }
 
 static void modulos_soltar(int x, int y) {
+    /* Soltar un rectangulo de la seccion FUNCIONES: si sigue encima, avisa
+     * de que la funcion aun no esta hecha. */
+    if (g.modulo_funcion_pulsada >= 0) {
+        int f = g.modulo_funcion_pulsada;
+        g.modulo_funcion_pulsada = -1;
+        if (modulos_funcion_en(x, y) == f)
+            app_estado("%s: funcion sin hacer todavia",
+                       modulos_funcion_nombre(f));
+        app_invalidar();
+        return;
+    }
+
     if (g.modulo_boton_pulsado) {
         int era_clic = !g.modulo_boton_movido;
         g.modulo_boton_pulsado = 0;
@@ -1319,6 +1368,13 @@ static void modulos_mover(int x, int y) {
     hover = zona_contiene(modulos_boton_zona(), x, y);
     if (hover != g.hover_modulo_boton) {
         g.hover_modulo_boton = hover;
+        app_invalidar();
+    }
+
+    /* Hover de los rectangulos de la seccion FUNCIONES. */
+    hover = modulos_funcion_en(x, y);
+    if (hover != g.hover_modulo_funcion) {
+        g.hover_modulo_funcion = hover;
         app_invalidar();
     }
 }

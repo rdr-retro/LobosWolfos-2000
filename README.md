@@ -55,7 +55,7 @@ sustituyen el documento compartido, no crean pestañas nuevas.
 El menú **MODO** incluye **Modo pintar**, que cierra el visor de patrón, sale del
 modo tiles o del editor de mapas y vuelve al lienzo normal, y **Gestor de
 lógica**, que abre un espacio de trabajo con los paneles izquierdo, derecho e
-inferior (los dos laterales del mismo ancho), manteniendo las pestañas y la
+inferior (el derecho un poco más ancho), manteniendo las pestañas y la
 barra de menús. Al elegir **Gestor de lógica** de nuevo se vuelve a Pintar.
 
 El panel izquierdo muestra la lista de elementos del lienzo (`Elemento 1`,
@@ -75,6 +75,10 @@ Elige uno con un clic y el botón pasa a mostrarlo; arrástralo hasta el lienzo
 para insertarlo como elemento con su miniatura y su nombre. Sin item elegido,
 el arrastre inserta un elemento vacío. Si hay más mapas que filas, la rueda
 desplaza la lista y `Escape` la cierra.
+
+Debajo del botón del item está la sección **FUNCIONES**, con rectángulos para
+las funciones lógicas del gestor. De momento solo existe **egine**, que aún no
+hace nada: al pulsarlo avisa de que la función todavía no está hecha.
 
 Los elementos ya colocados también se pueden arrastrar, y un clic derecho
 sobre uno de ellos lo elimina. Sus lados tienen
