@@ -15,7 +15,7 @@ para cargar y guardar PNG.
 - Patrón de textura repetido, visor de mosaico y guardado de tiles en PNG.
 - Pestañas de modo: Pintar, Tiles, Mapa y patrón comparten el mismo documento;
   cada pestaña conserva su vista, zoom y desplazamiento.
-- Gestor de escenas: paneles izquierdo, derecho e inferior (los laterales del
+- Gestor de lógica: paneles izquierdo, derecho e inferior (los laterales del
   mismo ancho), un botón de item arrastrable y un lienzo desplazable con
   rejilla. Los items son mapas `.mav` de la carpeta `maps` junto al ejecutable:
   se eligen con un clic y se muestran con miniatura y nombre. Los elementos se
@@ -54,9 +54,9 @@ sustituyen el documento compartido, no crean pestañas nuevas.
 
 El menú **MODO** incluye **Modo pintar**, que cierra el visor de patrón, sale del
 modo tiles o del editor de mapas y vuelve al lienzo normal, y **Gestor de
-escenas**, que abre un espacio de trabajo con los paneles izquierdo, derecho e
+lógica**, que abre un espacio de trabajo con los paneles izquierdo, derecho e
 inferior (los dos laterales del mismo ancho), manteniendo las pestañas y la
-barra de menús. Al elegir **Gestor de escenas** de nuevo se vuelve a Pintar.
+barra de menús. Al elegir **Gestor de lógica** de nuevo se vuelve a Pintar.
 
 El panel izquierdo muestra, de arriba abajo, la lista de elementos del lienzo
 (`Elemento 1`, `Elemento 2`…) y la lista de escenas creadas. Los elementos
@@ -98,7 +98,7 @@ indican la celda actual. Los tiles conservan su proporción dentro de la celda.
 **ARCHIVO > Guardar mapa .mav** guarda el mapa en formato Lua para Love2D; al
 volver a entrar se conserva el mapa que ya está en memoria. Los mapas se guardan
 por defecto en la carpeta `maps` junto al ejecutable (la misma que usa el
-selector de items del gestor de escenas). Las imágenes se buscan primero en la
+selector de items del gestor de lógica). Las imágenes se buscan primero en la
 carpeta `tiles_dir` junto al `.mav`, después junto al propio `.mav` y por
 último en la carpeta `tiles` del ejecutable.
 

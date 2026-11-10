@@ -158,7 +158,7 @@ static void accion_modo(int opcion) {
             }
             break;
         case 4:
-            /* Gestor de escenas: panel de elementos y escenas. */
+            /* Gestor de logica: panel de elementos y escenas. */
             app_alternar_gestor_modulos();
             break;
         default:
@@ -777,7 +777,7 @@ int clic_pestanas(int x, int y, int boton) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Gestor de escenas: lista del panel izquierdo                        */
+/* Gestor de logica: lista del panel izquierdo                        */
 /* ------------------------------------------------------------------ */
 static void escenas_reset_arrastre(void) {
     g.modulo_arrastrando = 0;
@@ -926,7 +926,7 @@ void dialogo_guardar_escena(void) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Gestor de escenas: boton arrastrable, lienzo y acople magnetico     */
+/* Gestor de logica: boton arrastrable, lienzo y acople magnetico     */
 /* ------------------------------------------------------------------ */
 /* Ajusta una posicion para acoplar los lados del rectangulo a otro
  * elemento ya colocado. `linea_x`/`linea_y` reciben la guia de acople en
@@ -1544,7 +1544,7 @@ void app_pulsar(int x, int y, int boton) {
         return;
     }
 
-    /* El gestor de escenas tiene su propio boton, lienzo y lista. */
+    /* El gestor de logica tiene su propio boton, lienzo y lista. */
     if (g.vista == VISTA_MODULOS) {
         modulos_pulsar(x, y, boton);
         return;

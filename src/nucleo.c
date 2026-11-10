@@ -433,7 +433,7 @@ void app_actualizar_titulo(void) {
     const char *nombre;
     if (!g.hwnd) return;
     if (g.vista == VISTA_MODULOS) {
-        strcpy(titulo, "LobosWolfos 2000 - Gestor de escenas");
+        strcpy(titulo, "LobosWolfos 2000 - Gestor de lógica");
     } else if (g.hover_herramienta >= 0) {
         nombre = ui_nombre_herramienta(g.hover_herramienta);
         _snprintf(titulo, sizeof(titulo), "LobosWolfos 2000 - %s", nombre);
@@ -446,7 +446,15 @@ void app_actualizar_titulo(void) {
         }
     }
     titulo[sizeof(titulo) - 1] = 0;
-    SetWindowTextA(g.hwnd, titulo);
+    /* El titulo lleva acentos en UTF-8: se convierte a UTF-16 para que
+     * SetWindowTextW los muestre bien en la barra de titulos. */
+    {
+        WCHAR wtitulo[128];
+        if (MultiByteToWideChar(CP_UTF8, 0, titulo, -1, wtitulo, 128) > 0)
+            SetWindowTextW(g.hwnd, wtitulo);
+        else
+            SetWindowTextA(g.hwnd, titulo);
+    }
 }
 
 void app_dibujar(void) {
@@ -807,7 +815,7 @@ void app_alternar_mapa(void) {
     }
 }
 
-/* Gestor de escenas: espacio de trabajo con la lista de escenas en el panel
+/* Gestor de logica: espacio de trabajo con la lista de escenas en el panel
  * izquierdo. Elegirlo de nuevo en el menu MODO vuelve a Pintar. */
 void app_alternar_gestor_modulos(void) {
     if (g.vista == VISTA_MODULOS) {

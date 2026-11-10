@@ -99,7 +99,7 @@ static Zona modulos_abajo_zona(void) {
     return zona_hacer(panel, g.alto - alto, ancho, alto);
 }
 
-/* Lienzo del gestor de escenas: todo el hueco central entre los paneles
+/* Lienzo del gestor de logica: todo el hueco central entre los paneles
  * laterales, desde la barra de menus hasta la barra inferior. */
 Zona modulos_lienzo_zona(void) {
     Zona abajo = modulos_abajo_zona();
@@ -1165,7 +1165,7 @@ void ui_dibujar_menu_desplegable(void) {
                 else if (i == 1) texto = "Visualizar patron de textura";
                 else if (i == 2) texto = "Modo tiles";
                 else if (i == 3) texto = "Editor de mapas";
-                else texto = "Gestor de escenas";
+                else texto = "Gestor de lógica";
                 if (hover) dibujar_rect_z(z, MENU_BARRA_HOVER);
                 if ((i == 0 && g.vista == VISTA_PINTAR && !g.modo_tiles) ||
                     (i == 2 && g.modo_tiles) || (i == 3 && mapa) ||
@@ -3464,7 +3464,7 @@ static void escenas_dibujar_panel(void) {
     }
 }
 
-/* Paneles del gestor de escenas: dos laterales iguales y barra inferior,
+/* Paneles del gestor de logica: dos laterales iguales y barra inferior,
  * completamente vacios. */
 static void ui_dibujar_paneles_vacios(void) {
     int panel = modulos_panel_ancho();
@@ -3518,7 +3518,7 @@ static void ui_dibujar_estado(void) {
 void ui_dibujar(void) {
     int i;
 
-    /* Gestor de escenas: paneles, lista, lienzo desplazable y boton. */
+    /* Gestor de logica: paneles, lista, lienzo desplazable y boton. */
     if (g.vista == VISTA_MODULOS) {
         dibujar_rect(0, 0, g.ancho, g.alto, FONDO);
         ui_dibujar_paneles_vacios();
