@@ -1,14 +1,54 @@
 //! Entrada de teclado: sondea el controlador PS/2 y, ademas, el puerto serie
 //! (util para probar rocky de forma automatica con `qemu -serial stdio`).
 
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use crate::cpu::inb;
+use crate::motor::{
+    MOTOR_ENT_ABAJO, MOTOR_ENT_ARRIBA, MOTOR_ENT_CERRAR, MOTOR_ENT_DERECHA, MOTOR_ENT_IZQUIERDA,
+    MOTOR_ENT_SALTO,
+};
 use crate::serial::Serial;
 use crate::sync::SyncCell;
 
 static SHIFT: AtomicBool = AtomicBool::new(false);
 static EXTENDED: AtomicBool = AtomicBool::new(false);
+
+/* ------------------------------------------------------------------ */
+/* Entrada del motor (fase 6)                                           */
+/* ------------------------------------------------------------------ */
+
+/// Teclas del juego mantenidas ahora mismo (bits MOTOR_ENT_*): las
+/// flechas del bloque E0, WASD, espacio y Escape.
+static ENTRADA: AtomicU32 = AtomicU32::new(0);
+
+/// Teclas del juego pulsadas desde la ultima lectura (bits MOTOR_ENT_*).
+///
+/// Un toque rapido puede soltarse entero entre dos sondeos (QEMU manda
+/// la pulsacion y la suelta del tiron): las pulsaciones se recuerdan
+/// aqui para que cuenten al menos como un fotograma de entrada, igual
+/// que una tecla mantenida cuenta todo el tiempo que este apretada.
+static PULSOS: AtomicU32 = AtomicU32::new(0);
+
+fn apretar(bit: u32) {
+    ENTRADA.fetch_or(bit, Ordering::Relaxed);
+    PULSOS.fetch_or(bit, Ordering::Relaxed);
+}
+
+fn soltar(bit: u32) {
+    ENTRADA.fetch_and(!bit, Ordering::Relaxed);
+}
+
+/// Bits MOTOR_ENT_* de las teclas del juego mantenidas ahora mismo.
+pub fn entrada() -> u32 {
+    ENTRADA.load(Ordering::Relaxed)
+}
+
+/// Bits MOTOR_ENT_* de las teclas pulsadas desde la ultima llamada. Se
+/// borra al leer (cada toque cuenta un fotograma).
+pub fn tomar_pulsos() -> u32 {
+    PULSOS.swap(0, Ordering::Relaxed)
+}
 
 /// Bufer circular que llena la IRQ4 del puerto serie.
 const RING_SIZE: usize = 512;
@@ -90,7 +130,39 @@ fn translate(scancode: u8) -> Option<u8> {
         return None;
     }
     if EXTENDED.swap(false, Ordering::Relaxed) {
-        return None; // teclas extendidas (flechas, etc.) ignoradas
+        // Teclas del bloque extendido (E0): aqui van las flechas, que son
+        // la entrada del juego (make 0x4x, break 0xCx).
+        match scancode {
+            0x4B => apretar(MOTOR_ENT_IZQUIERDA),
+            0x4D => apretar(MOTOR_ENT_DERECHA),
+            0x48 => apretar(MOTOR_ENT_ARRIBA),
+            0x50 => apretar(MOTOR_ENT_ABAJO),
+            0xCB => soltar(MOTOR_ENT_IZQUIERDA),
+            0xCD => soltar(MOTOR_ENT_DERECHA),
+            0xC8 => soltar(MOTOR_ENT_ARRIBA),
+            0xD0 => soltar(MOTOR_ENT_ABAJO),
+            _ => {}
+        }
+        return None; // el resto de teclas extendidas se ignora
+    }
+
+    // Teclas del juego sin prefijo: WASD, espacio y Escape. El estado se
+    // mantiene aparte (para el motor) sin tocar la traduccion a ASCII de
+    // abajo (que sigue sirviendo para la consola).
+    match scancode {
+        0x11 => apretar(MOTOR_ENT_ARRIBA),       // W
+        0x91 => soltar(MOTOR_ENT_ARRIBA),
+        0x1E => apretar(MOTOR_ENT_IZQUIERDA),    // A
+        0x9E => soltar(MOTOR_ENT_IZQUIERDA),
+        0x1F => apretar(MOTOR_ENT_ABAJO),        // S
+        0x9F => soltar(MOTOR_ENT_ABAJO),
+        0x20 => apretar(MOTOR_ENT_DERECHA),     // D
+        0xA0 => soltar(MOTOR_ENT_DERECHA),
+        0x39 => apretar(MOTOR_ENT_SALTO),        // espacio
+        0xB9 => soltar(MOTOR_ENT_SALTO),
+        0x01 => apretar(MOTOR_ENT_CERRAR),       // Escape
+        0x81 => soltar(MOTOR_ENT_CERRAR),
+        _ => {}
     }
 
     let shift = SHIFT.load(Ordering::Relaxed);

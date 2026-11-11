@@ -54,7 +54,7 @@ Interfaz común (cabecera C) y **dos variantes del núcleo**, una por destino:
 La variante de 32 bits ya está implementada (`motor/nucleo32.s`): limpiar
 con MMX, blit opaco con recorte, blit con máscara alpha, render del mapa
 con el sello del tile igual que el editor y colisiones AABB. La x86_64
-llega con la fase 6.
+(`loboswolfos/kernel/src/nucleo64.s`, SSE2) llegó con la fase 6.
 
 **Partes esenciales escritas a mano en ensamblador** (lo que debe correr
 rápido, el resto va encima en C/Rust):
@@ -111,7 +111,7 @@ escritorio **no se toca**: se trabaja sobre una copia.
 | 3 | Motor mínimo: núcleo ASM 32 bits (blit + tiles) y `game.exe` de prueba que abre una ventana, dibuja un mapa del proyecto y mueve un sprite con el teclado | **Hecho (10-11-2026)** |
 | 4 | **Compilar para Windows** desde el menú COMPILE: genera `game.exe` con el proyecto actual | **Hecho (10-11-2026)** |
 | 5 | Kernel loboswolfos: copia reducida de rocky que arranca por USB con framebuffer y entrada | **Hecho (10-11-2026)** |
-| 6 | Núcleo ASM x86_64 + el mismo juego corriendo sobre loboswolfos | Pendiente |
+| 6 | Núcleo ASM x86_64 + el mismo juego corriendo sobre loboswolfos | **Hecho (11-11-2026)** |
 | 7 | **Compilar para BIOS** desde el menú COMPILE: genera la imagen USB flasheable (y flashearla con la herramienta de rocky como guía) | Pendiente |
 | 8 | Más botones FUNCIONES arrastrables con **código editable dentro del botón**: al escribir el código, el botón cambia su aspecto; el código pasa a formar parte del juego compilado | Pendiente |
 
@@ -210,17 +210,62 @@ el motor ya compila.
   arranque completo, VBE 1024x768 a 32 bpp, reloj a 100 Hz y entrada en
   vivo (eco de teclado y movimiento + botones del raton inyectados por el
   monitor).
+- **11-11-2026 (fase 6)** — Núcleo x86_64 en `loboswolfos/kernel/src/
+  nucleo64.s`: SysV AMD64, **SSE2 en vez de MMX**, símbolos sin guion bajo
+  y AT&T (incluido con `options(att_syntax)`, que `global_asm!` no usa por
+  defecto). Misma interfaz y mismo recorte/sello/AABB que `nucleo32.s`;
+  `MotorImagen` pasa a 16 bytes (puntero de 8).
+- **11-11-2026 (fase 6)** — `start.s` activa `CR4.OSFXSR` y `OSXMMEXCPT`
+  antes de entrar en `rust_main`: sin el bit OSFXSR, toda instruccion
+  SSE2 que toque un XMM lanza #UD (detectado en QEMU: fallo grave nada mas
+  entrar en el nucleo). El trampolin del BIOS solo borra `CR4.PAE`, asi
+  que los bits sobreviven a las llamadas al firmware.
+- **11-11-2026 (fase 6)** — El ejecutable del juego dentro del kernel es
+  un **blob LGB1 en la zona de juego (LBA 2048)**, el mismo formato que
+  viaja pegado al `game.exe` de la fase 4, con dos ajustes para el
+  arranque por BIOS: los nombres de entrada llevan barra normal
+  (`maps/mapa.mav`) y el pie queda al final del ultimo sector (relleno con
+  ceros hasta multiplo de 512, con el largo total en el pie, que es lo
+  que el kernel compara sector a sector). Sin FS y sin heap: el xtask lo
+  monta con `proyecto.logic` (si existe) + `maps\*.mav` + `tiles\*.png`
+  del repo.
+- **11-11-2026 (fase 6)** — Memoria del juego (la RAM que hay sobre la
+  pila del kernel, identidad-mapeada por el arranque): copia del blob en
+  4 MiB (1 MiB de tope), rascaderos del decodificador PNG en 5 MiB (IDAT,
+  crudo y paleta) y pixeles de los tiles en 6 MiB (2 MiB a repartir); las
+  celdas, imagenes y nombres viven en `.bss`. La DAP y el bufer de rebote
+  del INT 13h van en 0x9000/0x9100 (gfx.rs usa 0x8000/0x8300).
+- **11-11-2026 (fase 6)** — `inflate` y `png` son puertos sin `alloc` de
+  las librerias de rocky: la salida y los rascaderos los presta el
+  llamante (slices), y el desfiltrado PNG se hace en el sitio sobre el
+  bufer crudo (cada fila conserva su byte de filtro delante).
+- **11-11-2026 (fase 6)** — `juego.rs` es el puerto de `motor/juego.c`:
+  framebuffer de 640x480 en `.bss`, spawn en espiral con margen de 8 px,
+  camara centrada, colision por eje, 60 FPS con acumulador entero sobre
+  el PIT de 100 Hz y volcado centrado al modo VBE. La entrada sondea las
+  flechas E0 (con WASD, espacio y Escape) como bits `MOTOR_ENT_*`; los
+  toques soltados entre sondeos se recuerdan (`PULSOS`) para que cuenten
+  un fotograma, y las letras `a/d/w/s`/espacio/Esc por la serie mueven
+  igual (pruebas sin teclado).
+- **11-11-2026 (fase 6)** — Comando `probar-juego` del xtask: QEMU sin
+  ventana con la serie a `build/serial.log` y el monitor por la entrada
+  estandar; mueve el sprite con `sendkey right 300` (y las demas flechas;
+  QEMU 11 no acepta `spk-*`, y el tercer parametro es el tiempo de
+  retencion en ms) y comprueba en el registro que el mapa cargo, que
+  decodifico los tiles, que el juego arranco y que el rastro
+  `egine: sprite en (x, y)` cambia.
 
 ## 5. Pendiente de decidir
 
-- Formato del ejecutable del juego dentro del kernel (binario propio o
-  adaptar el `.rok` de rocky). Se decide en la fase 6, junto con el contenido
-  de la zona del juego en LBA 2048.
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,
-  FAT32 u otro). Hoy no hay ninguno: la zona del juego es una particion cruda
-  apuntada por el bloque RKYCFG.
+  FAT32 u otro). Hoy no hay ninguno: la zona del juego lleva el blob LGB1
+  crudo apuntado por el bloque RKYCFG, que de momento basta.
 - Lenguaje del código de los botones de la fase 8 (texto plano, algo tipo
-  `.rka` de rocky, u otro propio).
+  `.rka` de rocky, u otro propio). La restricción que fija la fase 6:
+  ese código tiene que correr en **los dos destinos** (el `game.exe` de
+  32 bits con el motor en C y el kernel loboswolfos `no_std`), asi que o
+  se interpreta en ambos nucleos o se compila a cada uno; el proyecto viaja
+  en el mismo blob LGB1 en los dos casos.
 
 ## 6. Reglas de trabajo
 

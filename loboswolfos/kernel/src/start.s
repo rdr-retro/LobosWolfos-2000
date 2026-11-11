@@ -18,6 +18,15 @@ _start:
     xor     eax, eax
     rep     stosb
 
+    /* El nucleo del motor usa SSE2 (nucleo64.s): sin el bit OSFXSR de CR4
+     * cualquier instruccion que toque un registro XMM lanza #UD. Se
+     * activa tambien OSXMMEXCPT, su pareja obligada si algun dia se
+     * desenmascara una excepcion SIMD. El trampolin del BIOS solo borra
+     * CR4.PAE, asi que estos bits sobreviven a las llamadas al firmware. */
+    mov     rax, cr4
+    or      rax, 0x600
+    mov     cr4, rax
+
     call    rust_main
 .Lhang:
     cli

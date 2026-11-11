@@ -8,15 +8,18 @@
 //!   LBA 0       MBR (`bootusb`, 512 bytes, con la tabla de particiones)
 //!   LBA 1..4    segundo tramo (`bootusb2`, cargado en 0x8000)
 //!   LBA 5..     kernel (copiado a 0x100000)
-//!   LBA 2048..  zona del juego (la fase 6 pondra ahi el blob del proyecto)
+//!   LBA 2048..  zona del juego: el blob LGB1 con el proyecto del editor
+//!               (`.logic` del gestor, `.mav` de `maps\` y sus tiles PNG)
 //!
 //! Basado en el `xtask` de rocky; el trazado de la imagen y el bloque RKYCFG
 //! son identicos para no tocar el ensamblador de arranque.
 
 use std::env;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::time::Duration;
 
 const TARGET: &str = "x86_64-unknown-none";
 
@@ -71,10 +74,17 @@ fn main() {
             let segundos: u64 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(15);
             probar(&root, segundos);
         }
+        // Prueba del juego (fase 6): arranca la imagen sin ventana, mueve
+        // el sprite con sendkey por el monitor de QEMU y comprueba en la
+        // serie que el mapa cargo y el sprite se movio.
+        "probar-juego" => {
+            build(&root);
+            probar_juego(&root);
+        }
         "clean" => clean(&root),
         other => {
             eprintln!(
-                "uso: xtask [build|run|run-serial|probar [segundos]|clean] (recibi '{other}')"
+                "uso: xtask [build|run|run-serial|probar [segundos]|probar-juego|clean] (recibi '{other}')"
             );
             std::process::exit(1);
         }
@@ -151,17 +161,120 @@ fn build(root: &Path) -> PathBuf {
     // LBA 5..: el kernel, tal cual.
     let koff = KERNEL_LBA as usize * SECTOR;
     img[koff..koff + kernel.len()].copy_from_slice(&kernel);
+    // LBA 2048..: la zona del juego con el blob LGB1 del proyecto.
+    let blob = montar_blob(&root);
+    let joff = JUEGO_LBA as usize * SECTOR;
+    let jmax = JUEGO_SECTORES as usize * SECTOR;
+    if blob.len() > jmax {
+        panic!(
+            "el blob del proyecto mide {} bytes y la zona del juego solo tiene {}",
+            blob.len(),
+            jmax
+        );
+    }
+    img[joff..joff + blob.len()].copy_from_slice(&blob);
 
     let path = root.join("loboswolfos.img");
     fs::write(&path, &img).expect("no se pudo escribir loboswolfos.img");
     println!(
-        "loboswolfos: imagen {} ({} bytes; kernel {}, {} sectores).",
+        "loboswolfos: imagen {} ({} bytes; kernel {}, {} sectores; juego {} sectores).",
         path.display(),
         img.len(),
         kernel_bin.display(),
-        kernel_sectores
+        kernel_sectores,
+        blob.len() / SECTOR
     );
     path
+}
+
+/* ------------------------------------------------------------------ */
+/* Zona del juego: el blob LGB1                                        */
+/* ------------------------------------------------------------------ */
+
+/// Lo que lee el kernel como maximo (BLOB_MAX de kernel/src/activo.rs).
+const BLOB_MAX: usize = 1024 * 1024;
+
+/// Monta el blob LGB1 con el proyecto del editor: el mismo formato que
+/// `compilar.c` pega detras de la plantilla al fabricar `game.exe`
+/// (entradas `u32 largo_nombre, u32 largo_datos, nombre, datos` y pie
+/// `"LGB1"` + `u32 largo`), con dos ajustes para el arranque por BIOS:
+///
+///   - los nombres de entrada llevan barra normal ("maps/mapa.mav"),
+///     que es como los busca el kernel (activo.rs),
+///   - el blob se rellena con ceros hasta un multiplo de sector y el
+///     largo del pie cuenta el blob entero, pie incluido: el kernel lee
+///     la zona sector a sector y para cuando el pie cuadra con lo
+///     leido.
+///
+/// El contenido sale del proyecto del editor (la carpeta de encima de
+/// loboswolfos): la logica activa `proyecto.logic` si existe, todos los
+/// `.mav` de `maps\\` y todos los `.png` de `tiles\\`. Sin logica el
+/// kernel cae al mapa por defecto (`maps/mapa.mav`), igual que
+/// `activo.c` en Windows.
+fn montar_blob(root: &Path) -> Vec<u8> {
+    let repo = root.parent().expect("sin carpeta del editor sobre loboswolfos");
+    let mut blob: Vec<u8> = Vec::new();
+
+    let logic = repo.join("proyecto.logic");
+    if logic.is_file() {
+        agregar_entrada(&mut blob, "proyecto.logic", &logic);
+    }
+    for nombre in listar_carpeta(&repo.join("maps"), "mav") {
+        agregar_entrada(&mut blob, &format!("maps/{nombre}"), &repo.join("maps").join(&nombre));
+    }
+    for nombre in listar_carpeta(&repo.join("tiles"), "png") {
+        agregar_entrada(&mut blob, &format!("tiles/{nombre}"), &repo.join("tiles").join(&nombre));
+    }
+
+    if blob.is_empty() {
+        panic!(
+            "no hay proyecto que montar en {} (se espera maps\\*.mav y tiles\\*.png)",
+            repo.display()
+        );
+    }
+
+    // Pie al final del ultimo sector de la zona (rellenando con ceros).
+    let largo = (blob.len() + 8).div_ceil(SECTOR) * SECTOR;
+    if largo > BLOB_MAX {
+        panic!(
+            "el proyecto del editor mide {} bytes y el kernel solo carga {BLOB_MAX}",
+            largo
+        );
+    }
+    blob.resize(largo - 8, 0);
+    blob.extend_from_slice(b"LGB1");
+    blob.extend_from_slice(&(largo as u32).to_le_bytes());
+    blob
+}
+
+/// Anade una entrada al blob (cabecera + nombre + datos).
+fn agregar_entrada(blob: &mut Vec<u8>, nombre: &str, ruta: &Path) {
+    let datos = fs::read(ruta)
+        .unwrap_or_else(|e| panic!("no se pudo leer {} ({}): {e}", ruta.display(), nombre));
+    println!("loboswolfos: blob += {} ({} bytes)", nombre, datos.len());
+    blob.extend_from_slice(&(nombre.len() as u32).to_le_bytes());
+    blob.extend_from_slice(&(datos.len() as u32).to_le_bytes());
+    blob.extend_from_slice(nombre.as_bytes());
+    blob.extend_from_slice(&datos);
+}
+
+/// Nombres de los archivos de una carpeta con esa extension, en orden
+/// alfabetico (read_dir no promete ninguno).
+fn listar_carpeta(dir: &Path, ext: &str) -> Vec<String> {
+    let entradas = fs::read_dir(dir)
+        .unwrap_or_else(|e| panic!("no se pudo abrir {} (*.{ext}): {e}", dir.display()));
+    let mut nombres: Vec<String> = entradas
+        .flatten()
+        .filter(|e| {
+            e.path()
+                .extension()
+                .map(|x| x.eq_ignore_ascii_case(ext))
+                .unwrap_or(false)
+        })
+        .filter_map(|e| e.file_name().into_string().ok())
+        .collect();
+    nombres.sort();
+    nombres
 }
 
 /// Compila el segundo tramo del arranque (`bootusb2.bin`) y lo devuelve con
@@ -452,6 +565,106 @@ fn probar(root: &Path, segundos: u64) {
             "no se pudo leer {} (¿arranco QEMU?)",
             log.display()
         ),
+    }
+}
+
+/// Prueba automatica del juego (fase 6): QEMU sin ventana con la serie a
+/// `build/serial.log` y el monitor por la entrada estandar, para mover el
+/// sprite con `sendkey` (con tiempo de retencion: la tecla queda apretada
+/// una fraccion de segundo y el juego corre varios fotogramas con ella).
+/// Al final comprueba en el registro que el mapa cargo, que el juego
+/// arranco y que el sprite se movio de su sitio de nacimiento.
+fn probar_juego(root: &Path) {
+    let qemu = find_qemu();
+    let img = root.join("loboswolfos.img");
+    let log = root.join("build").join("serial.log");
+    if log.exists() {
+        fs::remove_file(&log).expect("no se pudo borrar el registro anterior");
+    }
+
+    let mut cmd = Command::new(&qemu);
+    cmd.arg("-m")
+        .arg("256")
+        .arg("-boot")
+        .arg("order=c")
+        .arg("-drive")
+        .arg(format!(
+            "if=ide,index=0,media=disk,format=raw,file={}",
+            img.display()
+        ))
+        .arg("-serial")
+        .arg(format!("file:{}", log.display()))
+        .arg("-monitor")
+        .arg("stdio")
+        .arg("-display")
+        .arg("none")
+        .arg("-no-reboot");
+
+    println!("loboswolfos: probando el juego sin ventana...");
+    let mut hijo = cmd
+        .stdin(Stdio::piped())
+        .spawn()
+        .expect("no se pudo ejecutar QEMU");
+    let mut monitor = hijo.stdin.take().expect("sin entrada para el monitor de QEMU");
+
+    // Arranque: kernel, modo VBE, lectura del blob y decodificado de los
+    // tiles (todo por la serie antes de este plazo).
+    std::thread::sleep(Duration::from_secs(8));
+
+    // Mover el sprite en las cuatro direcciones, 300 ms apretada cada una
+    // (a 60 fotogramas/s son ~18 pasos de 3 pixeles). Si una direccion
+    // esta tapada por un muro, el juego desliza en los otros ejes.
+    for tecla in ["right", "down", "left", "up"] {
+        if writeln!(monitor, "sendkey {tecla} 300").is_err() {
+            eprintln!("loboswolfos: el monitor de QEMU se cerro antes de tiempo.");
+            break;
+        }
+        let _ = monitor.flush();
+        std::thread::sleep(Duration::from_millis(500));
+    }
+
+    // Espera a que el rastro por segundo deje constancia del movimiento.
+    std::thread::sleep(Duration::from_secs(3));
+    let _ = hijo.kill();
+    let _ = hijo.wait();
+    drop(monitor);
+
+    let texto = fs::read_to_string(&log)
+        .unwrap_or_else(|_| panic!("no se pudo leer {} (¿arranco QEMU?)", log.display()));
+    println!("---- build/serial.log ----");
+    println!("{texto}");
+    println!("---- fin del registro ----");
+
+    // Comprobaciones de la fase 6 (el rastro sale por la serie).
+    let mut fallos: Vec<&str> = Vec::new();
+
+    if !texto.contains("egine: mapa ") {
+        fallos.push("el mapa no cargo (falta \"egine: mapa\")");
+    }
+    if !texto.contains("egine: tile ") {
+        fallos.push("ningun tile decodifico (falta \"egine: tile\")");
+    }
+    if !texto.contains("egine: juego listo") {
+        fallos.push("el juego no arranco (falta \"egine: juego listo\")");
+    }
+
+    let rastro: Vec<&str> = texto
+        .lines()
+        .filter(|l| l.starts_with("egine: sprite en ("))
+        .collect();
+    if rastro.is_empty() {
+        fallos.push("el rastro del sprite no aparecio (falta \"egine: sprite en\")");
+    } else if rastro.iter().all(|l| *l == rastro[0]) {
+        fallos.push("el sprite no se movio (el rastro no cambia)");
+    }
+
+    if fallos.is_empty() {
+        println!("loboswolfos: prueba del juego SUPERADA.");
+    } else {
+        for fallo in &fallos {
+            eprintln!("loboswolfos: FALLO: {fallo}");
+        }
+        std::process::exit(1);
     }
 }
 

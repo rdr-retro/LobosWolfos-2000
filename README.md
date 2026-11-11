@@ -87,9 +87,11 @@ del proyecto.
 El kernel propio del proyecto — la reducción de **rocky** a lo que el juego
 necesita — vive en `loboswolfos/`, junto al motor. Arranca desde la BIOS de
 un PC (MBR + segundo tramo en ensamblador), levanta un modo VESA VBE con
-framebuffer lineal (1024x768 a 32 bits o el primero disponible), activa la
-entrada PS/2 (teclado y ratón) y el reloj de 100 Hz, y dibuja la pantalla de
-prueba del motor directamente sobre el framebuffer con la fuente ROM del BIOS.
+framebuffer lineal (640x480 a 32 bits o el primero disponible), activa la
+entrada PS/2 (teclado y ratón) y el reloj de 100 Hz, y corre el juego del
+proyecto **sobre el núcleo del motor en ensamblador x86_64** (`nucleo64.s`,
+SSE2): el mismo juego que `game.exe`, con el mapa y sus tiles PNG cargados
+del propio disco de arranque.
 
 Compilarlo y probarlo requiere Rust (destino `x86_64-unknown-none`) y QEMU.
 Desde la raíz del proyecto:
@@ -99,20 +101,25 @@ cargo run --manifest-path loboswolfos\xtask\Cargo.toml -- build
 cargo run --manifest-path loboswolfos\xtask\Cargo.toml -- run
 ```
 
-`run` abre QEMU con ventana: la pantalla de prueba muestra el círculo que
-late con el reloj, la barra de tics de la IRQ0, la última tecla pulsada y el
-cursor del ratón. Otros comandos del constructor:
+`run` abre QEMU con ventana: el juego carga el mapa del proyecto y se juega
+con los cursores o `WASD` (Escape sale). Otros comandos del constructor:
 
 - `run-serial` — QEMU sin ventana, con la serie por la consola (Ctrl+C para
   salir).
-- `probar [segundos]` — prueba automática: QEMU sin ventana volcando la
-  serie a `loboswolfos\build\serial.log`, que se imprime al terminar.
+- `probar [segundos]` — prueba automática del arranque: QEMU sin ventana
+  volcando la serie a `loboswolfos\build\serial.log`, que se imprime al
+  terminar.
+- `probar-juego` — prueba automática del juego: mueve el sprite con
+  `sendkey` desde el monitor de QEMU (sin teclado) y comprueba en la serie
+  que el mapa cargó, que los tiles decodificaron y que el sprite se movió.
 - `clean` — borra los destinos de compilación y la imagen.
 
 `build` genera `loboswolfos\loboswolfos.img`, la imagen USB de 32 MiB con el
 trazado final: MBR en LBA 0, segundo tramo en 1..4, kernel en 5.. y la zona
-del juego reservada en LBA 2048 (la usará la fase 6). El ensamblador de
-arranque es el de rocky (`bootusb.s`, `bootusb2.s`) sin cambios de trazado.
+del juego en LBA 2048 con el **blob LGB1 del proyecto** (el mismo formato
+que viaja pegado al `game.exe` compilado: `proyecto.logic`, `maps\*.mav` y
+`tiles\*.png` de la raíz del proyecto). El ensamblador de arranque es el de
+rocky (`bootusb.s`, `bootusb2.s`) sin cambios de trazado.
 
 ## Uso
 
