@@ -24,3 +24,4 @@ IDR_FREEFORM    RCDATA "recursos\\free-form select.png"
 IDR_SELRECT     RCDATA "recursos\\rectangular_sellection.png"
 
 IDR_MOTOR       RCDATA "..\\motor\\game.exe"
+IDR_KERNEL       RCDATA "..\\loboswolfos\\build\\plantilla-kernel.bin"

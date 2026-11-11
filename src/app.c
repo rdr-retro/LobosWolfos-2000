@@ -240,9 +240,9 @@ static void ejecutar_menu(int menu, int opcion) {
         case 4: accion_capa(opcion); break;
         case 5: accion_colores(opcion); break;
         case 6:
-            /* COMPILE: solo Compilar para Windows (fase 4). */
-            if (opcion == 1) dialogo_compilar_windows();
-            else app_estado("Compilar para BIOS: sin hacer todavia");
+            /* COMPILE: Compilar para BIOS (fase 7) y para Windows (fase 4). */
+            if (opcion == 0) dialogo_compilar_bios();
+            else if (opcion == 1) dialogo_compilar_windows();
             break;
         case 7:
             g.info_visible = 1;
@@ -1308,7 +1308,7 @@ int selector_mapa_en(int x, int y) {
 /* Funciones logicas del panel derecho                                  */
 /* ------------------------------------------------------------------ */
 /* Rectangulos de la seccion FUNCIONES del panel derecho. Por ahora solo
- * hay una ("egine") y todavia no hace nada. */
+ * hay una ("egine"): se arrastra al lienzo como elemento del motor. */
 static const char *MODULOS_FUNCIONES[] = { "egine" };
 
 int modulos_funciones_num(void) {

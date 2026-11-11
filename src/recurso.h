@@ -25,5 +25,6 @@
 #define IDR_SELRECT    125
 
 #define IDR_MOTOR      126 /* plantilla game.exe del motor egine */
+#define IDR_KERNEL     127 /* plantilla de arranque de loboswolfos (Compilar para BIOS) */
 
 #endif

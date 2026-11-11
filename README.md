@@ -112,6 +112,12 @@ con los cursores o `WASD` (Escape sale). Otros comandos del constructor:
 - `probar-juego` — prueba automática del juego: mueve el sprite con
   `sendkey` desde el monitor de QEMU (sin teclado) y comprueba en la serie
   que el mapa cargó, que los tiles decodificaron y que el sprite se movió.
+- `probar-imagen <ruta>` — lo mismo que `probar-juego` pero con una imagen
+  ya montada (por ejemplo, la que genera el editor con **Compilar para
+  BIOS**), sin reconstruirla.
+- `plantilla` — escribe `loboswolfos\build\plantilla-kernel.bin`: los bytes
+  de la imagen antes de la zona del juego, que el editor incrusta como
+  recurso para **Compilar para BIOS**.
 - `clean` — borra los destinos de compilación y la imagen.
 
 `build` genera `loboswolfos\loboswolfos.img`, la imagen USB de 32 MiB con el
@@ -189,14 +195,29 @@ carpeta `tiles_dir` junto al `.mav`, después junto al propio `.mav` y por
 último en la carpeta `tiles` del ejecutable.
 
 El menú **COMPILE** de la barra de menús, entre **COLORES** e **INFO**, ofrece
-**Compilar para BIOS** y **Compilar para Windows**. **Compilar para Windows**
-toma el proyecto activo — la lógica del gestor, los mapas que usan sus
-elementos y los tiles de esos mapas — y produce un `game.exe` autónomo de 32
-bits: el proyecto entero viaja incrustado dentro del propio ejecutable, así
-el juego funciona en cualquier carpeta sin necesidad de `maps/` ni `tiles/`.
-La plantilla del motor viaja dentro del propio editor, por lo que compilar
-no requiere tener MinGW instalado. **Compilar para BIOS** todavía no está
-hecha y avisa de ello al elegirla.
+**Compilar para BIOS** y **Compilar para Windows**. Ambos toman el proyecto
+activo — la lógica del gestor, los mapas que usan sus elementos y los tiles
+de esos mapas — y lo incrustan entero como archivos virtuales (blob `LGB1`).
+
+**Compilar para Windows** produce un `game.exe` autónomo de 32 bits: el
+proyecto viaja incrustado dentro del propio ejecutable, así el juego
+funciona en cualquier carpeta sin necesidad de `maps/` ni `tiles/`.
+**Compilar para BIOS** produce la imagen USB de 32 MiB de loboswolfos
+(`.img`): MBR + arranque + kernel + el proyecto en la zona de juego; escribida
+en un pendrive con `flashear.bat`, el juego arranca desde la BIOS del PC sin
+Windows. Las plantillas (el motor y el arranque del kernel) viajan dentro del
+propio editor, por lo que compilar no requiere tener MinGW ni Rust
+instalados.
+
+Para flashear la imagen a un pendrive (desde una consola con permisos de
+administrador):
+
+```bat
+flashear.bat            (o: flashear.bat <num disco> <ruta\imagen.img>)
+```
+
+El script nunca toca el disco 0, pide confirmación escrita y verifica
+releyendo el pendrive tras la escritura.
 
 ## Atajos
 
@@ -216,18 +237,21 @@ hecha y avisa de ello al elegirla.
 ## Estructura
 
 - `src/` — código fuente C y recursos de la interfaz. `src/compilar.c` es el
-  menú COMPILE (compilar el proyecto para Windows).
+  menú COMPILE (compilar el proyecto para Windows y para BIOS).
 - `motor/` — motor egine: núcleo en ensamblador 32 bits (`nucleo32.s`),
   interfaz común (`motor.h`), carga del proyecto (`activo.c`) y `juego.c`
   (`game.exe`).
 - `loboswolfos/` — kernel propio (reducción de rocky) para arrancar el juego
   desde la BIOS: arranque en ensamblador (`boot/`), kernel Rust `no_std`
   (`kernel/`) y el constructor de la imagen (`xtask/`).
+- `flashear.bat` / `flashear-usb.ps1` — flashear la imagen compilada a un
+  pendrive (porteo del `rocky-usb.ps1` de rocky).
 - `recursos/` — iconos e imágenes de las herramientas.
 - `tiles/` — carpeta donde se guardan los mosaicos.
 - `maps/` — mapas `.mav` (pantallas del juego).
 - `build.bat` / `build.ps1` — scripts de compilación. El del editor compila
-  primero el motor, porque su plantilla viaja incrustada como recurso.
+  primero el motor y el kernel, porque sus plantillas viajan incrustadas
+  como recursos.
 
 ## Licencia
 

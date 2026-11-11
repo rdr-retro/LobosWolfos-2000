@@ -45,6 +45,13 @@ echo Compilando el motor egine (plantilla del menu COMPILE)...
 call "%AQUI%motor\build.bat" "%MINGW%"
 if errorlevel 1 goto error
 
+rem Lo mismo con la plantilla de arranque del kernel loboswolfos (menu
+rem COMPILE, "Compilar para BIOS", fase 7): el xtask la escribe en
+rem loboswolfos\build\plantilla-kernel.bin y windres la incrusta.
+echo Compilando el kernel loboswolfos (plantilla del menu COMPILE)...
+cargo run --manifest-path "%AQUI%loboswolfos\xtask\Cargo.toml" -- plantilla
+if errorlevel 1 goto error
+
 rem windres falla con rutas absolutas que contienen espacios: usar rutas relativas.
 pushd "%AQUI%"
 echo Compilando recursos...

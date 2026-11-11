@@ -13,6 +13,13 @@
 //!
 //! Basado en el `xtask` de rocky; el trazado de la imagen y el bloque RKYCFG
 //! son identicos para no tocar el ensamblador de arranque.
+//!
+//! `plantilla` escribe solo la parte de arranque de la imagen (todo lo que
+//! va antes de la zona del juego) en `build/plantilla-kernel.bin`: es la
+//! plantilla que el editor incrusta como recurso `IDR_KERNEL` para el menu
+//! COMPILE, "Compilar para BIOS" (fase 7), igual que `motor/game.exe` lo es
+//! para "Compilar para Windows". `probar-imagen <ruta>` prueba una imagen
+//! ya montada (la que genera el editor) sin reconstruirla.
 
 use std::env;
 use std::fs;
@@ -81,22 +88,41 @@ fn main() {
             build(&root);
             probar_juego(&root);
         }
+        // Prueba de una imagen ya montada (fase 7): la que genera el
+        // editor con "Compilar para BIOS". Igual que probar-juego, pero
+        // sin reconstruir nada: la ruta va tal cual (relativa al
+        // directorio desde el que se llama).
+        "probar-imagen" => {
+            let ruta = args.get(2).map(String::as_str).unwrap_or_else(|| {
+                eprintln!("uso: xtask probar-imagen <ruta de la imagen>");
+                std::process::exit(1);
+            });
+            probar_imagen(&root, Path::new(ruta));
+        }
+        // Plantilla del kernel para el editor (fase 7): los bytes de la
+        // imagen antes de la zona del juego, que el editor incrusta como
+        // recurso IDR_KERNEL y completa con el blob del proyecto.
+        "plantilla" => plantilla(&root),
         "clean" => clean(&root),
         other => {
             eprintln!(
-                "uso: xtask [build|run|run-serial|probar [segundos]|probar-juego|clean] (recibi '{other}')"
+                "uso: xtask [build|run|run-serial|probar [segundos]|probar-juego|probar-imagen <ruta>|plantilla|clean] (recibi '{other}')"
             );
             std::process::exit(1);
         }
     }
 }
 
-/// Compila todo y monta `loboswolfos.img`. Devuelve su ruta.
-fn build(root: &Path) -> PathBuf {
+/// Compila los dos tramos del arranque y el kernel, y los devuelve ya
+/// montados como la **plantilla** de la imagen: los bytes desde el LBA 0
+/// hasta el final del kernel, es decir, todo lo que va antes de la zona
+/// del juego. El MBR lleva escrita su tabla de particiones y el bloque
+/// RKYCFG del segundo tramo queda parcheado con los sectores del kernel
+/// y la zona del juego. Devuelve tambien los sectores que ocupa el
+/// kernel (para los mensajes).
+fn compilar_base(root: &Path, objcopy: &Path) -> (Vec<u8>, usize) {
     let out = root.join("build");
     fs::create_dir_all(&out).expect("no se pudo crear build/");
-
-    let objcopy = find_llvm_objcopy();
 
     // --- Kernel: binario plano que vive en 1 MiB ---
     let kernel_elf = compile_crate(
@@ -106,7 +132,7 @@ fn build(root: &Path) -> PathBuf {
         &root.join("kernel/kernel.ld"),
     );
     let kernel_bin = out.join("kernel.bin");
-    objcopy_binary(&objcopy, &kernel_elf, &kernel_bin);
+    objcopy_binary(objcopy, &kernel_elf, &kernel_bin);
     let kernel = fs::read(&kernel_bin).expect("sin kernel.bin");
 
     let kernel_sectores = kernel.len().div_ceil(SECTOR);
@@ -120,7 +146,7 @@ fn build(root: &Path) -> PathBuf {
     }
 
     // --- Segundo tramo: el que carga el kernel y entra en modo largo ---
-    let mut tramo2 = compilar_tramo2(root, &objcopy);
+    let mut tramo2 = compilar_tramo2(root, objcopy);
     // Bloque de configuracion: sectores del kernel y zona del juego (en
     // rocky estos campos apuntaban al volumen Estrato del disco).
     parchear_cfg(
@@ -133,7 +159,7 @@ fn build(root: &Path) -> PathBuf {
     // --- Primer tramo: el sector de arranque (512 bytes) ---
     let bootusb_elf = compile_crate(root, "boot", "bootusb", &root.join("boot/bootusb.ld"));
     let bootusb_bin = out.join("bootusb.bin");
-    objcopy_binary(&objcopy, &bootusb_elf, &bootusb_bin);
+    objcopy_binary(objcopy, &bootusb_elf, &bootusb_bin);
     let mut boot = fs::read(&bootusb_bin).expect("sin bootusb.bin");
     if boot.len() != SECTOR {
         panic!(
@@ -151,16 +177,27 @@ fn build(root: &Path) -> PathBuf {
         }],
     );
 
+    // La plantilla es la concatenacion exacta de las tres piezas: MBR
+    // (512 bytes), segundo tramo (4 sectores, ya rellenado) y kernel
+    // detras. En la imagen ocupan LBA 0, LBA 1..4 y LBA 5.., que son
+    // posiciones contiguas, asi que pegarlas equivale al trazado.
+    let mut plantilla = Vec::with_capacity(boot.len() + tramo2.len() + kernel.len());
+    plantilla.extend_from_slice(&boot);
+    plantilla.extend_from_slice(&tramo2);
+    plantilla.extend_from_slice(&kernel);
+    (plantilla, kernel_sectores)
+}
+
+/// Compila todo y monta `loboswolfos.img`. Devuelve su ruta.
+fn build(root: &Path) -> PathBuf {
+    let objcopy = find_llvm_objcopy();
+    let (plantilla, kernel_sectores) = compilar_base(root, &objcopy);
+
     // --- La imagen ---
     let mut img = vec![0u8; IMAGEN_SECTORES * SECTOR];
-    // LBA 0: primer tramo (ya lleva la tabla de particiones).
-    img[..SECTOR].copy_from_slice(&boot);
-    // LBA 1..: segundo tramo (el que carga el kernel).
-    let toff = TRAMO2_LBA as usize * SECTOR;
-    img[toff..toff + tramo2.len()].copy_from_slice(&tramo2);
-    // LBA 5..: el kernel, tal cual.
-    let koff = KERNEL_LBA as usize * SECTOR;
-    img[koff..koff + kernel.len()].copy_from_slice(&kernel);
+    // LBA 0..: arranque y kernel. La plantilla ya trae el MBR con su
+    // tabla de particiones, el segundo tramo parcheado y el kernel.
+    img[..plantilla.len()].copy_from_slice(&plantilla);
     // LBA 2048..: la zona del juego con el blob LGB1 del proyecto.
     let blob = montar_blob(&root);
     let joff = JUEGO_LBA as usize * SECTOR;
@@ -177,14 +214,33 @@ fn build(root: &Path) -> PathBuf {
     let path = root.join("loboswolfos.img");
     fs::write(&path, &img).expect("no se pudo escribir loboswolfos.img");
     println!(
-        "loboswolfos: imagen {} ({} bytes; kernel {}, {} sectores; juego {} sectores).",
+        "loboswolfos: imagen {} ({} bytes; kernel {} sectores; juego {} sectores).",
         path.display(),
         img.len(),
-        kernel_bin.display(),
         kernel_sectores,
         blob.len() / SECTOR
     );
     path
+}
+
+/// Escribe la plantilla del kernel en `build/plantilla-kernel.bin`: la
+/// parte de arranque de la imagen, sin la zona del juego (fase 7).
+///
+/// El editor la incrusta como recurso `IDR_KERNEL` (menu COMPILE,
+/// "Compilar para BIOS") y completa el resto de la imagen el solo:
+/// ceros hasta el LBA 2048, el blob LGB1 del proyecto activo y ceros
+/// hasta los 32 MiB, igual que `montar_blob` hace aqui.
+fn plantilla(root: &Path) {
+    let objcopy = find_llvm_objcopy();
+    let (bytes, kernel_sectores) = compilar_base(root, &objcopy);
+    let path = root.join("build").join("plantilla-kernel.bin");
+    fs::write(&path, &bytes).expect("no se pudo escribir la plantilla del kernel");
+    println!(
+        "loboswolfos: plantilla {} ({} bytes; kernel {} sectores; zona del juego en LBA {JUEGO_LBA}).",
+        path.display(),
+        bytes.len(),
+        kernel_sectores
+    );
 }
 
 /* ------------------------------------------------------------------ */
@@ -568,16 +624,28 @@ fn probar(root: &Path, segundos: u64) {
     }
 }
 
-/// Prueba automatica del juego (fase 6): QEMU sin ventana con la serie a
-/// `build/serial.log` y el monitor por la entrada estandar, para mover el
-/// sprite con `sendkey` (con tiempo de retencion: la tecla queda apretada
-/// una fraccion de segundo y el juego corre varios fotogramas con ella).
-/// Al final comprueba en el registro que el mapa cargo, que el juego
-/// arranco y que el sprite se movio de su sitio de nacimiento.
+/// Prueba automatica del juego (fase 6): arranca la imagen sin ventana
+/// con la serie a `build/serial.log` y el monitor por la entrada
+/// estandar, para mover el sprite con `sendkey` (con tiempo de retencion:
+/// la tecla queda apretada una fraccion de segundo y el juego corre
+/// varios fotogramas con ella). Al final comprueba en el registro que el
+/// mapa cargo, que el juego arranco y que el sprite se movio de su sitio
+/// de nacimiento.
 fn probar_juego(root: &Path) {
+    probar_imagen(root, &root.join("loboswolfos.img"));
+}
+
+/// Lo mismo que `probar_juego` pero con la imagen que se le pase (fase
+/// 7): sirve para probar la que genera el editor con "Compilar para
+/// BIOS" sin pasar por `build`.
+fn probar_imagen(root: &Path, img: &Path) {
     let qemu = find_qemu();
-    let img = root.join("loboswolfos.img");
     let log = root.join("build").join("serial.log");
+    fs::create_dir_all(root.join("build")).expect("no se pudo crear build/");
+    if !img.exists() {
+        eprintln!("loboswolfos: no encuentro la imagen {}.", img.display());
+        std::process::exit(1);
+    }
     if log.exists() {
         fs::remove_file(&log).expect("no se pudo borrar el registro anterior");
     }

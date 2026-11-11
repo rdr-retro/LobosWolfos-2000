@@ -1,4 +1,4 @@
-/* compilar.c - menu COMPILE: compilar el proyecto para Windows (fase 4).
+/* compilar.c - menu COMPILE: compilar el proyecto (fases 4 y 7).
  *
  * "Compilar para Windows" produce un game.exe autonomo: la plantilla
  * del motor (motor/game.exe, que viaja incrustada en el editor como
@@ -6,7 +6,15 @@
  *
  *   [exe del motor][entradas del blob]["LGB1" u32 tam_blob u32]
  *
- * El blob lleva el proyecto entero como archivos virtuales:
+ * "Compilar para BIOS" produce la imagen USB de loboswolfos (32 MiB):
+ * la plantilla de arranque (MBR + segundo tramo + kernel, incrustada
+ * como recurso IDR_KERNEL) con el proyecto en la zona de juego:
+ *
+ *   [plantilla][ceros hasta LBA 2048][blob rellenado a sector]
+ *   ["LGB1" u32 largo total][ceros hasta 32 MiB]
+ *
+ * En los dos casos el blob lleva el proyecto entero como archivos
+ * virtuales:
  *   - "proyecto.logic": la logica activa del gestor
  *   - "maps\<nombre>.mav": cada mapa referenciado por un elemento
  *   - "<tile>.png": cada imagen que usan esos mapas
@@ -14,14 +22,27 @@
  * Al arrancar, el motor lee el pie LGB1 (activo_blob_cargar de
  * motor/activo.c) y carga el proyecto del propio ejecutable, asi el
  * juego compilado funciona en cualquier carpeta, sin maps/ ni tiles/.
- * El formato de las entradas (u32 largo_nombre, u32 largo_datos,
- * nombre, datos) es el mismo que parsea el motor.
+ * El kernel hace lo mismo sector a sector con el pie de la zona de
+ * juego (activo.rs), que ademas cuenta el blob entero (pie incluido) y
+ * queda al final del ultimo sector. El formato de las entradas
+ * (u32 largo_nombre, u32 largo_datos, nombre, datos) es el mismo que
+ * parsean el motor y el kernel; solo cambia el separador de la carpeta
+ * de mapas: "\\" para el motor de Windows y "/" para el kernel, que
+ * busca las entradas con barra normal.
  */
 #include "app.h"
 #include "recurso.h"
 
 #define BLOB_MAGICO "LGB1"
 #define COMPILAR_IMAGENES_MAX 256
+
+/* Trazado de la imagen USB (el mismo que monta el xtask de loboswolfos,
+ * ver montar_blob): la zona del juego empieza en el LBA 2048 y la imagen
+ * entera mide 32 MiB. El tope del blob es BLOB_MAX de activo.rs. */
+#define BIOS_SECTOR        512
+#define BIOS_JUEGO_LBA     2048
+#define BIOS_IMAGEN_BYTES  (32 * 1024 * 1024)
+#define BIOS_BLOB_MAX      (1024 * 1024)
 
 #pragma pack(push, 1)
 typedef struct {
@@ -173,30 +194,27 @@ static int resolver_tile(const char *ruta_mav, const char *tiles_dir,
 }
 
 /* ------------------------------------------------------------------ */
-/* Compilacion                                                         */
+/* Reunion del proyecto                                                 */
 /* ------------------------------------------------------------------ */
 
-/* Compila el proyecto activo en un game.exe de Windows de 32 bits:
- * plantilla del motor mas el blob del proyecto al final. Devuelve 1 si
- * se escribio el archivo; si no, compilar_error_msj explica el fallo. */
-int compilar_windows(const char *ruta) {
+/* Reune el proyecto activo como entradas del blob (los pasos 1-3 de la
+ * compilacion): "proyecto.logic", cada mapa que usan los elementos del
+ * gestor y los PNG de sus tiles, resueltos con el mismo orden de busqueda
+ * del motor. El separador va entre la carpeta y el nombre de los mapas:
+ * '\\' para el game.exe de Windows y '/' para el kernel loboswolfos
+ * (fase 7), que busca las entradas con barra normal. Los tiles van con
+ * su nombre base en los dos destinos: el motor los registra asi y el
+ * kernel cae al nombre base cuando no ve la ruta con la carpeta.
+ * Devuelve 0 y explica el fallo en compilar_error_msj; el llamador
+ * libera blob->datos en cualquier caso. */
+static int compilar_reunir(Bloque *blob, char separador) {
     char maps_nombres[MODULOS_MAX][MAPS_NOMBRE_MAX];
     char imagenes[COMPILAR_IMAGENES_MAX][64];
     int num_maps = 0, num_imagenes = 0;
-    Bloque blob;
     char *logic_datos = NULL;
     int logic_largo = 0;
-    HRSRC rec;
-    HGLOBAL carga;
-    const void *exe_datos;
-    DWORD exe_largo;
-    FILE *f;
-    u32 blob_largo;
     int ok;
     int i, j;
-
-    if (!ruta || !ruta[0]) return 0;
-    memset(&blob, 0, sizeof(blob));
 
     /* 1. Mapas distintos que usan los elementos del gestor. */
     for (i = 0; i < g.num_modulos; i++) {
@@ -224,7 +242,7 @@ int compilar_windows(const char *ruta) {
                   "No hay memoria para serializar la logica.");
         return 0;
     }
-    ok = blob_entrada(&blob, "proyecto.logic", logic_datos, logic_largo);
+    ok = blob_entrada(blob, "proyecto.logic", logic_datos, logic_largo);
     free(logic_datos);
     if (!ok) {
         formatear(compilar_error_msj, sizeof(compilar_error_msj),
@@ -247,17 +265,16 @@ int compilar_windows(const char *ruta) {
             formatear(compilar_error_msj, sizeof(compilar_error_msj),
                       "No se pudo leer el mapa %s de la carpeta maps.",
                       maps_nombres[i]);
-            free(blob.datos);
             return 0;
         }
-        formatear(clave, sizeof(clave), "%s\\%s", CARPETA_MAPS_TEXTO,
-                  maps_nombres[i]);
-        ok = blob_entrada(&blob, clave, contenido, largo);
+        formatear(clave, sizeof(clave), "%s%c%s", CARPETA_MAPS_TEXTO,
+                  separador, maps_nombres[i]);
+        ok = blob_entrada(blob, clave, contenido, largo);
         if (ok) {
             if (!extraer_cadena_lua(contenido, "tiles_dir", tiles_dir,
                                      sizeof(tiles_dir)) || !tiles_dir[0])
                 recortar_texto(tiles_dir, CARPETA_TILES_TEXTO,
-                               sizeof(tiles_dir));
+                                sizeof(tiles_dir));
             n_imgs = mav_imagenes(contenido, imgs_mapa,
                                   COMPILAR_IMAGENES_MAX);
         }
@@ -265,7 +282,6 @@ int compilar_windows(const char *ruta) {
         if (!ok) {
             formatear(compilar_error_msj, sizeof(compilar_error_msj),
                       "No hay memoria para montar el proyecto.");
-            free(blob.datos);
             return 0;
         }
 
@@ -287,7 +303,6 @@ int compilar_windows(const char *ruta) {
                           "No se encontro la imagen del tile %s\n"
                           "(usada por el mapa %s).",
                           img, maps_nombres[i]);
-                free(blob.datos);
                 return 0;
             }
             if (!leer_archivo(ruta_img, &datos_img, &largo_img) ||
@@ -295,22 +310,48 @@ int compilar_windows(const char *ruta) {
                 formatear(compilar_error_msj,
                           sizeof(compilar_error_msj),
                           "No se pudo leer la imagen del tile %s.", img);
-                free(blob.datos);
                 return 0;
             }
-            ok = blob_entrada(&blob, nombre_base(img), datos_img,
+            ok = blob_entrada(blob, nombre_base(img), datos_img,
                               largo_img);
             free(datos_img);
             if (!ok) {
                 formatear(compilar_error_msj,
                           sizeof(compilar_error_msj),
                           "No hay memoria para montar el proyecto.");
-                free(blob.datos);
                 return 0;
             }
             if (num_imagenes < COMPILAR_IMAGENES_MAX)
                 recortar_texto(imagenes[num_imagenes++], img, 64);
         }
+    }
+    return 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* Compilacion                                                         */
+/* ------------------------------------------------------------------ */
+
+/* Compila el proyecto activo en un game.exe de Windows de 32 bits:
+ * plantilla del motor mas el blob del proyecto al final. Devuelve 1 si
+ * se escribio el archivo; si no, compilar_error_msj explica el fallo. */
+int compilar_windows(const char *ruta) {
+    Bloque blob;
+    HRSRC rec;
+    HGLOBAL carga;
+    const void *exe_datos;
+    DWORD exe_largo;
+    FILE *f;
+    u32 blob_largo;
+    int ok;
+
+    if (!ruta || !ruta[0]) return 0;
+    memset(&blob, 0, sizeof(blob));
+
+    /* 1-3. El proyecto activo como entradas del blob. */
+    if (!compilar_reunir(&blob, '\\')) {
+        free(blob.datos);
+        return 0;
     }
 
     /* 4. Plantilla del motor, incrustada como recurso del editor. */
@@ -348,6 +389,109 @@ int compilar_windows(const char *ruta) {
     return 1;
 }
 
+/* Escribe n bytes de ceros (el relleno entre las zonas de la imagen). */
+static int escribir_ceros(FILE *f, int n) {
+    static const unsigned char ceros[64 * 1024];
+    while (n > 0) {
+        int trozo = n > (int)sizeof(ceros) ? (int)sizeof(ceros) : n;
+        if (fwrite(ceros, 1, (size_t)trozo, f) != (size_t)trozo) return 0;
+        n -= trozo;
+    }
+    return 1;
+}
+
+/* Compila el proyecto activo en la imagen USB de loboswolfos (menu
+ * COMPILE, "Compilar para BIOS", fase 7): la plantilla de arranque
+ * (MBR + tramo 2 + kernel, incrustada como recurso IDR_KERNEL) seguida
+ * de la zona del juego con el blob LGB1 del proyecto y ceros hasta los
+ * 32 MiB.
+ *
+ * El pie del blob queda al final del ultimo sector de la zona y cuenta
+ * el blob entero (pie y relleno incluidos), que es lo que el kernel
+ * compara sector a sector al arrancar (activo.rs). Flasheando la
+ * imagen a un pendrive (flashear.bat) el juego arranca desde la BIOS
+ * sin Windows. Devuelve 1 si se escribio el archivo; si no,
+ * compilar_error_msj explica el fallo. */
+int compilar_bios(const char *ruta) {
+    Bloque blob;
+    HRSRC rec;
+    HGLOBAL carga;
+    const void *arranque_datos;
+    DWORD arranque_largo;
+    FILE *f;
+    u32 largo_total;
+    int zona_juego;
+    int ok;
+
+    if (!ruta || !ruta[0]) return 0;
+    memset(&blob, 0, sizeof(blob));
+
+    /* 1-3. El proyecto activo como entradas del blob (barra normal,
+     * que es como las busca el kernel). */
+    if (!compilar_reunir(&blob, '/')) {
+        free(blob.datos);
+        return 0;
+    }
+
+    /* 4. Pie al final del ultimo sector: relleno con ceros hasta el
+     * multiplo de sector y largo total (pie incluido), que es lo que el
+     * kernel compara al leer la zona. */
+    largo_total = (u32)((blob.largo + 8 + BIOS_SECTOR - 1) /
+                        BIOS_SECTOR * BIOS_SECTOR);
+    if ((int)largo_total > BIOS_BLOB_MAX) {
+        formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                  "El proyecto compilado mide %d KB y la zona de juego\n"
+                  "del kernel loboswolfos admite %d KB.",
+                  ((int)largo_total + 1023) / 1024, BIOS_BLOB_MAX / 1024);
+        free(blob.datos);
+        return 0;
+    }
+
+    /* 5. Plantilla del arranque, incrustada como recurso del editor. */
+    rec = FindResourceA(NULL, MAKEINTRESOURCEA(IDR_KERNEL), RT_RCDATA);
+    carga = rec ? LoadResource(NULL, rec) : NULL;
+    arranque_datos = carga ? LockResource(carga) : NULL;
+    arranque_largo = carga ? SizeofResource(NULL, rec) : 0;
+    if (!arranque_datos || arranque_largo == 0) {
+        formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                  "No se encontro la plantilla del kernel (IDR_KERNEL).");
+        free(blob.datos);
+        return 0;
+    }
+    if ((int)arranque_largo > BIOS_JUEGO_LBA * BIOS_SECTOR) {
+        formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                  "La plantilla del kernel no cabe en la zona de arranque.");
+        free(blob.datos);
+        return 0;
+    }
+
+    /* 6. Escribir la imagen: plantilla, ceros hasta la zona del juego,
+     * blob con su pie y ceros hasta los 32 MiB. */
+    f = fopen(ruta, "wb");
+    if (!f) {
+        formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                  "No se pudo crear el archivo %s.", ruta);
+        free(blob.datos);
+        return 0;
+    }
+    zona_juego = BIOS_JUEGO_LBA * BIOS_SECTOR;
+    ok = fwrite(arranque_datos, 1, arranque_largo, f) == arranque_largo &&
+         escribir_ceros(f, zona_juego - (int)arranque_largo) &&
+         fwrite(blob.datos, 1, (size_t)blob.largo, f) == (size_t)blob.largo &&
+         escribir_ceros(f, (int)largo_total - 8 - blob.largo) &&
+         fwrite(BLOB_MAGICO, 1, 4, f) == 4 &&
+         fwrite(&largo_total, 1, 4, f) == 4 &&
+         escribir_ceros(f, BIOS_IMAGEN_BYTES - zona_juego - (int)largo_total);
+    fclose(f);
+    free(blob.datos);
+    if (!ok) {
+        formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                  "Fallo al escribir la imagen %s.", ruta);
+        return 0;
+    }
+    return 1;
+}
+
 /* Dialogo del menu COMPILE: elige donde guardar el game.exe compilado. */
 void dialogo_compilar_windows(void) {
     char ruta[MAX_PATH];
@@ -366,6 +510,29 @@ void dialogo_compilar_windows(void) {
     if (!GetSaveFileNameA(&ofn)) return;
     if (compilar_windows(ruta))
         app_estado("Juego compilado: %s", ruta);
+    else
+        dialogo_error(compilar_error_msj);
+    app_invalidar();
+}
+
+/* Dialogo del menu COMPILE: elige donde guardar la imagen USB. */
+void dialogo_compilar_bios(void) {
+    char ruta[MAX_PATH];
+    OPENFILENAMEA ofn;
+
+    strcpy(ruta, "loboswolfos.img");
+    memset(&ofn, 0, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = g.hwnd;
+    ofn.lpstrFilter = "Imagen USB (*.img)\0*.img\0Todos los archivos\0*.*\0\0";
+    ofn.lpstrFile = ruta;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrDefExt = "img";
+    ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY |
+                OFN_OVERWRITEPROMPT;
+    if (!GetSaveFileNameA(&ofn)) return;
+    if (compilar_bios(ruta))
+        app_estado("Imagen USB compilada: %s (flashea con flashear.bat)", ruta);
     else
         dialogo_error(compilar_error_msj);
     app_invalidar();

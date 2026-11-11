@@ -57,6 +57,13 @@ Push-Location (Join-Path $Aqui "motor")
 if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Error "fallo la compilacion del motor"; exit 1 }
 Pop-Location
 
+# Lo mismo con la plantilla de arranque del kernel loboswolfos (menu
+# COMPILE, "Compilar para BIOS", fase 7): el xtask la escribe en
+# loboswolfos\build\plantilla-kernel.bin y windres la incrusta.
+Write-Host "Compilando el kernel loboswolfos (plantilla del menu COMPILE)..." -ForegroundColor Cyan
+& cargo run --manifest-path (Join-Path $Aqui "loboswolfos\xtask\Cargo.toml") -- plantilla
+if ($LASTEXITCODE -ne 0) { Write-Error "fallo la compilacion del kernel"; exit 1 }
+
 Write-Host "Compilando recursos..." -ForegroundColor Cyan
 Push-Location $Aqui
 & $Windres -I src -i src\recurso.rc -o obj\recurso.o --codepage=1252

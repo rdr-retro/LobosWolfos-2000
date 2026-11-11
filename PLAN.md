@@ -83,8 +83,10 @@ PS/2, disco y ejecutables propios. De rocky se reutiliza:
 - `kernel/src/*.s` (`bios.s`, `interrupts.s`, `start.s`): el estilo de
   ensamblador del sistema.
 - Drivers de framebuffer/VGA/VBE, PS/2 (teclado y ratón) y disco ATA.
-- `flashusb/` + `flashear.bat`: la forma de flashear el pendrive desde
-  Windows con la imagen.
+- El flasheo del pendrive: rocky ya no tiene `flashusb/` (solo queda el
+  `flashear.bat` que lo llamaba), así que la referencia es su script
+  `rocky-usb.ps1`; este repo lleva el porteo como `flashear.bat` +
+  `flashear-usb.ps1` (fase 7).
 
 loboswolfos es la **reducción** de rocky al juego: sin shell completo, sin
 escritorio Kira; solo lo necesario para levantar framebuffer + entrada +
@@ -96,10 +98,11 @@ escritorio **no se toca**: se trabaja sobre una copia.
 - **Compilar para Windows**: el editor toma el proyecto activo y el núcleo
   de 32 bits del motor y produce `game.exe` (Win32, 32 bits). Los mapas y
   tiles del proyecto se incrustan en el ejecutable.
-- **Compilar para BIOS**: el editor toma el proyecto, el núcleo x86_64 del
-  motor y el kernel loboswolfos, y produce una **imagen de disco USB** con
-  MBR + loader + kernel + juego. Flasheándola a un pendrive, el juego
-  arranca directamente desde la BIOS del PC.
+- **Compilar para BIOS**: el editor toma el proyecto activo y la plantilla
+  de arranque del kernel loboswolfos (incrustada como recurso) y produce
+  una **imagen de disco USB** de 32 MiB con MBR + loader + kernel + juego,
+  con un clic del menú COMPILE. Flasheándola a un pendrive con
+  `flashear.bat`, el juego arranca directamente desde la BIOS del PC.
 
 ## 3. Fases
 
@@ -112,7 +115,7 @@ escritorio **no se toca**: se trabaja sobre una copia.
 | 4 | **Compilar para Windows** desde el menú COMPILE: genera `game.exe` con el proyecto actual | **Hecho (10-11-2026)** |
 | 5 | Kernel loboswolfos: copia reducida de rocky que arranca por USB con framebuffer y entrada | **Hecho (10-11-2026)** |
 | 6 | Núcleo ASM x86_64 + el mismo juego corriendo sobre loboswolfos | **Hecho (11-11-2026)** |
-| 7 | **Compilar para BIOS** desde el menú COMPILE: genera la imagen USB flasheable (y flashearla con la herramienta de rocky como guía) | Pendiente |
+| 7 | **Compilar para BIOS** desde el menú COMPILE: genera la imagen USB flasheable (y flashearla con la herramienta de rocky como guía) | **Hecho (11-11-2026)** |
 | 8 | Más botones FUNCIONES arrastrables con **código editable dentro del botón**: al escribir el código, el botón cambia su aspecto; el código pasa a formar parte del juego compilado | Pendiente |
 
 Orden de trabajo por defecto: 1 → 2 → 3 → 4 (primero Windows, que es
@@ -254,6 +257,29 @@ el motor ya compila.
   retencion en ms) y comprueba en el registro que el mapa cargo, que
   decodifico los tiles, que el juego arranco y que el rastro
   `egine: sprite en (x, y)` cambia.
+- **11-11-2026 (fase 7)** — La plantilla de arranque viaja incrustada en
+  el editor como recurso RCDATA (`IDR_KERNEL`), igual que
+  `motor/game.exe`: el xtask la escribe con el comando `plantilla` en
+  `loboswolfos/build/plantilla-kernel.bin` (los bytes de la imagen antes
+  de la zona del juego: MBR con su tabla, tramo 2 con el RKYCFG
+  parcheado y kernel), y `build.bat`/`build.ps1` la generan antes de los
+  recursos porque windres la lee. Compilar es copiar la plantilla,
+  ceros hasta el LBA 2048, el blob con su pie y ceros hasta los 32 MiB.
+- **11-11-2026 (fase 7)** — La reunion del proyecto (`compilar_reunir`)
+  se comparte entre los dos destinos: mismo blob LGB1 con
+  `proyecto.logic`, los `.mav` referenciados y sus tiles; solo cambia el
+  separador de la carpeta de mapas (`\` para el motor de Windows, `/`
+  para el kernel). El pie BIOS queda al final del ultimo sector con el
+  largo total (relleno incluido), como el kernel lo compara.
+- **11-11-2026 (fase 7)** — Flasheo portado de rocky: `flashear.bat` +
+  `flashear-usb.ps1` en la raiz del repo (el `flashusb/` de rocky ya no
+  existe; el porteo sigue su `rocky-usb.ps1`). Se eleva solo, nunca toca
+  el disco 0, pide BORRAR en mayusculas, desmonta todos los volumenes
+  del disco, escribe en crudo con reintentos y verifica releyendo.
+- **11-11-2026 (fase 7)** — Flags de prueba: `--compilar-bios <ruta>`
+  compila la imagen sin dialogo (como `--compilar-windows`) y el xtask
+  tiene `probar-imagen <ruta>` para arrancar en QEMU una imagen ya
+  montada (la del editor) sin reconstruirla.
 
 ## 5. Pendiente de decidir
 

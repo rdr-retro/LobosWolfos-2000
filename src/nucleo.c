@@ -1504,6 +1504,22 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 if (comp_ruta[0]) compilar_windows(comp_ruta);
             }
         }
+        /* Compilacion directa para BIOS (pruebas sin dialogo, fase 7):
+         * escribe la imagen USB del proyecto activo en la ruta dada. */
+        {
+            char *bios_arg = arg_valor(cmd, "--compilar-bios");
+            if (bios_arg) {
+                char bios_ruta[MAX_PATH];
+                int n = 0;
+                while (bios_arg[n] && bios_arg[n] != ' ' &&
+                       bios_arg[n] != '\t' && n < MAX_PATH - 1) {
+                    bios_ruta[n] = bios_arg[n];
+                    n++;
+                }
+                bios_ruta[n] = 0;
+                if (bios_ruta[0]) compilar_bios(bios_ruta);
+            }
+        }
         /* Posicion final del raton: actualiza tambien el hover, como un
          * movimiento real, para capturar resaltes y cursores. */
         if (raton_arg) {
