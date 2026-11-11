@@ -97,7 +97,7 @@ fn main() {
                 eprintln!("uso: xtask probar-imagen <ruta de la imagen>");
                 std::process::exit(1);
             });
-            probar_imagen(&root, Path::new(ruta));
+            probar_imagen(&root, Path::new(ruta), false);
         }
         // Plantilla del kernel para el editor (fase 7): los bytes de la
         // imagen antes de la zona del juego, que el editor incrusta como
@@ -274,6 +274,11 @@ fn montar_blob(root: &Path) -> Vec<u8> {
     let logic = repo.join("proyecto.logic");
     if logic.is_file() {
         agregar_entrada(&mut blob, "proyecto.logic", &logic);
+    } else {
+        // Sin logica del editor en el raiz: una de prueba con un boton
+        // FUNCIONES (fase 8), para que las pruebas automaticas ejerzan
+        // el lobo tambien en la BIOS.
+        agregar_entrada_datos(&mut blob, "proyecto.logic", &logica_de_prueba(repo));
     }
     for nombre in listar_carpeta(&repo.join("maps"), "mav") {
         agregar_entrada(&mut blob, &format!("maps/{nombre}"), &repo.join("maps").join(&nombre));
@@ -307,11 +312,68 @@ fn montar_blob(root: &Path) -> Vec<u8> {
 fn agregar_entrada(blob: &mut Vec<u8>, nombre: &str, ruta: &Path) {
     let datos = fs::read(ruta)
         .unwrap_or_else(|e| panic!("no se pudo leer {} ({}): {e}", ruta.display(), nombre));
+    agregar_entrada_datos(blob, nombre, &datos);
+}
+
+/// Lo mismo con los datos ya en memoria (la logica de prueba se genera
+/// al vuelo, sin tocar el disco).
+fn agregar_entrada_datos(blob: &mut Vec<u8>, nombre: &str, datos: &[u8]) {
     println!("loboswolfos: blob += {} ({} bytes)", nombre, datos.len());
     blob.extend_from_slice(&(nombre.len() as u32).to_le_bytes());
     blob.extend_from_slice(&(datos.len() as u32).to_le_bytes());
     blob.extend_from_slice(nombre.as_bytes());
-    blob.extend_from_slice(&datos);
+    blob.extend_from_slice(datos);
+}
+
+/// proyecto.logic LOGIC2 de prueba (fase 8), para cuando el raiz no
+/// tiene logica del editor: dos elementos (el primer mapa de maps\ y
+/// un boton FUNCIONES de id 1) y una funcion de codigo lobo que pasea
+/// al lobo en circulo y responde a las teclas. El kernel la carga igual
+/// que una del editor.
+fn logica_de_prueba(repo: &Path) -> Vec<u8> {
+    let mapa = listar_carpeta(&repo.join("maps"), "mav")
+        .into_iter()
+        .next()
+        .unwrap_or_default();
+    // El mismo formato que logica_guardar_memoria del editor: lineas
+    // LF, codigo crudo con su largo exacto y un separador final.
+    let codigo = "\
+# paseo autonomo del lobo (fase 8)\n\
+vel = 3\n\
+si tecla_izquierda\n\
+x = x - vel\n\
+fin\n\
+si tecla_derecha\n\
+x = x + vel\n\
+fin\n\
+si tecla_arriba\n\
+y = y - vel\n\
+fin\n\
+si tecla_abajo\n\
+y = y + vel\n\
+fin\n\
+si paso < 90\n\
+x = x + 1\n\
+sino\n\
+si paso < 180\n\
+y = y + 1\n\
+sino\n\
+paso = 0\n\
+fin\n\
+fin\n\
+paso = paso + 1\n";
+
+    let mut logic = String::new();
+    logic += "LOGIC2\n";
+    logic += "0 0\n";
+    logic += "2\n";
+    logic += &format!("0 0 200 150 1 0 \"{mapa}\" -1\n");
+    logic += "220 0 100 100 2 0 \"\" 1\n";
+    logic += "1\n";
+    logic += &format!("1 \"paseo\" {}\n", codigo.len());
+    logic += codigo;
+    logic += "\n";
+    logic.into_bytes()
 }
 
 /// Nombres de los archivos de una carpeta con esa extension, en orden
@@ -632,13 +694,16 @@ fn probar(root: &Path, segundos: u64) {
 /// mapa cargo, que el juego arranco y que el sprite se movio de su sitio
 /// de nacimiento.
 fn probar_juego(root: &Path) {
-    probar_imagen(root, &root.join("loboswolfos.img"));
+    probar_imagen(root, &root.join("loboswolfos.img"), true);
 }
 
 /// Lo mismo que `probar_juego` pero con la imagen que se le pase (fase
 /// 7): sirve para probar la que genera el editor con "Compilar para
-/// BIOS" sin pasar por `build`.
-fn probar_imagen(root: &Path, img: &Path) {
+/// BIOS" sin pasar por `build`. `exigir_lobo` (fase 8) exige ademas que
+/// los scripts lobo se hayan preparado: la imagen del constructor
+/// siempre lleva la logica de prueba, pero la del editor puede no
+/// llevar funciones.
+fn probar_imagen(root: &Path, img: &Path, exigir_lobo: bool) {
     let qemu = find_qemu();
     let log = root.join("build").join("serial.log");
     fs::create_dir_all(root.join("build")).expect("no se pudo crear build/");
@@ -724,6 +789,20 @@ fn probar_imagen(root: &Path, img: &Path) {
         fallos.push("el rastro del sprite no aparecio (falta \"egine: sprite en\")");
     } else if rastro.iter().all(|l| *l == rastro[0]) {
         fallos.push("el sprite no se movio (el rastro no cambia)");
+    }
+
+    // Comprobaciones del lobo (fase 8): ningun script puede fallar al
+    // compilar (los errores salen por la serie) y, en la imagen del
+    // constructor, tiene que haber la linea de preparacion.
+    if texto.contains("egine: lobo: error ") {
+        fallos.push("un script lobo no compilo (\"egine: lobo: error\")");
+    }
+    if exigir_lobo
+        && !texto
+            .lines()
+            .any(|l| l.starts_with("egine: lobo: ") && l.ends_with(" scripts."))
+    {
+        fallos.push("los scripts lobo no se prepararon (falta \"egine: lobo: N scripts\")");
     }
 
     if fallos.is_empty() {

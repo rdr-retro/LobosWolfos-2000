@@ -19,6 +19,7 @@
 #include <stdarg.h>
 
 #include "recurso.h"
+#include "../motor/lobo.h" /* lenguaje lobo de los botones FUNCIONES */
 
 #ifdef __cplusplus
 extern "C" {
@@ -147,7 +148,8 @@ typedef unsigned char  u8;
 #define MODULOS_IMAN           12
 #define MODULOS_REJILLA        0x001A2430u
 #define MODULOS_EJE            0x00304050u
-#define MODULOS_PANEL_DER_EXTRA 40 /* cuanto mas ancho es el panel derecho */
+#define MODULOS_PANEL_DER_EXTRA 120 /* cuanto mas ancho es el panel derecho
+                                      * (deja ver columnas de codigo lobo) */
 
 /* Aspecto del elemento de funcion en el lienzo (egine y futuras funciones):
  * banda superior con la clase de modulo y nombre centrado en azul. */
@@ -159,6 +161,26 @@ typedef unsigned char  u8;
 #define MODULOS_FUNCION_TITULO_HUECO 9 /* hueco entre el boton y el titulo */
 #define MODULOS_FUNCION_ALTO        24 /* alto de cada rectangulo */
 #define MODULOS_FUNCION_HUECO        5 /* hueco tras el titulo y entre rects */
+
+/* Botones FUNCIONES con codigo lobo (fase 8). Los limites son los mismos
+ * del motor (motor.h: ACTIVO_FUNCIONES_MAX y ACTIVO_FUNCION_CODIGO_MAX)
+ * y del kernel (activo.rs). */
+#define FUNCIONES_MAX            32
+#define FUNCIONES_NOMBRE_MAX     24
+#define FUNCIONES_CODIGO_MAX     2048
+
+/* Editor de codigo dentro del boton expandido. */
+#define MODULOS_FUNCION_EDITOR_LINEAS 10 /* lineas de codigo visibles */
+#define MODULOS_FUNCION_LINEA_ALTO    12 /* alto de cada linea de codigo */
+#define MODULOS_FUNCION_TABULACION    4 /* espacios que inserta el tabulador */
+
+/* Colores del lenguaje lobo sobre el fondo blanco del editor. */
+#define LOBO_CLAVE    0x000058C8u /* si, sino, fin, mientras, no */
+#define LOBO_NUMERO   0x00A04A00u
+#define LOBO_COMENT   0x00608640u
+#define LOBO_VAR      0x00404080u /* x, y, vel, fotograma y locales */
+#define LOBO_TECLA    0x008030A0u /* tecla_* */
+#define LOBO_FUNCION  0x00307850u /* choca, cerrar */
 
 /* Items del gestor: cada item es un mapa .mav de la carpeta `maps`. Las
  * miniaturas se guardan en una cache pequena para no releer el mapa. */
@@ -608,16 +630,31 @@ typedef struct TileDoc {
 
 /* Elemento insertado en el lienzo del gestor de logica. La posicion se guarda
  * en coordenadas del mundo y se dibuja con el desplazamiento de la vista.
- * Cada elemento puede ser un item (un mapa `.mav` de `maps`) o una funcion
- * logica del motor (ver MODULOS_FUNCIONES en app.c). */
+ * Cada elemento puede ser un item (un mapa `.mav` de `maps`), el modulo
+ * egine (el motor) o un boton FUNCIONES de codigo lobo. */
 typedef struct ModuloElemento {
     int x, y;
     int ancho, alto;
     int id; /* orden de creacion, estable al moverlo en el lienzo */
     int plegado; /* solo en la raiz del grupo: lista de hijos oculta */
     char mapa[MAPS_NOMBRE_MAX]; /* nombre del .mav, vacio = elemento vacio */
-    int funcion; /* indice en MODULOS_FUNCIONES, -1 = item de mapa */
+    int funcion; /* -1 = item de mapa, 0 = egine, >= 1 = id de funcion lobo */
 } ModuloElemento;
+
+/* Un boton FUNCIONES con codigo lobo (fase 8): el texto viaja en el
+ * .logic del proyecto (formato LOGIC2) y el motor lo compila y corre
+ * cada fotograma. El editor valida con el mismo parser del motor
+ * (lobo_parsear) y pinta el boton segun el resultado. */
+typedef struct FuncionCodigo {
+    int id;      /* referencia estable de los elementos, empieza en 1 */
+    char nombre[FUNCIONES_NOMBRE_MAX];
+    char codigo[FUNCIONES_CODIGO_MAX]; /* terminado en 0 */
+    int largo;   /* bytes utiles del codigo */
+    int cursor;  /* posicion de edicion (indice en codigo) */
+    int scroll;  /* primera linea visible del editor abierto */
+    char error[LOBO_ERROR_MAX]; /* "" = el codigo compila */
+    int error_linea;            /* linea del error, 0 si no hay */
+} FuncionCodigo;
 
 /* Miniatura de un mapa `.mav` guardada en la cache de items. */
 typedef struct MiniaturaMapa {
@@ -749,6 +786,17 @@ typedef struct App {
     int modulo_funcion_pulsada; /* funcion pulsada, -1 = ninguna */
     int modulo_funcion_x, modulo_funcion_y;
     int modulo_funcion_movido;
+
+    /* Botones FUNCIONES con codigo lobo (fase 8): egine es fija (indice 0
+     * de la seccion) y el resto son funciones de codigo que viajan al
+     * .logic y corren en el motor. Los indices de aqui abajo son del
+     * array funciones, no del walk de la seccion. */
+    FuncionCodigo funciones[FUNCIONES_MAX];
+    int num_funciones;
+    int funcion_siguiente_id;  /* id del proximo boton creado */
+    int funcion_abierta;       /* boton expandido (indice del array), -1 */
+    int funciones_scroll;      /* primer boton visible de la seccion */
+    int confirmar_funcion;     /* borrado pendiente de confirmar, -1 = no */
 
     /* Item elegido (mapa .mav de la carpeta `maps`) y selector de items. */
     char item_mapa[MAPS_NOMBRE_MAX];
@@ -1144,8 +1192,36 @@ Zona modulos_lienzo_zona(void);
 Zona modulos_boton_zona(void);
 Zona modulos_funcion_zona(int indice);
 int  modulos_funciones_num(void);
+int  modulos_funciones_total(void);   /* egine + botones + boton "+": el
+                                       * walk de la seccion */
+int  modulos_funcion_alto_de(int indice); /* alto del boton (expandido) */
+int  modulos_funciones_visibles(void);    /* botones que caben con el scroll */
 const char *modulos_funcion_nombre(int indice);
 int  modulos_funcion_en(int x, int y);
+/* Id de la funcion lobo del boton `indice` de la seccion (0 = egine). */
+int  modulos_funcion_id_de(int indice);
+/* Busca el indice del array g.funciones de la funcion con ese id
+ * (-1 si no esta). */
+int  modulos_funcion_indice_de(int id);
+/* Nombre de la funcion con ese id ("" si no esta): los elementos del
+ * lienzo guardan ids, no indices. */
+const char *modulos_funcion_nombre_id(int id);
+/* Cabecera del boton expandido (el clic aqui lo pliega) y su area de
+ * codigo blanca; `indice` es del walk de la seccion. */
+Zona modulos_funcion_cabecera_zona(int indice);
+Zona modulos_funcion_codigo_zona(int indice);
+/* Zona de la seccion FUNCIONES completa (titulo aparte). */
+Zona modulos_funciones_seccion_zona(void);
+/* Ajusta el scroll de la seccion para ver el boton `indice` entero. */
+void modulos_funciones_scroll_ver(int indice);
+void funciones_codigo_nueva(void);
+void funciones_codigo_borrar(int indice);
+void funciones_codigo_validar(FuncionCodigo *f);
+/* Edicion del boton abierto: teclas de control y caracteres. */
+void funciones_codigo_tecla(int vk, int ctrl);
+void funciones_codigo_caracter(int ch);
+int  funciones_codigo_abierta_linea(void);
+int  funciones_codigo_abierta_columna(void);
 Zona selector_mapa_zona(void);
 Zona selector_mapa_fila_zona(int indice);
 void selector_mapa_abrir(void);

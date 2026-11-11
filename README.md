@@ -75,8 +75,11 @@ motor\game.exe --captura captura.bmp --fotogramas 60 --tecla derecha
 ```
 
 Opciones: `--logica ruta` (proyecto `.logic`), `--mapa ruta` (un `.mav`
-directo), `--captura ruta`, `--fotogramas N` y `--tecla nombre`
-(izquierda/derecha/arriba/abajo/saltar).
+directo), `--captura ruta`, `--fotogramas N`, `--tecla nombre`
+(izquierda/derecha/arriba/abajo/saltar) y `--traza ruta` (una línea por
+fotograma con el contador y la posición del lobo; la cabecera
+`lobo: N scripts` confirma que los scripts lobo compilaron y uno que
+falla sale como `lobo: error <id> <motivo>`).
 
 `motor/prueba.c` es un banco de pruebas de consola del núcleo; se compila
 aparte siguiendo las instrucciones de su cabecera y se ejecuta desde la raíz
@@ -127,6 +130,65 @@ que viaja pegado al `game.exe` compilado: `proyecto.logic`, `maps\*.mav` y
 `tiles\*.png` de la raíz del proyecto). El ensamblador de arranque es el de
 rocky (`bootusb.s`, `bootusb2.s`) sin cambios de trazado.
 
+## El código lobo
+
+Los botones FUNCIONES del gestor de lógica se programan en **lobo**, el
+lenguaje propio de LobosWolfos 2000: texto plano, palabras en español y una
+sentencia por línea. El mismo código corre en los dos destinos (`game.exe`
+y el kernel loboswolfos), porque el proyecto entero viaja en el blob del
+juego compilado:
+
+```lobo
+# paseo autonomo del lobo
+vel = 3
+si tecla_derecha
+x = x + vel
+fin
+si paso < 90
+x = x + 1
+sino
+paso = 0
+fin
+paso = paso + 1
+```
+
+Sentencias:
+
+- `si <expr>` ... `sino` ... `fin` — condicional (el `sino` es opcional).
+- `mientras <expr>` ... `fin` — bucle, con tope de pasos por fotograma (un
+  bucle sin salida no cuelga el juego).
+- `<nombre> = <expr>` — asignación.
+- `<expr>` suelta (por ejemplo `cerrar()`) — se evalúa y se descarta.
+
+Expresiones: números enteros, variables, paréntesis, aritmética
+(`+ - * / %`), comparaciones (`== != < > <= >=`), lógica (`&`, `|`, `no`,
+`!`), las teclas y las funciones del juego. El `#` empieza un comentario
+hasta el final de la línea.
+
+Variables del juego: `x` e `y` (posición del sprite), `vel` (velocidad) y
+`fotograma` (contador de actualizaciones). Los demás nombres que se asignan
+en el código son **variables locales del script**: se preescanean al
+compilar, así que un error tipográfico da error de sintaxis en vez de leer
+0 en silencio.
+
+Teclas: `tecla_izquierda`, `tecla_derecha`, `tecla_arriba`,
+`tecla_abajo`, `tecla_salto` y `tecla_cerrar`.
+
+Funciones: `choca(x, y)` — 1 si la caja del sprite choca contra el mapa en
+esa posición — y `cerrar()` — cierra el juego.
+
+Límites (los mismos en los dos destinos): 32 funciones por proyecto, 2048
+bytes de código por botón, 256 instrucciones compiladas, 16 variables
+locales, 32 valores de pila y 200000 pasos por fotograma. La división entre
+cero da 0 y la aritmética envuelve como unsigned.
+
+**Cómo corre**: cuando algún elemento del lienzo usa una función, el motor
+entra en **modo scripts**: el código lobo manda cada fotograma (un script
+por elemento, con sus locales persistentes entre fotogramas) y el
+movimiento por defecto queda fuera; al final del fotograma solo vuelven
+`x` e `y` (vel y fotograma son de entrada). Sin funciones usadas, el juego
+corre con el movimiento por teclado de siempre.
+
 ## Uso
 
 Ejecuta `LobosWolfos2000.exe`. Los tiles que guardes se almacenan en la carpeta
@@ -165,11 +227,20 @@ el arrastre inserta un elemento vacío. Si hay más mapas que filas, la rueda
 desplaza la lista y `Escape` la cierra.
 
 Debajo del botón del item está la sección **FUNCIONES**, con rectángulos
-arrastrables para las funciones lógicas del juego. De momento solo existe
-**egine**, el motor del juego: se arrastra al lienzo para colocarlo como
-elemento (con su banda MOTOR y el nombre en azul); un clic sin arrastrar
-recuerda cómo se usa. La opción **Guardar logica .logic** también guarda la
-función de cada elemento, y **Abrir lógica .logic** la recupera al cargar.
+arrastrables para las funciones lógicas del juego. El primero es **egine**,
+el motor del juego: se arrastra al lienzo para colocarlo como elemento (con
+su banda MOTOR y el nombre en azul); un clic sin arrastrar recuerda cómo se
+usa. Los demás son botones de **código lobo**: el botón **+ NUEVA FUNCION**
+del final crea uno (con nombre automático) y abre su editor, donde se
+escribe el código del juego (ver la sección «El código lobo» más arriba). Cada botón muestra
+su nombre, un cuadro de estado (rojo = error, verde = listo, gris = vacío)
+y un resumen; un clic abre y cierra su editor, y un clic derecho lo borra
+(con confirmación) junto con los elementos del lienzo que lo usen. El
+código se valida al escribir con el mismo parser del motor: los errores
+(«linea N: motivo») se pintan en la franja bajo el editor. Arrastrado al
+lienzo, el botón inserta un elemento que ejecuta su código cada fotograma.
+La opción **Guardar logica .logic** también guarda la función de cada
+elemento, y **Abrir lógica .logic** la recupera al cargar.
 
 Los elementos ya colocados también se pueden arrastrar, y un clic derecho
 sobre uno de ellos lo elimina. Sus lados tienen
@@ -218,6 +289,19 @@ flashear.bat            (o: flashear.bat <num disco> <ruta\imagen.img>)
 
 El script nunca toca el disco 0, pide confirmación escrita y verifica
 releyendo el pendrive tras la escritura.
+
+El editor acepta además flags de línea de comandos para pruebas
+automáticas sin tocar la ventana: `--captura ruta` (dibuja un fotograma
+y guarda el BMP), `--gestor` (abre el gestor de lógica), `--abrir-logica
+ruta` y `--guardar-logica ruta` (abrir y guardar el `.logic` sin
+diálogo), `--clics "x,y;x,y"` y `--arrastre "x0,y0;x1,y1"` (clics y
+arrastres simulados) y, para la sección FUNCIONES (fase 8),
+`--funcion-abrir <id>` (abre el editor de código de esa función),
+`--codigo-teclas "texto"` (escribe en el editor abierto, con `\n`, `\t`,
+`\b` y `\\` como escapes), `--funcion-borrar x,y` (clic derecho simulado
+que pide confirmación de borrado) y `--modulos-rueda x,y,delta[,ctrl]`
+(la rueda del gestor, que desplaza la sección FUNCIONES). Cada flag está
+documentada junto a su procesado en `src\nucleo.c`.
 
 ## Atajos
 

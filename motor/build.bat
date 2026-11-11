@@ -34,7 +34,7 @@ pushd "%AQUI%"
 "%GCC%" -m32 -std=c99 -O2 -Wall -Wextra -Wno-unused-parameter ^
     -D_WIN32_WINNT=0x0501 -DWINVER=0x0501 -UUNICODE -U_UNICODE ^
     -fno-strict-aliasing ^
-    nucleo32.s activo.c juego.c ^
+    nucleo32.s activo.c juego.c lobo.c ^
     -o "%SALIDA%" ^
     -lgdiplus -lgdi32 -luser32 -lkernel32 -lole32 ^
     -mwindows -static-libgcc

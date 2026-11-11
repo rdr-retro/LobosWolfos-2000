@@ -12,12 +12,17 @@
  *   --fotogramas N    fotogramas de la captura (60 por defecto)
  *   --tecla nombre    tecla mantenida durante la captura
  *                     (izquierda/derecha/arriba/abajo/saltar)
+ *   --traza ruta      escribe en el archivo una linea por fotograma con
+ *                     la posicion del lobo (y una cabecera lobo: N);
+ *                     sirve para comparar un script con el movimiento
+ *                     por defecto de forma determinista
  */
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "motor.h"
+#include "lobo.h"
 
 #define VENTANA_ANCHO 640
 #define VENTANA_ALTO  480
@@ -34,6 +39,7 @@ typedef struct Juego {
     u32 sprite[SPRITE_LADO * SPRITE_LADO]; /* sprite generado, 24x24 */
     int x, y;                /* posicion del sprite en el mundo */
     unsigned entrada;        /* bits MOTOR_ENT_* */
+    int fotograma;           /* contador de actualizaciones */
     int corriendo;
 } Juego;
 
@@ -115,27 +121,133 @@ static void buscar_spawn(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Scripts lobo: el codigo de los botones FUNCIONES (fase 8)           */
+/* ------------------------------------------------------------------ */
+
+/* Un script por elemento del lienzo con funcion de codigo: todos ven
+ * el mismo estado del juego (la posicion del lobo, las teclas) y cada
+ * uno guarda su maquina (sus variables locales). Los elementos que
+ * repiten funcion comparten el programa compilado. */
+static LoboPrograma g_programas[ACTIVO_FUNCIONES_MAX];
+static int g_prog_id[ACTIVO_FUNCIONES_MAX]; /* id de funcion de cada programa */
+static int g_num_programas;
+
+static struct {
+    int prog; /* indice en g_programas */
+    LoboMaquina maquina;
+} g_scripts[ACTIVO_USADAS_MAX];
+static int g_num_scripts;
+
+static FILE *g_traza; /* --traza: una linea por fotograma */
+
+/* Callback de choca() del lenguaje: la caja del sprite contra el
+ * mapa solido. */
+static int lobo_choca(void *ctx, int x, int y) {
+    (void)ctx;
+    return choca_con_mapa(x, y);
+}
+
+/* Compila los scripts del proyecto y prepara una maquina por elemento.
+ * Las funciones vacias o borradas se saltan; las que no compilan se
+ * avisan (cuadro en modo ventana, linea en la traza) y tambien se
+ * saltan: el resto del juego sigue corriendo. */
+static void scripts_preparar(int con_ventana) {
+    int ids[ACTIVO_USADAS_MAX];
+    int n = activo_funciones_usadas(ids, ACTIVO_USADAS_MAX);
+    int i, j;
+
+    g_num_programas = 0;
+    g_num_scripts = 0;
+    for (i = 0; i < n; i++) {
+        const char *codigo = activo_funcion_codigo(ids[i]);
+        char error[LOBO_ERROR_MAX];
+        int prog = -1;
+
+        if (!codigo || !codigo[0]) continue;
+
+        for (j = 0; j < g_num_programas; j++)
+            if (g_prog_id[j] == ids[i]) { prog = j; break; }
+        if (prog < 0) {
+            if (!lobo_parsear(codigo, &g_programas[g_num_programas],
+                              error, sizeof(error))) {
+                if (g_traza)
+                    fprintf(g_traza, "lobo: error %d %s\n", ids[i], error);
+                if (con_ventana) {
+                    char msg[256];
+                    _snprintf(msg, sizeof(msg),
+                              "La funcion %d no compila:\n%s", ids[i], error);
+                    msg[sizeof(msg) - 1] = '\0';
+                    MessageBoxA(NULL, msg, "egine", MB_ICONWARNING);
+                }
+                continue;
+            }
+            g_prog_id[g_num_programas] = ids[i];
+            prog = g_num_programas++;
+        }
+        g_scripts[g_num_scripts].prog = prog;
+        lobo_maquina_reiniciar(&g_scripts[g_num_scripts].maquina);
+        g_num_scripts++;
+    }
+    if (g_traza) fprintf(g_traza, "lobo: %d scripts\n", g_num_scripts);
+}
+
+/* Una linea de traza por fotograma: contador, x e y del lobo. */
+static void traza_fotograma(void) {
+    if (g_traza)
+        fprintf(g_traza, "%d %d %d\n", juego.fotograma, juego.x, juego.y);
+}
+
+/* ------------------------------------------------------------------ */
 /* Actualizar y renderizar un fotograma                                */
 /* ------------------------------------------------------------------ */
 
 static void actualizar(void) {
-    int vx = 0, vy = 0;
     unsigned e = juego.entrada;
 
-    if (e & MOTOR_ENT_IZQUIERDA) vx -= SPRITE_VEL;
-    if (e & MOTOR_ENT_DERECHA)   vx += SPRITE_VEL;
-    if (e & MOTOR_ENT_ARRIBA)    vy -= SPRITE_VEL;
-    if (e & MOTOR_ENT_ABAJO)     vy += SPRITE_VEL;
+    juego.fotograma++;
+
+    /* Escape cierra siempre, alla donde se mueva el lobo. */
     if (e & MOTOR_ENT_CERRAR) juego.corriendo = 0;
 
-    /* movimiento separado por eje para deslizar contra los tiles */
-    if (vx) {
-        juego.x += vx;
-        if (choca_con_mapa(juego.x, juego.y)) juego.x -= vx;
+    if (g_num_scripts > 0) {
+        /* Modo scripts (fase 8): el codigo lobo de los botones
+         * FUNCIONES manda y el movimiento por defecto queda fuera. */
+        LoboEstado st;
+        int i;
+        st.x = juego.x;
+        st.y = juego.y;
+        st.vel = SPRITE_VEL;
+        st.fotograma = juego.fotograma;
+        st.entrada = juego.entrada; /* LOBO_TECLA_* == MOTOR_ENT_* */
+        st.choca = lobo_choca;
+        st.ctx = NULL;
+        for (i = 0; i < g_num_scripts; i++) {
+            lobo_ejecutar(&g_programas[g_scripts[i].prog], &st,
+                          &g_scripts[i].maquina);
+            if (g_scripts[i].maquina.cerrar) juego.corriendo = 0;
+        }
+        juego.x = st.x;
+        juego.y = st.y;
+        return;
     }
-    if (vy) {
-        juego.y += vy;
-        if (choca_con_mapa(juego.x, juego.y)) juego.y -= vy;
+
+    /* Movimiento por defecto (sin scripts en el proyecto). */
+    {
+        int vx = 0, vy = 0;
+        if (e & MOTOR_ENT_IZQUIERDA) vx -= SPRITE_VEL;
+        if (e & MOTOR_ENT_DERECHA)   vx += SPRITE_VEL;
+        if (e & MOTOR_ENT_ARRIBA)    vy -= SPRITE_VEL;
+        if (e & MOTOR_ENT_ABAJO)     vy += SPRITE_VEL;
+
+        /* movimiento separado por eje para deslizar contra los tiles */
+        if (vx) {
+            juego.x += vx;
+            if (choca_con_mapa(juego.x, juego.y)) juego.x -= vx;
+        }
+        if (vy) {
+            juego.y += vy;
+            if (choca_con_mapa(juego.x, juego.y)) juego.y -= vy;
+        }
     }
 }
 
@@ -256,6 +368,7 @@ static int correr_ventana(HINSTANCE instancia) {
         juego.entrada = leer_teclado();
         actualizar();
         if (!juego.corriendo) break;
+        traza_fotograma();
         renderizar();
         {
             HDC hdc = GetDC(hwnd);
@@ -285,6 +398,7 @@ static int correr_captura(const char *ruta_bmp, int fotogramas) {
     juego.fb_alto = VENTANA_ALTO;
     for (i = 0; i < fotogramas && juego.corriendo; i++) {
         actualizar();
+        traza_fotograma();
         renderizar();
     }
     if (!activo_guardar_bmp(ruta_bmp, juego.fb, juego.fb_ancho, juego.fb_alto))
@@ -301,14 +415,17 @@ static int correr_captura(const char *ruta_bmp, int fotogramas) {
 static int opcion(const char *nombre) {
     return strcmp(nombre, "--logica") == 0 || strcmp(nombre, "--mapa") == 0 ||
            strcmp(nombre, "--captura") == 0 ||
-           strcmp(nombre, "--fotogramas") == 0 || strcmp(nombre, "--tecla") == 0;
+           strcmp(nombre, "--fotogramas") == 0 ||
+           strcmp(nombre, "--tecla") == 0 || strcmp(nombre, "--traza") == 0;
 }
 
 int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show) {
     const char *ruta_logica = NULL, *ruta_mapa = NULL, *ruta_bmp = NULL;
+    const char *ruta_traza = NULL;
     int fotogramas = 60;
     unsigned tecla = 0;
     int i;
+    int resultado;
     (void)prev; (void)cmdline; (void)show;
 
     for (i = 1; i < __argc; i++) {
@@ -317,6 +434,7 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
             if (strcmp(__argv[i - 1], "--logica") == 0) ruta_logica = v;
             else if (strcmp(__argv[i - 1], "--mapa") == 0) ruta_mapa = v;
             else if (strcmp(__argv[i - 1], "--captura") == 0) ruta_bmp = v;
+            else if (strcmp(__argv[i - 1], "--traza") == 0) ruta_traza = v;
             else if (strcmp(__argv[i - 1], "--fotogramas") == 0)
                 fotogramas = atoi(v);
             else if (strcmp(__argv[i - 1], "--tecla") == 0) {
@@ -330,6 +448,9 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     }
     if (fotogramas < 1) fotogramas = 1;
     if (fotogramas > 100000) fotogramas = 100000;
+    if (ruta_traza) {
+        g_traza = fopen(ruta_traza, "wt"); /* si falla: sin traza */
+    }
 
     if (!activo_gdiplus_iniciar()) {
         MessageBoxA(NULL, "No se pudo iniciar GDI+ (gdiplus.dll)",
@@ -357,6 +478,7 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
                       ruta_mapa);
             msg[sizeof(msg) - 1] = '\0';
             MessageBoxA(NULL, msg, "egine", MB_ICONERROR);
+            if (g_traza) fclose(g_traza);
             return 1;
         }
         strncpy(juego.mapa_usado, ruta_mapa, sizeof(juego.mapa_usado) - 1);
@@ -368,14 +490,23 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
                         "No se pudo cargar el proyecto ni un mapa .mav\n"
                         "(busca un .logic o maps\\*.mav junto al juego)",
                         "egine", MB_ICONERROR);
+            if (g_traza) fclose(g_traza);
             return 1;
         }
+        /* los botones FUNCIONES con codigo: un script por elemento */
+        scripts_preparar(ruta_bmp == NULL);
     }
 
     if (ruta_bmp) {
         buscar_spawn();
-        return correr_captura(ruta_bmp, fotogramas);
+        resultado = correr_captura(ruta_bmp, fotogramas);
+    } else {
+        buscar_spawn();
+        resultado = correr_ventana(instancia);
     }
-    buscar_spawn();
-    return correr_ventana(instancia);
+    if (g_traza) {
+        fclose(g_traza);
+        g_traza = NULL;
+    }
+    return resultado;
 }

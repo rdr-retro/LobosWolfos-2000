@@ -1336,6 +1336,35 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                     g.vista = VISTA_MODULOS;
             }
         }
+        /* Editor de codigo abierto por id de funcion (fase 8): como un
+         * clic en el boton de la seccion FUNCIONES. */
+        {
+            char *fabrir_arg = arg_valor(cmd, "--funcion-abrir");
+            if (fabrir_arg && g.vista == VISTA_MODULOS) {
+                int id = atoi(fabrir_arg);
+                int indice = modulos_funcion_indice_de(id);
+                if (indice >= 0) {
+                    g.funcion_abierta = indice;
+                    modulos_funciones_scroll_ver(indice + 1);
+                }
+            }
+        }
+        /* Clic derecho simulado sobre un boton de la seccion FUNCIONES:
+         * pide confirmacion para borrar la funcion (fase 8). Va antes de
+         * --clics para poder confirmar el aviso en la misma corrida. */
+        {
+            char *fborrar_arg = arg_valor(cmd, "--funcion-borrar");
+            if (fborrar_arg && g.vista == VISTA_MODULOS) {
+                int fx = 0, fy = 0;
+                if (sscanf(fborrar_arg, "%d,%d", &fx, &fy) == 2) {
+                    app_mover(fx, fy, MK_RBUTTON);
+                    g.boton_der = 1;
+                    app_pulsar(fx, fy, 1);
+                    g.boton_der = 0;
+                    app_soltar(fx, fy, 1);
+                }
+            }
+        }
         if (strstr(cmd, "--info") != NULL) g.info_visible = 1;
         if (strstr(cmd, "--patron") != NULL) g.patron_visible = 1;
         if (strstr(cmd, "--mayus") != NULL) g.shift_simulado = 1;
@@ -1368,6 +1397,29 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                     break;
                 }
                 while (*p == ';' || *p == ' ' || *p == ',') p++;
+            }
+        }
+        /* Teclado simulado en el editor de codigo (fase 8): el texto se
+         * escribe caracter a caracter, con \n \t \b \\ como escapes y
+         * cada \n como salto de linea. Va despues de --clics para poder
+         * abrir el editor con un clic en el boton y escribir despues. */
+        {
+            char *teclas_arg = arg_valor(cmd, "--codigo-teclas");
+            if (teclas_arg && g.vista == VISTA_MODULOS &&
+                g.funcion_abierta >= 0) {
+                const char *p = teclas_arg;
+                while (*p) {
+                    if (p[0] == '\\' && p[1]) {
+                        if (p[1] == 'n') { app_tecla(VK_RETURN, 0, 0); p += 2; continue; }
+                        if (p[1] == 't') { app_tecla(VK_TAB, 0, 0); p += 2; continue; }
+                        if (p[1] == 'b') { app_tecla(VK_BACK, 0, 0); p += 2; continue; }
+                        if (p[1] == '\\') { app_caracter('\\'); p += 2; continue; }
+                        p++; /* escape desconocido: solo saltar la barra */
+                        continue;
+                    }
+                    app_caracter((unsigned char)*p);
+                    p++;
+                }
             }
         }
         /* Arrastre simulado "x0,y0;x1,y1": pulsa en el primer punto, recorre
@@ -1451,6 +1503,18 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                     app_pulsar(dx, dy, 1);
                     g.boton_der = 0;
                     app_soltar(dx, dy, 1);
+                }
+            }
+        }
+        /* Rueda simulada en el gestor: "x,y,delta[,ctrl]" (fase 8, para
+         * desplazar la seccion FUNCIONES). */
+        {
+            char *mrueda_arg = arg_valor(cmd, "--modulos-rueda");
+            if (mrueda_arg && g.vista == VISTA_MODULOS) {
+                int rx = 0, ry = 0, d = 0, n = 0, ctrl = 0;
+                if (sscanf(mrueda_arg, "%d,%d,%d%n", &rx, &ry, &d, &n) >= 3) {
+                    if (mrueda_arg[n] == ',') ctrl = atoi(mrueda_arg + n + 1);
+                    app_rueda(rx, ry, d, ctrl);
                 }
             }
         }

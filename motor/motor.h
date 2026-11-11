@@ -102,9 +102,32 @@ int activo_cargar_mapa(const char *ruta, MotorMapa *m);
 
 /* Carga un proyecto .logic del gestor y elige el mapa del primer
  * elemento con mapa asociado (las pantallas del juego). Si no hay
- * ninguno, cae a mapa_default. Devuelve la ruta usada en mapa_usado. */
+ * ninguno, cae a mapa_default. Devuelve la ruta usada en mapa_usado.
+ * Acepta LOGIC1 y LOGIC2 (ver abajo las funciones de codigo). */
 int activo_cargar_proyecto(const char *ruta_logic, MotorMapa *m,
                            char *mapa_usado, int tam_usado);
+
+/* ------------------------------------------------------------------ */
+/* Funciones de codigo lobo del proyecto (LOGIC2, fase 8)              */
+/* ------------------------------------------------------------------ */
+/* El gestor guarda cada boton FUNCIONES con su id y su codigo lobo
+ * (ver lobo.h). El campo `funcion` de un elemento pasa de indice a
+ * referencia: -1 = item de mapa, 0 = egine, >= 1 = id de funcion. Estos
+ * limites son los mismos del lado del editor (app.h) y del kernel
+ * (activo.rs): un proyecto que caben en los tres. */
+#define ACTIVO_FUNCIONES_MAX      32  /* botones FUNCIONES por proyecto */
+#define ACTIVO_FUNCION_CODIGO_MAX 2048 /* bytes de codigo por funcion */
+#define ACTIVO_USADAS_MAX         128 /* una entrada por elemento */
+
+/* Codigo lobo de la funcion con ese id, terminado en 0 (NULL si el
+ * proyecto no la tiene). El puntero es del motor y vive hasta cargar
+ * otro proyecto. */
+const char *activo_funcion_codigo(int id);
+
+/* Rellena `ids` (hasta `max`) con los ids de las funciones que usan
+ * los elementos del lienzo, en orden de aparicion: un script por
+ * elemento, cada uno con su maquina. Devuelve el total (truncado). */
+int activo_funciones_usadas(int *ids, int max);
 
 /* Inicia y apaga GDI+ para poder leer PNG. */
 int activo_gdiplus_iniciar(void);

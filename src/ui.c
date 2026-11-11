@@ -134,15 +134,80 @@ static Zona modulos_funciones_titulo_zona(void) {
 }
 
 /* Rectangulo de la funcion logica `indice` de la seccion del panel
- * derecho; los rectangulos se apilan hacia abajo con un hueco entre
- * ellos. */
+ * derecho (walk: 0 = egine, 1..N botones de codigo, N+1 el boton "+");
+ * los rectangulos se apilan hacia abajo con un hueco entre ellos. El
+ * boton abierto crece con su editor de codigo. Los botones por encima
+ * del scroll actual quedan fuera de pantalla. */
 Zona modulos_funcion_zona(int indice) {
     Zona t = modulos_funciones_titulo_zona();
     Zona b = modulos_boton_zona();
     int y0 = zona_abajo(t) + MODULOS_FUNCION_HUECO;
-    return zona_hacer(b.x,
-                      y0 + indice * (MODULOS_FUNCION_ALTO + MODULOS_FUNCION_HUECO),
-                      b.ancho, MODULOS_FUNCION_ALTO);
+    int i;
+
+    if (indice < g.funciones_scroll)
+        return zona_hacer(b.x, -10000 - indice * (MODULOS_FUNCION_ALTO +
+                                                  MODULOS_FUNCION_HUECO),
+                          b.ancho, MODULOS_FUNCION_ALTO);
+    for (i = g.funciones_scroll; i < indice; i++)
+        y0 += modulos_funcion_alto_de(i) + MODULOS_FUNCION_HUECO;
+    return zona_hacer(b.x, y0, b.ancho, modulos_funcion_alto_de(indice));
+}
+
+/* Cabecera del boton expandido (el clic aqui pliega el editor). */
+Zona modulos_funcion_cabecera_zona(int indice) {
+    Zona z = modulos_funcion_zona(indice);
+    return zona_hacer(z.x, z.y, z.ancho, MODULOS_FUNCION_ALTO);
+}
+
+/* Area blanca de codigo del boton expandido: cabecera de 24 px, hueco
+ * de 2, area de 4 + lineas*alto y franja final de 12. */
+Zona modulos_funcion_codigo_zona(int indice) {
+    Zona z = modulos_funcion_zona(indice);
+    return zona_hacer(z.x + 2, z.y + MODULOS_FUNCION_ALTO + 2, z.ancho - 4,
+                      4 + MODULOS_FUNCION_EDITOR_LINEAS *
+                          MODULOS_FUNCION_LINEA_ALTO);
+}
+
+/* Zona de la seccion FUNCIONES completa: el panel derecho desde la
+ * primera fila de botones hasta el borde inferior de la ventana. */
+Zona modulos_funciones_seccion_zona(void) {
+    Zona t = modulos_funciones_titulo_zona();
+    int panel = modulos_panel_derecho_ancho();
+    int x0 = g.ancho - panel;
+    int y0 = zona_abajo(t) + MODULOS_FUNCION_HUECO;
+    if (y0 > g.alto) y0 = g.alto;
+    return zona_hacer(x0, y0, panel, g.alto - y0);
+}
+
+/* Botones de la seccion que caben enteros con el scroll actual (al
+ * menos uno, para que la rueda siempre pueda desplazar). */
+int modulos_funciones_visibles(void) {
+    Zona s = modulos_funciones_seccion_zona();
+    int espacio = zona_abajo(s) - s.y;
+    int usado = 0, n = 0, i;
+
+    for (i = 0; i < modulos_funciones_total(); i++) {
+        if (usado > 0) usado += MODULOS_FUNCION_HUECO;
+        usado += modulos_funcion_alto_de(g.funciones_scroll + i);
+        if (usado > espacio) break;
+        n++;
+    }
+    return n < 1 ? 1 : n;
+}
+
+/* Ajusta el scroll de la seccion para que el boton `indice` (walk) se
+ * vea entero. */
+void modulos_funciones_scroll_ver(int indice) {
+    int visibles, maximo;
+    if (indice < 0) return;
+    if (indice < g.funciones_scroll) g.funciones_scroll = indice;
+    visibles = modulos_funciones_visibles();
+    maximo = modulos_funciones_total() - visibles;
+    if (maximo < 0) maximo = 0;
+    while (g.funciones_scroll + modulos_funciones_visibles() <= indice &&
+           g.funciones_scroll < maximo)
+        g.funciones_scroll++;
+    if (g.funciones_scroll > maximo) g.funciones_scroll = maximo;
 }
 
 /* Panel flotante del selector de items, centrado en el lienzo del gestor. */
@@ -2233,6 +2298,14 @@ void ui_dibujar_confirmaciones(void) {
                              zona_contiene(si, g.raton_x, g.raton_y),
                              zona_contiene(no, g.raton_x, g.raton_y));
         (void)panel;
+    } else if (g.confirmar_funcion >= 0) {
+        panel = confirmar_panel_zona(&si, &no);
+        dibujar_confirmacion("BORRAR FUNCION",
+                             "SE ELIMINARA SU CODIGO Y LOS ELEMENTOS",
+                             "DEL LIENZO QUE LA USAN.",
+                             zona_contiene(si, g.raton_x, g.raton_y),
+                             zona_contiene(no, g.raton_x, g.raton_y));
+        (void)panel;
     }
 }
 
@@ -3232,6 +3305,180 @@ void ui_dibujar_selector_mapa(void) {
 }
 
 /* Lienzo desplazable del gestor: rejilla y elementos insertados. */
+/* ------------------------------------------------------------------ */
+/* Lenguaje lobo: color de sintaxis y vistas previas de codigo          */
+/* ------------------------------------------------------------------ */
+
+/* Es inicial o continuacion de identificador lobo (a-z, A-Z, _, 0-9),
+ * igual que el lexer del motor. */
+static int lobo_es_letra(char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+}
+
+static int lobo_alfanum(char c) {
+    return lobo_es_letra(c) || (c >= '0' && c <= '9');
+}
+
+/* Color de un nombre lobo: claves del lenguaje, teclas, funciones
+ * incorporadas y el resto como variables. */
+static u32 color_nombre_lobo(const char *nombre) {
+    if (!strcmp(nombre, "si") || !strcmp(nombre, "sino") ||
+        !strcmp(nombre, "fin") || !strcmp(nombre, "mientras") ||
+        !strcmp(nombre, "no"))
+        return LOBO_CLAVE;
+    if (!strncmp(nombre, "tecla_", 6)) return LOBO_TECLA;
+    if (!strcmp(nombre, "choca") || !strcmp(nombre, "cerrar"))
+        return LOBO_FUNCION;
+    return LOBO_VAR;
+}
+
+/* Dibuja un trozo de texto con tope de caracteres (fuente_dibujar no
+ * recorta: el tope se aplica aqui). */
+static void lobo_dibujar_run(int x, int y, const char *texto, int largo,
+                             int quedan, u32 color) {
+    char buf[128];
+    if (largo > quedan) largo = quedan;
+    if (largo > 127) largo = 127;
+    if (largo <= 0) return;
+    memcpy(buf, texto, (size_t)largo);
+    buf[largo] = 0;
+    fuente_dibujar(x, y, buf, color);
+}
+
+/* Dibuja una linea de codigo lobo con colores de sintaxis, recortada a
+ * limite_x. Con color_mono != 0 todo se dibuja en ese color (para las
+ * vistas previas sobre fondo oscuro). */
+static void dibujar_linea_lobo(int x, int y, const char *texto,
+                               int limite_x, u32 color_mono) {
+    const char *p = texto;
+    int cursor = x;
+    int quedan = (limite_x - x + 1) / 6; /* caracteres que caben */
+
+    if (!texto) return;
+    while (*p && quedan > 0) {
+        if (*p == '\n') break; /* fin de la linea visual */
+        if (*p == ' ' || *p == '\t') {
+            p++;
+            cursor += 6;
+            quedan--;
+            continue;
+        }
+        if (*p == '#') {
+            /* comentario hasta el final de la linea */
+            int n = 0;
+            while (p[n] && p[n] != '\n') n++;
+            lobo_dibujar_run(cursor, y, p, n, quedan,
+                             color_mono ? color_mono : LOBO_COMENT);
+            return;
+        }
+        if (*p >= '0' && *p <= '9') {
+            const char *inicio = p;
+            while (*p >= '0' && *p <= '9') p++;
+            lobo_dibujar_run(cursor, y, inicio, (int)(p - inicio), quedan,
+                             color_mono ? color_mono : LOBO_NUMERO);
+            cursor += 6 * (int)(p - inicio);
+            quedan -= (int)(p - inicio);
+            continue;
+        }
+        if (lobo_es_letra(*p)) {
+            const char *inicio = p;
+            char nombre[64];
+            int n = 0;
+            while (lobo_alfanum(*p)) {
+                if (n < 63) nombre[n++] = *p;
+                p++;
+            }
+            nombre[n] = 0;
+            lobo_dibujar_run(cursor, y, inicio, (int)(p - inicio), quedan,
+                             color_mono ? color_mono
+                                        : color_nombre_lobo(nombre));
+            cursor += 6 * (int)(p - inicio);
+            quedan -= (int)(p - inicio);
+            continue;
+        }
+        /* operador o signo de un caracter */
+        lobo_dibujar_run(cursor, y, p, 1, quedan,
+                         color_mono ? color_mono : TEXTO_UI);
+        p++;
+        cursor += 6;
+        quedan--;
+    }
+}
+
+/* Resumen de una funcion para su boton plegado: la primera linea de
+ * codigo con algo escrito (o "(vacio)" si no hay ninguna). */
+static void funcion_resumen(const FuncionCodigo *f, char *destino,
+                            int tam) {
+    const char *p = f->codigo;
+    if (tam < 1) return;
+    destino[0] = 0;
+    while (*p) {
+        const char *inicio = p;
+        int tiene = 0;
+        while (*p && *p != '\n') {
+            if (*p != ' ' && *p != '\t') tiene = 1;
+            p++;
+        }
+        if (tiene) {
+            int n = (int)(p - inicio);
+            if (n > tam - 1) n = tam - 1;
+            memcpy(destino, inicio, (size_t)n);
+            destino[n] = 0;
+            return;
+        }
+        if (*p == '\n') p++;
+    }
+    recortar_texto(destino, "(vacio)", tam);
+}
+
+/* Elemento de funcion de codigo lobo en el lienzo (o su previsualizacion
+ * de arrastre): etiqueta LOBO, nombre a escala 2 y hasta tres lineas de
+ * vista previa del codigo. Si `f` es NULL el id cuelga (la funcion se
+ * borro) y solo queda su identificador. `claro` distingue el elemento
+ * del lienzo (fondo claro) de la previsualizacion sobre fondo oscuro. */
+static void dibujar_elemento_codigo(int vx0, int vy0, int ancho, int alto,
+                                    const FuncionCodigo *f, int id,
+                                    int activo, int claro) {
+    char nombre[64];
+    u32 color_etiqueta = claro ? SEPARADOR : 0x0090A8BCu;
+    u32 color_nombre = claro ? MODULOS_FUNCION_TEXTO : 0x00FFFFFFu;
+    u32 color_codigo = claro ? 0x00606878u : 0x00D8E0E8u;
+
+    if (activo) {
+        color_nombre = 0x00FFFFFFu;
+        color_etiqueta = claro ? 0x00FFFFFFu : color_etiqueta;
+        color_codigo = claro ? 0x00E8EEF4u : color_codigo;
+    }
+
+    fuente_dibujar(vx0 + 4, vy0 + 5, "LOBO", color_etiqueta);
+    if (f) {
+        recortar_texto(nombre, f->nombre, sizeof(nombre));
+        fuente_dibujar_escala(
+            vx0 + (ancho - fuente_texto_ancho_escala(nombre, 2)) / 2,
+            vy0 + 18, nombre, color_nombre, 2);
+        {
+            /* hasta tres lineas de codigo como vista previa */
+            const char *p = f->codigo;
+            int linea = 0;
+            while (*p && linea < 3) {
+                const char *inicio = p;
+                while (*p && *p != '\n') p++;
+                dibujar_linea_lobo(vx0 + 4, vy0 + 38 + linea * 8,
+                                   inicio, vx0 + ancho - 4,
+                                   claro && !activo ? 0 : color_codigo);
+                if (*p == '\n') p++;
+                linea++;
+            }
+        }
+    } else {
+        /* id colgante: la funcion ya no existe en el proyecto */
+        formatear(nombre, sizeof(nombre), "id %d", id);
+        fuente_dibujar_escala(
+            vx0 + (ancho - fuente_texto_ancho_escala(nombre, 2)) / 2,
+            vy0 + 18, nombre, claro ? SEPARADOR : 0x00D0D8E0u, 2);
+    }
+}
+
 static void modulos_dibujar_lienzo(void) {
     Zona lienzo = modulos_lienzo_zona();
     int i;
@@ -3256,14 +3503,20 @@ static void modulos_dibujar_lienzo(void) {
         completo = vx0 >= lienzo.x && vy0 >= lienzo.y &&
                    vx1 <= zona_derecha(lienzo) && vy1 <= zona_abajo(lienzo);
         if (!completo) continue;
-        if (e->funcion >= 0) {
-            /* Elemento de funcion logica del motor (p. ej. egine). */
-            const char *nombre = modulos_funcion_nombre(e->funcion);
+        if (e->funcion == 0) {
+            /* Elemento del motor (egine). */
             fuente_dibujar(vx0 + 4, vy0 + 5, "MOTOR", SEPARADOR);
             fuente_dibujar_escala(
-                vx0 + (e->ancho - fuente_texto_ancho_escala(nombre, 3)) / 2,
-                vy0 + 27, nombre,
+                vx0 + (e->ancho - fuente_texto_ancho_escala("egine", 3)) / 2,
+                vy0 + 27, "egine",
                 activo ? 0x00FFFFFFu : MODULOS_FUNCION_TEXTO, 3);
+        } else if (e->funcion >= 1) {
+            /* Elemento de funcion de codigo lobo: se dibuja con su
+             * nombre y una vista previa del codigo. */
+            int fi = modulos_funcion_indice_de(e->funcion);
+            dibujar_elemento_codigo(vx0, vy0, e->ancho, e->alto,
+                                    fi >= 0 ? &g.funciones[fi] : NULL,
+                                    e->funcion, activo, 1);
         } else if (e->mapa[0]) {
             const MiniaturaMapa *m = mapa_miniatura_item(e->mapa);
             int ix = vx0 + 4;
@@ -3324,7 +3577,8 @@ static void modulos_dibujar_lienzo(void) {
     }
 
     /* Previsualizacion de la funcion que se arrastra desde la seccion
-     * FUNCIONES (egine = el motor), con el mismo acople del iman. */
+     * FUNCIONES (egine = el motor, o una funcion de codigo lobo), con
+     * el mismo acople del iman. */
     if (g.modulo_arrastrando == 4) {
         int wx = g.raton_x - lienzo.x - g.pan_x - MODULOS_ELEMENTO_ANCHO / 2;
         int wy = g.raton_y - lienzo.y - g.pan_y - MODULOS_ELEMENTO_ALTO / 2;
@@ -3337,16 +3591,23 @@ static void modulos_dibujar_lienzo(void) {
         x1 = x0 + MODULOS_ELEMENTO_ANCHO;
         y1 = y0 + MODULOS_ELEMENTO_ALTO;
         if (modulos_recortar(lienzo, &x0, &y0, &x1, &y1)) {
-            const char *nombre =
-                modulos_funcion_nombre(g.modulo_funcion_pulsada);
             dibujar_rect(x0, y0, x1, y1, 0x004A5A6Au);
             dibujar_marco(x0, y0, x1, y1, BOTON_SELECCION);
-            fuente_dibujar(lienzo.x + g.pan_x + wx + 4,
-                           lienzo.y + g.pan_y + wy + 5, "MOTOR", SEPARADOR);
-            fuente_dibujar_escala(
-                lienzo.x + g.pan_x + wx +
-                    (MODULOS_ELEMENTO_ANCHO - fuente_texto_ancho_escala(nombre, 3)) / 2,
-                lienzo.y + g.pan_y + wy + 27, nombre, 0x00FFFFFFu, 3);
+            if (g.modulo_funcion_pulsada == 0) {
+                fuente_dibujar(x0 + 4, y0 + 5, "MOTOR", 0x0090A8BCu);
+                fuente_dibujar_escala(
+                    x0 + (MODULOS_ELEMENTO_ANCHO -
+                          fuente_texto_ancho_escala("egine", 3)) / 2,
+                    y0 + 27, "egine", 0x00FFFFFFu, 3);
+            } else {
+                /* funcion de codigo: nombre y vista previa en claro
+                 * sobre el fondo oscuro de la previsualizacion */
+                int fid = modulos_funcion_id_de(g.modulo_funcion_pulsada);
+                int fi = modulos_funcion_indice_de(fid);
+                dibujar_elemento_codigo(
+                    x0, y0, MODULOS_ELEMENTO_ANCHO, MODULOS_ELEMENTO_ALTO,
+                    fi >= 0 ? &g.funciones[fi] : NULL, fid, 0, 0);
+            }
         }
         modulos_dibujar_guia(lienzo, lx, ly);
     }
@@ -3390,31 +3651,123 @@ static void ui_dibujar_boton_modulos(void) {
     }
 }
 
-/* Seccion FUNCIONES del panel derecho, bajo el boton del item: rectangulos
- * con las funciones logicas del gestor. De momento solo hay una ("egine")
- * y todavia no hace nada. */
+/* Puntero al inicio de la linea `linea` del codigo (o a su final si no
+ * llega). */
+static const char *funcion_linea_codigo(const FuncionCodigo *f, int linea) {
+    const char *p = f->codigo;
+    int l = 0;
+    while (*p && l < linea) {
+        if (*p == '\n') l++;
+        p++;
+    }
+    return p;
+}
+
+/* Seccion FUNCIONES del panel derecho, bajo el boton del item: egine
+ * (el motor), los botones con codigo lobo (el abierto muestra su
+ * editor y su franja de estado) y el boton "+" que crea funciones. */
 void ui_dibujar_funciones_modulos(void) {
     Zona t = modulos_funciones_titulo_zona();
+    Zona s = modulos_funciones_seccion_zona();
+    int visibles = modulos_funciones_visibles();
     int i;
 
     fuente_dibujar(t.x, t.y, "FUNCIONES", TEXTO_UI);
 
-    for (i = 0; i < modulos_funciones_num(); i++) {
-        const char *nombre = modulos_funcion_nombre(i);
-        Zona z = modulos_funcion_zona(i);
-        int hover = zona_contiene(z, g.raton_x, g.raton_y);
-        int pulsado = g.modulo_funcion_pulsada == i &&
-                      !g.modulo_funcion_movido && hover;
+    for (i = 0; i < visibles; i++) {
+        int indice = g.funciones_scroll + i;
+        Zona z;
+        int hover, pulsado;
+        if (indice >= modulos_funciones_total()) break;
+        z = modulos_funcion_zona(indice);
+        if (zona_abajo(z) > zona_abajo(s)) break; /* no cabe entero */
+        hover = zona_contiene(z, g.raton_x, g.raton_y);
+        pulsado = g.modulo_funcion_pulsada == indice &&
+                  !g.modulo_funcion_movido && hover;
 
-        dibujar_rect_z(z, pulsado ? 0x00D8DEE6u : (hover ? 0x00EDF2F7u : BARRA));
+        dibujar_rect_z(z, pulsado ? 0x00D8DEE6u
+                                 : (hover ? 0x00EDF2F7u : BARRA));
         dibujar_rect(z.x, z.y, zona_derecha(z), z.y + 1, 0x00F8F8F8u);
         dibujar_rect(z.x, z.y, z.x + 1, zona_abajo(z), 0x00F8F8F8u);
-        dibujar_rect(z.x, zona_abajo(z) - 1, zona_derecha(z), zona_abajo(z),
-                     SEPARADOR);
-        dibujar_rect(zona_derecha(z) - 1, z.y, zona_derecha(z), zona_abajo(z),
-                     SEPARADOR);
-        fuente_dibujar(z.x + (z.ancho - fuente_texto_ancho(nombre)) / 2,
-                       z.y + (z.alto - 7) / 2, nombre, TEXTO_UI);
+        dibujar_rect(z.x, zona_abajo(z) - 1, zona_derecha(z),
+                     zona_abajo(z), SEPARADOR);
+        dibujar_rect(zona_derecha(z) - 1, z.y, zona_derecha(z),
+                     zona_abajo(z), SEPARADOR);
+
+        if (indice == 0) {
+            /* egine: el motor del juego, siempre centrado. */
+            fuente_dibujar(z.x + (z.ancho - fuente_texto_ancho("egine")) / 2,
+                           z.y + (MODULOS_FUNCION_ALTO - 7) / 2, "egine",
+                           TEXTO_UI);
+        } else if (indice == modulos_funciones_num()) {
+            /* Boton + : crea una funcion de codigo nueva. */
+            fuente_dibujar(
+                z.x + (z.ancho - fuente_texto_ancho("+ NUEVA FUNCION")) / 2,
+                z.y + (MODULOS_FUNCION_ALTO - 7) / 2, "+ NUEVA FUNCION",
+                MODULOS_FUNCION_TEXTO);
+        } else {
+            /* Boton de codigo lobo: nombre, cuadro de estado y resumen;
+             * el abierto ensancha el boton con su editor. */
+            FuncionCodigo *f = &g.funciones[indice - 1];
+            int abierto = (g.funcion_abierta == indice - 1);
+            char resumen[64];
+            u32 estado = f->error[0] ? 0x00C03030u
+                                     : (f->largo > 0 ? 0x0020A040u : SEPARADOR);
+            if (abierto)
+                dibujar_rect(z.x, z.y, zona_derecha(z),
+                             z.y + MODULOS_FUNCION_ALTO - 1,
+                             MODULOS_FUNCION_FONDO);
+            texto_recortado(z.x + 8, z.y + 3, f->nombre,
+                            abierto ? MODULOS_FUNCION_TEXTO : TEXTO_UI,
+                            z.ancho - 8 - 16);
+            /* cuadro de estado: rojo = error, verde = listo, gris = vacio */
+            dibujar_rect(zona_derecha(z) - 12, z.y + 3,
+                         zona_derecha(z) - 4, z.y + 11, estado);
+            funcion_resumen(f, resumen, sizeof(resumen));
+            texto_recortado(z.x + 8, z.y + 13, resumen, SEPARADOR,
+                            z.ancho - 16);
+
+            if (abierto) {
+                /* Editor: area blanca con las lineas visibles, cursor y
+                 * franja de estado con el error o la posicion. */
+                Zona cz = modulos_funcion_codigo_zona(indice);
+                int l, cl, cc, cx, cy;
+                dibujar_rect_z(cz, LIENZO);
+                dibujar_marco_z(cz, SEPARADOR);
+                for (l = 0; l < MODULOS_FUNCION_EDITOR_LINEAS; l++)
+                    dibujar_linea_lobo(
+                        cz.x + 2,
+                        cz.y + 2 + l * MODULOS_FUNCION_LINEA_ALTO,
+                        funcion_linea_codigo(f, f->scroll + l),
+                        zona_derecha(cz) - 2, 0);
+                /* cursor: barra fina capada al ancho del area */
+                cl = funciones_codigo_abierta_linea();
+                cc = funciones_codigo_abierta_columna();
+                if (cl >= f->scroll &&
+                    cl < f->scroll + MODULOS_FUNCION_EDITOR_LINEAS) {
+                    cx = cz.x + 2 + cc * 6;
+                    cy = cz.y + 2 +
+                         (cl - f->scroll) * MODULOS_FUNCION_LINEA_ALTO;
+                    if (cx > zona_derecha(cz) - 4)
+                        cx = zona_derecha(cz) - 4;
+                    dibujar_rect(cx, cy, cx + 1, cy + 9, TRAZO);
+                }
+                /* franja bajo el editor */
+                if (f->error[0]) {
+                    dibujar_rect(z.x, zona_abajo(cz), zona_derecha(z),
+                                 zona_abajo(z), 0x00F8DCDCu);
+                    texto_recortado(z.x + 4, zona_abajo(cz) + 2, f->error,
+                                    0x00802020u, z.ancho - 8);
+                } else {
+                    char pos[48];
+                    formatear(pos, sizeof(pos), "lin %d col %d", cl, cc);
+                    dibujar_rect(z.x, zona_abajo(cz), zona_derecha(z),
+                                 zona_abajo(z), MODULOS_FUNCION_TEXTO);
+                    fuente_dibujar(z.x + 4, zona_abajo(cz) + 2, pos,
+                                   0x00ECF0F4u);
+                }
+            }
+        }
     }
 }
 
@@ -3500,11 +3853,17 @@ static void elementos_dibujar_panel(void) {
         marca = hijos[fila];
         z = elemento_fila_zona(i);
         activo = (g.modulo_arrastrando == 3 && idx == g.modulo_drag_i);
-        if (g.modulos[idx].funcion >= 0)
-            recortar_texto(etiqueta,
-                           modulos_funcion_nombre(g.modulos[idx].funcion),
-                           sizeof(etiqueta));
-        else if (g.modulos[idx].mapa[0])
+        if (g.modulos[idx].funcion == 0)
+            recortar_texto(etiqueta, "egine", sizeof(etiqueta));
+        else if (g.modulos[idx].funcion >= 1) {
+            const char *nombre =
+                modulos_funcion_nombre_id(g.modulos[idx].funcion);
+            if (nombre[0])
+                recortar_texto(etiqueta, nombre, sizeof(etiqueta));
+            else
+                formatear(etiqueta, sizeof(etiqueta), "funcion %d",
+                          g.modulos[idx].funcion);
+        } else if (g.modulos[idx].mapa[0])
             recortar_texto(etiqueta, g.modulos[idx].mapa, sizeof(etiqueta));
         else
             formatear(etiqueta, sizeof(etiqueta), "Elemento %d",
@@ -3599,6 +3958,7 @@ void ui_dibujar(void) {
         ui_dibujar_barra_menus();
         ui_dibujar_menu_desplegable();
         ui_dibujar_estado();
+        ui_dibujar_confirmaciones();
         return;
     }
 

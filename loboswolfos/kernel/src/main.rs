@@ -30,6 +30,7 @@ mod idt;
 mod inflate;
 mod input;
 mod juego;
+mod lobo;
 mod mouse;
 mod motor;
 mod pic;

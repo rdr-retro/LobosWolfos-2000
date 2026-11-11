@@ -12,6 +12,11 @@
 //! El constructor (loboswolfos/xtask) lo rellena con el `.logic` del
 //! gestor, los `.mav` de `maps\` y los tiles PNG.
 //!
+//! El `.logic` se parsea de verdad desde la fase 8 (LOGIC1 y LOGIC2):
+//! el primer elemento con mapa que este en el blob es la pantalla del
+//! juego y los elementos con funcion >= 1 son botones FUNCIONES de
+//! codigo lobo, que quedan aqui serializados para el motor (juego.rs).
+//!
 //! Memoria: el kernel ocupa [1, 3) MiB y la pila [3, 4) MiB (ver
 //! kernel.ld). El juego usa la RAM que hay encima, que bootusb2 deja
 //! identidad-mapeada, a base de direcciones fijas como hace bios.rs con
@@ -262,13 +267,6 @@ fn buscar(texto: &[u8], aguja: &[u8]) -> Option<usize> {
     (0..=texto.len() - aguja.len()).find(|&i| &texto[i..i + aguja.len()] == aguja)
 }
 
-/// Lo que va entre la primera pareja de comillas de una linea.
-fn entre_comillas(linea: &[u8]) -> Option<&[u8]> {
-    let q1 = linea.iter().position(|&b| b == b'"')?;
-    let q2 = linea.iter().skip(q1 + 1).position(|&b| b == b'"')? + q1 + 1;
-    Some(&linea[q1 + 1..q2])
-}
-
 /// Pega `prefijo/nombre` en un bufer fijo y lo devuelve como &str (la
 /// version sin alloc de unir_ruta de activo.c).
 fn unir_ruta<'a>(bufer: &'a mut [u8], prefijo: &str, nombre: &str) -> &'a str {
@@ -302,39 +300,294 @@ fn registrar_nombre(nombre: &str) -> Option<usize> {
     None
 }
 
-/// El mapa que toca usar: el primero del proyecto `.logic` (pantallas del
-/// juego) y, si no hay proyecto, `maps/mapa.mav` (el mismo criterio que
-/// activo.c).
-fn buscar_mapa(blob: &[u8]) -> Option<(&[u8], &'static str)> {
+/* ------------------------------------------------------------------ */
+/* Proyecto .logic (LOGIC1/LOGIC2) y funciones lobo (fase 8)          */
+/* ------------------------------------------------------------------ */
+
+/// Botones FUNCIONES con codigo que caben en el proyecto.
+pub const FUNCIONES_MAX: usize = 32;
+/// Elementos del lienzo con funcion asociada que se siguen.
+pub const USADAS_MAX: usize = 128;
+/// Bytes de codigo lobo por funcion.
+pub const FUNCION_CODIGO_MAX: usize = 2048;
+
+/// Un boton FUNCIONES serializado: su id y su texto lobo.
+#[derive(Clone, Copy)]
+struct Funcion {
+    id: i32,
+    /// Bytes utiles del codigo (sin el relleno del array).
+    largo: usize,
+    codigo: [u8; FUNCION_CODIGO_MAX],
+}
+
+impl Funcion {
+    const NUEVA: Funcion = Funcion {
+        id: 0,
+        largo: 0,
+        codigo: [0; FUNCION_CODIGO_MAX],
+    };
+}
+
+/// Funciones del proyecto (codigo lobo) por id.
+static FUNCIONES: SyncCell<[Funcion; FUNCIONES_MAX]> =
+    SyncCell::new([Funcion::NUEVA; FUNCIONES_MAX]);
+static NUM_FUNCIONES: SyncCell<usize> = SyncCell::new(0);
+
+/// Ids de las funciones que usan los elementos del lienzo, en orden de
+/// aparicion: el motor corre un script por elemento (los ids colgantes
+/// se conservan y el motor los salta).
+static USADAS: SyncCell<[i32; USADAS_MAX]> = SyncCell::new([0; USADAS_MAX]);
+static NUM_USADAS: SyncCell<usize> = SyncCell::new(0);
+
+/// strtol de andar por casa sobre bytes crudos: [espacios]?[+-]?digitos.
+fn entero(texto: &[u8]) -> Option<i32> {
+    let mut pos = 0usize;
+    while pos < texto.len() && matches!(texto[pos], b' ' | b'\t') {
+        pos += 1;
+    }
+    let mut negativo = false;
+    if pos < texto.len() && texto[pos] == b'-' {
+        negativo = true;
+        pos += 1;
+    } else if pos < texto.len() && texto[pos] == b'+' {
+        pos += 1;
+    }
+    let mut valor: i64 = 0;
+    let mut digitos = 0usize;
+    while pos < texto.len() && texto[pos].is_ascii_digit() && digitos < 18 {
+        valor = valor * 10 + (texto[pos] - b'0') as i64;
+        pos += 1;
+        digitos += 1;
+    }
+    // Digitos sobrantes: saturan (como strtol) sin desbordar el i64.
+    while pos < texto.len() && texto[pos].is_ascii_digit() {
+        valor = i32::MAX as i64;
+        pos += 1;
+    }
+    if digitos == 0 {
+        return None;
+    }
+    let valor = valor.min(i32::MAX as i64) as i32;
+    Some(if negativo { -valor } else { valor })
+}
+
+/// Fin de la linea que empieza en `pos`: el indice del primer \r o \n
+/// (None si no hay mas lineas). Tolerante con \n, \r y \r\n.
+fn fin_de_linea(texto: &[u8], pos: usize) -> Option<usize> {
+    (pos..texto.len()).find(|&i| texto[i] == b'\n' || texto[i] == b'\r')
+}
+
+/// Posicion tras el separador de linea que hay en `i` (1 o 2 bytes).
+fn tras_separador(texto: &[u8], i: usize) -> usize {
+    if texto[i] == b'\r' && i + 1 < texto.len() && texto[i + 1] == b'\n' {
+        i + 2
+    } else {
+        i + 1
+    }
+}
+
+/// Busca en la linea el nombre entre comillas y el entero que va
+/// despues. Devuelve (mapa, funcion) si la linea tiene la forma
+/// completa; el mapa queda vacio cuando el elemento no lleva.
+fn parsear_elemento(linea: &[u8]) -> Option<(&[u8], i32)> {
+    let q1 = linea.iter().position(|&b| b == b'"')?;
+    let q2 = q1 + 1 + linea.iter().skip(q1 + 1).position(|&b| b == b'"')?;
+    let n = (q2 - q1 - 1).min(127); // como el mapa[128] del C
+    let mapa = &linea[q1 + 1..q1 + 1 + n];
+    let mut q = q2 + 1;
+    while q < linea.len() && matches!(linea[q], b' ' | b'\t') {
+        q += 1;
+    }
+    let funcion = if q < linea.len() && (linea[q].is_ascii_digit() || linea[q] == b'-') {
+        entero(&linea[q..]).unwrap_or(0)
+    } else {
+        -1
+    };
+    Some((mapa, funcion))
+}
+
+/// Codigo lobo de la funcion con ese id (None si no esta definida).
+pub fn funcion_codigo(id: i32) -> Option<&'static [u8]> {
+    let funciones = unsafe { &*FUNCIONES.get() };
+    let num = unsafe { *NUM_FUNCIONES.get() }.min(FUNCIONES_MAX);
+    for i in 0..num {
+        if funciones[i].id == id {
+            let n = funciones[i].largo.min(FUNCION_CODIGO_MAX);
+            return Some(&funciones[i].codigo[..n]);
+        }
+    }
+    None
+}
+
+/// Ids de las funciones que usan los elementos del lienzo, en orden de
+/// aparicion.
+pub fn funciones_usadas() -> &'static [i32] {
+    let num = unsafe { *NUM_USADAS.get() }.min(USADAS_MAX);
+    let usadas = unsafe { &*USADAS.get() };
+    &usadas[..num]
+}
+
+/// Parsea la seccion de funciones de un LOGIC2 desde `texto` (justo
+/// despues de los elementos): una linea con el numero de funciones y,
+/// por cada una, la cabecera `<id> "<nombre>" <largo>`, su codigo crudo
+/// de `largo` bytes (puede llevar saltos de linea) y un separador
+/// final. Tolerante a lo que falte al final del archivo.
+fn cargar_funciones(texto: &[u8]) {
+    let mut pos = 0usize;
+    let mut nf = entero(texto).unwrap_or(0);
+    if nf < 0 || nf > 100000 {
+        nf = 0;
+    }
+    // Saltar la linea del contador.
+    pos = match fin_de_linea(texto, pos) {
+        Some(fin) => tras_separador(texto, fin),
+        None => texto.len(),
+    };
+
+    let funciones = unsafe { &mut *FUNCIONES.get() };
+    let mut num_funciones = unsafe { *NUM_FUNCIONES.get() }.min(FUNCIONES_MAX);
+
+    for _ in 0..nf {
+        if pos >= texto.len() {
+            break;
+        }
+        // Cabecera: <id> "<nombre>" <largo>.
+        let fin = fin_de_linea(texto, pos);
+        let fin_linea = match fin {
+            Some(f) => f,
+            None => texto.len(),
+        };
+        let linea = &texto[pos..fin_linea];
+        let id = entero(linea).unwrap_or(0);
+        let mut largo = 0usize;
+        if let Some(q1) = linea.iter().position(|&b| b == b'"') {
+            if let Some(rel) = linea.iter().skip(q1 + 1).position(|&b| b == b'"') {
+                largo = entero(&linea[q1 + rel + 2..]).unwrap_or(0).max(0) as usize;
+            }
+        }
+        match fin {
+            Some(f) => pos = tras_separador(texto, f),
+            // Sin separador: el archivo se acabo antes del codigo.
+            None => break,
+        }
+
+        // Codigo crudo: lo que quepa en el slot (el resto se salta).
+        let copia = largo.min(FUNCION_CODIGO_MAX).min(texto.len() - pos);
+        if id >= 1 && copia > 0 {
+            // Slot por id: la ultima definicion gana, como en el C.
+            let mut slot: Option<usize> = None;
+            for i in 0..num_funciones {
+                if funciones[i].id == id {
+                    slot = Some(i);
+                    break;
+                }
+            }
+            if slot.is_none() && num_funciones < FUNCIONES_MAX {
+                funciones[num_funciones].id = id;
+                slot = Some(num_funciones);
+                num_funciones += 1;
+            }
+            if let Some(i) = slot {
+                funciones[i].codigo[..copia].copy_from_slice(&texto[pos..pos + copia]);
+                funciones[i].largo = copia;
+            }
+        }
+        // Avanzar el codigo entero aunque no quepa en el slot.
+        pos += largo.min(texto.len() - pos);
+        // Separador tras el codigo.
+        if pos < texto.len() && (texto[pos] == b'\n' || texto[pos] == b'\r') {
+            pos = tras_separador(texto, pos);
+        }
+    }
+    unsafe { *NUM_FUNCIONES.get() = num_funciones };
+}
+
+/// Carga el proyecto del blob: el mapa que toca usar (el primer
+/// elemento con mapa que este en el blob, como activo.c) y las
+/// funciones lobo que usan los elementos (LOGIC2), que quedan en los
+/// arrays estaticos para el motor. Sin proyecto, o sin mapa que
+/// resolver, cae al mapa por defecto.
+fn parsear_proyecto(blob: &[u8]) -> Option<(&[u8], &'static str)> {
+    unsafe {
+        *NUM_FUNCIONES.get() = 0;
+        *NUM_USADAS.get() = 0;
+    }
+    let mut elegido: Option<(&[u8], &'static str)> = None;
+
     if let Some(logic) = buscar_entrada(blob, "proyecto.logic") {
-        // Formato del gestor: "LOGIC1", pan, numero de elementos y una
-        // linea por elemento: x y an alto id plegado "mapa" funcion.
-        // La pantalla del juego es el primer elemento con mapa.
-        let mut clave_buf = [0u8; 96];
-        let mut linea_inicio = 0usize;
-        let mut lineas = 0usize;
-        for i in 0..=logic.len() {
-            if i == logic.len() || logic[i] == b'\n' {
-                if lineas >= 3 {
-                    if let Some(mapa) = entre_comillas(&logic[linea_inicio..i]) {
+        let es_logic2 = logic.starts_with(b"LOGIC2");
+        if es_logic2 || logic.starts_with(b"LOGIC1") {
+            let mut pos = 6usize; // tras "LOGIC?"
+            // \r o \n sobrantes de la cabecera.
+            while pos < logic.len() && (logic[pos] == b'\r' || logic[pos] == b'\n') {
+                pos += 1;
+            }
+            // La linea del pan.
+            pos = match fin_de_linea(logic, pos) {
+                Some(fin) => tras_separador(logic, fin),
+                None => logic.len(),
+            };
+            // Numero de elementos.
+            let mut num = entero(&logic[pos.min(logic.len())..]).unwrap_or(0);
+            if num < 0 || num > 100000 {
+                num = 0;
+            }
+            pos = match fin_de_linea(logic, pos) {
+                Some(fin) => tras_separador(logic, fin),
+                None => logic.len(),
+            };
+            // Una linea por elemento.
+            let usadas = unsafe { &mut *USADAS.get() };
+            let mut num_usadas = 0usize;
+            let mut clave_buf = [0u8; 96];
+            let mut i = 0i32;
+            while i < num {
+                if pos >= logic.len() {
+                    break;
+                }
+                let fin = fin_de_linea(logic, pos);
+                let fin_linea = match fin {
+                    Some(f) => f,
+                    None => logic.len(),
+                };
+                if let Some((mapa, funcion)) = parsear_elemento(&logic[pos..fin_linea]) {
+                    if funcion >= 1 && num_usadas < USADAS_MAX {
+                        usadas[num_usadas] = funcion;
+                        num_usadas += 1;
+                    }
+                    // El mapa del proyecto vive en maps/.
+                    if elegido.is_none() && !mapa.is_empty() {
                         if let Ok(nombre) = core::str::from_utf8(mapa) {
                             let clave = unir_ruta(&mut clave_buf, "maps", nombre);
                             if let Some(datos) = buscar_entrada(blob, clave) {
                                 println!("egine: mapa del proyecto: {}.", clave);
-                                return Some((datos, "proyecto.logic"));
+                                elegido = Some((datos, "proyecto.logic"));
                             }
                         }
                     }
                 }
-                linea_inicio = i + 1;
-                lineas += 1;
+                i += 1;
+                pos = match fin {
+                    Some(f) => tras_separador(logic, f),
+                    None => logic.len(),
+                };
+            }
+            unsafe { *NUM_USADAS.get() = num_usadas };
+            // LOGIC2: funciones de codigo lobo tras los elementos.
+            if es_logic2 && pos < logic.len() {
+                cargar_funciones(&logic[pos..]);
             }
         }
-        println!("egine: el proyecto no apunta a ningun mapa del blob.");
+        if elegido.is_none() {
+            println!("egine: el proyecto no apunta a ningun mapa del blob.");
+        }
     }
-    let datos = buscar_entrada(blob, "maps/mapa.mav")?;
-    println!("egine: mapa por defecto: maps/mapa.mav.");
-    Some((datos, "maps/mapa.mav"))
+    if elegido.is_none() {
+        let datos = buscar_entrada(blob, "maps/mapa.mav")?;
+        println!("egine: mapa por defecto: maps/mapa.mav.");
+        return Some((datos, "maps/mapa.mav"));
+    }
+    elegido
 }
 
 /* ------------------------------------------------------------------ */
@@ -344,7 +597,7 @@ fn buscar_mapa(blob: &[u8]) -> Option<(&[u8], &'static str)> {
 /// Carga el mapa y sus tiles. Devuelve el MotorMapa listo para el nucleo
 /// (las celdas en .bss, los pixeles en la arena de arriba).
 pub fn cargar(blob: &[u8]) -> Option<MotorMapa> {
-    let (mav, origen) = buscar_mapa(blob)?;
+    let (mav, origen) = parsear_proyecto(blob)?;
 
     let mut lado = extraer_entero(mav, "tile_size").unwrap_or(32);
     lado = lado.clamp(4, 256);

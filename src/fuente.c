@@ -84,6 +84,32 @@ static const Glifo G_ESPACIO    = { { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
 static const Glifo G_MAS        = { { 0x00, 0x04, 0x04, 0x1F, 0x04, 0x04, 0x00 } };
 static const Glifo G_MENOS      = { { 0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00 } };
 
+/* Simbolos del lenguaje lobo (fase 8): comentario, comparaciones,
+ * operadores logicos, parentesis y parentesis de choca(x, y). */
+static const Glifo G_NUMERAL    = { { 0x0A, 0x0A, 0x1F, 0x0A, 0x0A, 0x00, 0x00 } };
+static const Glifo G_IGUAL     = { { 0x00, 0x00, 0x1F, 0x00, 0x1F, 0x00, 0x00 } };
+static const Glifo GUION_BAJO   = { { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1F } };
+static const Glifo G_MENOR      = { { 0x08, 0x04, 0x02, 0x01, 0x02, 0x04, 0x08 } };
+static const Glifo G_MAYOR      = { { 0x02, 0x04, 0x08, 0x10, 0x08, 0x04, 0x02 } };
+static const Glifo G_ADMIRACION = { { 0x04, 0x04, 0x04, 0x04, 0x04, 0x00, 0x04 } };
+static const Glifo G_AMPERSAND  = { { 0x0C, 0x12, 0x14, 0x08, 0x15, 0x12, 0x0D } };
+static const Glifo G_BARRA_VERT = { { 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04 } };
+static const Glifo G_PAR_ABRIR  = { { 0x02, 0x04, 0x08, 0x08, 0x08, 0x04, 0x02 } };
+static const Glifo G_PAR_CERRAR = { { 0x08, 0x04, 0x02, 0x02, 0x02, 0x04, 0x08 } };
+static const Glifo G_DIAGONAL   = { { 0x01, 0x01, 0x02, 0x04, 0x08, 0x10, 0x10 } };
+static const Glifo G_ASTERISCO  = { { 0x00, 0x0A, 0x04, 0x1F, 0x04, 0x0A, 0x00 } };
+static const Glifo G_COMA       = { { 0x00, 0x00, 0x00, 0x00, 0x04, 0x04, 0x08 } };
+
+/* Letras que faltaban para los nombres lobo del usuario. */
+static const Glifo G_MIN_H      = { { 0x10, 0x10, 0x1E, 0x11, 0x11, 0x11, 0x11 } };
+static const Glifo G_MIN_K      = { { 0x10, 0x10, 0x12, 0x14, 0x18, 0x14, 0x12 } };
+static const Glifo G_MIN_Q      = { { 0x00, 0x00, 0x0F, 0x11, 0x11, 0x1F, 0x01 } };
+static const Glifo G_MIN_Z      = { { 0x00, 0x00, 0x1F, 0x02, 0x04, 0x08, 0x1F } };
+static const Glifo G_J          = { { 0x07, 0x02, 0x02, 0x02, 0x02, 0x12, 0x0C } };
+static const Glifo G_K          = { { 0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11 } };
+static const Glifo G_Q          = { { 0x0E, 0x11, 0x11, 0x11, 0x15, 0x0E, 0x01 } };
+static const Glifo G_MAY_W      = { { 0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A } };
+
 #define G(g) ((g).filas)
 
 /* Mapeo de `glifo(caracter)`. Devuelve las 7 filas del glifo o NULL si no hay
@@ -92,6 +118,27 @@ const unsigned char *fuente_glifo(int codepoint) {
     if (codepoint >= '0' && codepoint <= '9') return G(G_DIGITOS[codepoint - '0']);
     switch (codepoint) {
         case '%': return G(G_PORCENTAJE);
+        case '#': return G(G_NUMERAL);
+        case '=': return G(G_IGUAL);
+        case '_': return G(GUION_BAJO);
+        case '<': return G(G_MENOR);
+        case '>': return G(G_MAYOR);
+        case '!': return G(G_ADMIRACION);
+        case '&': return G(G_AMPERSAND);
+        case '|': return G(G_BARRA_VERT);
+        case '(': return G(G_PAR_ABRIR);
+        case ')': return G(G_PAR_CERRAR);
+        case '/': return G(G_DIAGONAL);
+        case '*': return G(G_ASTERISCO);
+        case ',': return G(G_COMA);
+        case 'h': return G(G_MIN_H);
+        case 'k': return G(G_MIN_K);
+        case 'q': return G(G_MIN_Q);
+        case 'z': return G(G_MIN_Z);
+        case 'J': return G(G_J);
+        case 'K': return G(G_K);
+        case 'Q': return G(G_Q);
+        case 'W': return G(G_MAY_W);
         case 'p': return G(G_P);
         case 'P': return G(G_MAY_P);
         case 'B': return G(G_MAY_B);

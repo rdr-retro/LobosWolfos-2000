@@ -528,13 +528,20 @@ int activo_cargar_mapa(const char *ruta, MotorMapa *m) {
 /* ------------------------------------------------------------------ */
 
 /* Formato (logica_guardar_archivo del editor):
- *   LOGIC1
+ *   LOGIC2
  *   <pan_x> <pan_y>
  *   <num_elementos>
  *   <x> <y> <ancho> <alto> <id> <plegado> "<mapa>" <funcion>
+ *   <num_funciones>
+ *   <id> "<nombre>" <largo>
+ *   <codigo lobo de largo bytes crudos>
  *
  * El juego usa el primer elemento con mapa asociado (las pantallas del
- * juego) y comprueba que exista el modulo egine. */
+ * juego) y comprueba que exista el modulo egine. El campo funcion pasa
+ * de indice a referencia: -1 = item de mapa, 0 = egine y >= 1 el id de
+ * un boton FUNCIONES de codigo lobo, que el motor corre cada fotograma
+ * (ver lobo.h). Los proyectos LOGIC1 (sin la seccion de funciones)
+ * siguen cargando igual. */
 
 /* Busca en la linea el nombre entre comillas y el entero que va despues.
  * Devuelve 1 si la linea tiene la forma completa. */
@@ -559,6 +566,94 @@ static int parsear_elemento(const char *linea, char *mapa, int tam_mapa,
         *funcion = (int)strtol(q, NULL, 10);
     }
     return 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* Funciones de codigo lobo del proyecto (LOGIC2, fase 8)              */
+/* ------------------------------------------------------------------ */
+
+/* Un boton FUNCIONES serializado: su id y su texto lobo. */
+typedef struct ActivoFuncion {
+    int id;
+    int largo; /* bytes utiles del codigo (sin el 0 final) */
+    char codigo[ACTIVO_FUNCION_CODIGO_MAX + 1];
+} ActivoFuncion;
+
+static ActivoFuncion g_funciones[ACTIVO_FUNCIONES_MAX];
+static int g_num_funciones = 0;
+
+/* Ids de las funciones que usan los elementos del lienzo, en orden de
+ * aparicion: el motor corre un script por elemento. */
+static int g_usadas[ACTIVO_USADAS_MAX];
+static int g_num_usadas = 0;
+
+/* Slot de la funcion con ese id (creandolo si hay sitio): la ultima
+ * definicion gana, como en el resto del formato. */
+static ActivoFuncion *funcion_slot(int id) {
+    int i;
+    for (i = 0; i < g_num_funciones; i++)
+        if (g_funciones[i].id == id) return &g_funciones[i];
+    if (g_num_funciones >= ACTIVO_FUNCIONES_MAX) return NULL;
+    g_funciones[g_num_funciones].id = id;
+    return &g_funciones[g_num_funciones++];
+}
+
+const char *activo_funcion_codigo(int id) {
+    int i;
+    for (i = 0; i < g_num_funciones; i++)
+        if (g_funciones[i].id == id) return g_funciones[i].codigo;
+    return NULL;
+}
+
+int activo_funciones_usadas(int *ids, int max) {
+    int i, n = g_num_usadas < max ? g_num_usadas : max;
+    for (i = 0; i < n; i++) ids[i] = g_usadas[i];
+    return n;
+}
+
+/* Parsea la seccion de funciones de un LOGIC2 desde `p` (justo despues
+ * de los elementos): una linea con el numero de funciones y, por cada
+ * una, la cabecera <id> "<nombre>" <largo>, su codigo crudo de largo
+ * bytes (puede llevar saltos de linea) y un separador final. Tolerante
+ * a lo que falte al final del archivo. */
+static void cargar_funciones(const char *p, char *linea, int tam_linea) {
+    int nf, k;
+    nf = (int)strtol(p, NULL, 10);
+    if (nf < 0 || nf > 100000) nf = 0;
+    while (*p && *p != '\n') p++;
+    if (*p) p++;
+
+    for (k = 0; k < nf && p && *p; k++) {
+        const char *fin = strchr(p, '\n');
+        int n = fin ? (int)(fin - p) : (int)strlen(p);
+        int id = 0, largo = 0, copia;
+        char *q1, *q2;
+        ActivoFuncion *fn = NULL;
+
+        if (n >= tam_linea) n = tam_linea - 1;
+        memcpy(linea, p, (size_t)n);
+        linea[n] = '\0';
+        /* cabecera: <id> "<nombre>" <largo> */
+        id = (int)strtol(linea, NULL, 10);
+        q1 = strchr(linea, '"');
+        q2 = q1 ? strchr(q1 + 1, '"') : NULL;
+        if (q2) largo = (int)strtol(q2 + 1, NULL, 10);
+        if (largo < 0) largo = 0;
+        p = fin ? fin + 1 : NULL;
+        if (!p) break;
+
+        copia = largo > ACTIVO_FUNCION_CODIGO_MAX
+                  ? ACTIVO_FUNCION_CODIGO_MAX : largo;
+        if (id >= 1 && copia > 0) fn = funcion_slot(id);
+        if (fn) {
+            memcpy(fn->codigo, p, (size_t)copia);
+            fn->codigo[copia] = '\0';
+            fn->largo = copia;
+        }
+        /* avanzar el codigo entero aunque no quepa en el slot */
+        while (largo > 0 && *p) { p++; largo--; }
+        if (*p == '\n') p++; /* separador tras el codigo */
+    }
 }
 
 /* Ruta por defecto del mapa cuando el proyecto no tiene ninguno. */
@@ -604,19 +699,22 @@ int activo_cargar_proyecto(const char *ruta_logic, MotorMapa *m,
 
     mapa_usado[0] = '\0';
     ruta_mapa[0] = '\0';
+    g_num_funciones = 0;
+    g_num_usadas = 0;
 
     if (ruta_logic && ruta_logic[0]) {
         char *contenido;
         int largo = 0;
         char linea[512];
         const char *p;
-        int num = 0, i = 0, hay_egine = 0;
+        int num = 0, i = 0, hay_egine = 0, es_logic2 = 0;
 
         contenido = leer_archivo(ruta_logic, &largo);
         if (!contenido) return 0;
         p = contenido;
-        /* cabecera: LOGIC1 / pan / num */
-        if (strncmp(p, "LOGIC1", 6) != 0) { free(contenido); return 0; }
+        /* cabecera: LOGIC1 o LOGIC2 / pan / num */
+        if (strncmp(p, "LOGIC2", 6) == 0) es_logic2 = 1;
+        else if (strncmp(p, "LOGIC1", 6) != 0) { free(contenido); return 0; }
         p += 6;
         while (*p == '\r' || *p == '\n') p++;
         while (*p && *p != '\n') p++;          /* linea del pan */
@@ -636,6 +734,8 @@ int activo_cargar_proyecto(const char *ruta_logic, MotorMapa *m,
             linea[n] = '\0';
             if (parsear_elemento(linea, mapa, sizeof(mapa), &funcion)) {
                 if (funcion == 0) hay_egine = 1;
+                if (funcion >= 1 && g_num_usadas < ACTIVO_USADAS_MAX)
+                    g_usadas[g_num_usadas++] = funcion;
                 if (!ruta_mapa[0] && mapa[0]) {
                     /* el mapa del proyecto vive en maps/ */
                     _snprintf(ruta_mapa, sizeof(ruta_mapa), "maps\\%s", mapa);
@@ -646,6 +746,9 @@ int activo_cargar_proyecto(const char *ruta_logic, MotorMapa *m,
             i++;
             p = fin ? fin + 1 : NULL;
         }
+        /* LOGIC2: funciones de codigo lobo tras los elementos. */
+        if (es_logic2 && p && *p)
+            cargar_funciones(p, linea, (int)sizeof(linea));
         free(contenido);
         (void)hay_egine; /* informacion para futuras fases */
     }

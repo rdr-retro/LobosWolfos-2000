@@ -800,31 +800,41 @@ void logica_iniciar(void) {
     g.hover_modulo_funcion = -1;
     g.modulo_funcion_pulsada = -1;
     g.modulo_funcion_movido = 0;
+    g.num_funciones = 0;
+    g.funcion_siguiente_id = 1;
+    g.funcion_abierta = -1;
+    g.funciones_scroll = 0;
+    g.confirmar_funcion = -1;
 }
 
 /* ------------------------------------------------------------------ */
 /* Archivo de logica (.logic)                                          */
 /* ------------------------------------------------------------------ */
 /* Formato de texto, una logica por archivo:
- *   LOGIC1
+ *   LOGIC2
  *   <pan_x> <pan_y>
  *   <num_elementos>
  *   <x> <y> <ancho> <alto> <id> <plegado> "<mapa>" <funcion>
- *     (una linea por elemento; funcion es el indice en MODULOS_FUNCIONES,
- *      -1 = item de mapa) */
+ *     (una linea por elemento; funcion es -1 = item de mapa, 0 = egine
+ *      y >= 1 el id de un boton FUNCIONES de codigo)
+ *   <num_funciones>
+ *   <id> "<nombre>" <largo>
+ *   <codigo lobo crudo de largo bytes, con sus saltos de linea>
+ *     (una entrada por boton FUNCIONES, fase 8) */
 /* Serializa la logica activa en un buffer de memoria con el mismo
  * formato que el archivo .logic. El llamador libera el buffer con
  * free. Devuelve 0 sin memoria. */
 int logica_guardar_memoria(char **datos, int *largo) {
     char *buf;
-    int capacidad = 64 + g.num_modulos * 160;
+    int capacidad = 64 + g.num_modulos * 160 +
+                    g.num_funciones * (64 + FUNCIONES_CODIGO_MAX);
     int n = 0;
     int i;
 
     if (!datos || !largo) return 0;
     buf = (char *)malloc(capacidad);
     if (!buf) return 0;
-    n += sprintf(buf + n, "LOGIC1\n");
+    n += sprintf(buf + n, "LOGIC2\n");
     n += sprintf(buf + n, "%d %d\n", g.pan_x, g.pan_y);
     n += sprintf(buf + n, "%d\n", g.num_modulos);
     for (i = 0; i < g.num_modulos; i++) {
@@ -832,6 +842,14 @@ int logica_guardar_memoria(char **datos, int *largo) {
         n += sprintf(buf + n, "%d %d %d %d %d %d \"%s\" %d\n",
                      m->x, m->y, m->ancho, m->alto, m->id, m->plegado,
                      m->mapa, m->funcion);
+    }
+    n += sprintf(buf + n, "%d\n", g.num_funciones);
+    for (i = 0; i < g.num_funciones; i++) {
+        const FuncionCodigo *f = &g.funciones[i];
+        n += sprintf(buf + n, "%d \"%s\" %d\n", f->id, f->nombre, f->largo);
+        memcpy(buf + n, f->codigo, (size_t)f->largo);
+        n += f->largo;
+        buf[n++] = '\n'; /* separador tras el codigo */
     }
     *datos = buf;
     *largo = n;
@@ -856,21 +874,33 @@ int logica_guardar_archivo(const char *ruta) {
     return ok;
 }
 
-/* Carga una logica guardada (LOGIC1). Sustituye la logica activa por la
- * del archivo y devuelve 1; 0 si no se puede leer o el formato no es
- * LOGIC1. El campo del mapa y el de la funcion se toman de entre
- * comillas y del numero final: las lineas antiguas sin funcion (fase 0)
- * se aceptan como items de mapa, igual que un nombre vacio. */
+/* Carga una logica guardada (LOGIC1 o LOGIC2). Sustituye la logica
+ * activa por la del archivo y devuelve 1; 0 si no se puede leer o el
+ * formato no es conocido. El campo del mapa y el de la funcion se toman
+ * de entre comillas y del numero final: las lineas antiguas sin
+ * funcion (fase 0) se aceptan como items de mapa, igual que un nombre
+ * vacio. Las funciones de codigo (LOGIC2, fase 8) llegan tras los
+ * elementos; los ids que falten se conservan como referencias
+ * colgantes, que el motor salta. */
 int logica_cargar_archivo(const char *ruta) {
     FILE *f;
     char linea[512];
     int pan_x, pan_y, num, i, max_id;
+    int es_logic2 = 0;
 
     f = fopen(ruta, "rb");
     if (!f) return 0;
+    if (!fgets(linea, sizeof(linea), f)) {
+        fclose(f);
+        return 0;
+    }
+    if (strncmp(linea, "LOGIC2", 6) == 0) {
+        es_logic2 = 1;
+    } else if (strncmp(linea, "LOGIC1", 6) != 0) {
+        fclose(f);
+        return 0;
+    }
     if (!fgets(linea, sizeof(linea), f) ||
-        strncmp(linea, "LOGIC1", 6) != 0 ||
-        !fgets(linea, sizeof(linea), f) ||
         sscanf(linea, "%d %d", &pan_x, &pan_y) != 2 ||
         !fgets(linea, sizeof(linea), f)) {
         fclose(f);
@@ -915,7 +945,8 @@ int logica_cargar_archivo(const char *ruta) {
             if (*fin == '-' || (*fin >= '0' && *fin <= '9'))
                 funcion = atoi(fin);
         }
-        if (funcion >= modulos_funciones_num()) funcion = -1;
+        /* Los ids colgantes (funciones borradas o LOGIC1 antiguo) se
+         * conservan: el motor los salta al correr los scripts. */
 
         /* Tamanos degenerados vuelven al estandar del gestor. */
         if (ancho < 8 || ancho > 4096) ancho = MODULOS_ELEMENTO_ANCHO;
@@ -933,6 +964,64 @@ int logica_cargar_archivo(const char *ruta) {
         e->plegado = plegado;
         e->funcion = funcion;
         recortar_texto(e->mapa, mapa, sizeof(e->mapa));
+    }
+
+    /* Seccion de funciones de codigo lobo (LOGIC2): una linea con el
+     * numero de funciones y, por cada una, la cabecera <id> "<nombre>"
+     * <largo>, su codigo crudo de largo bytes y un separador final. */
+    if (es_logic2 && fgets(linea, sizeof(linea), f)) {
+        int nf = atoi(linea);
+        int k;
+        if (nf < 0 || nf > FUNCIONES_MAX) nf = 0;
+        for (k = 0; k < nf; k++) {
+            int id = 0, largo_codigo = 0;
+            const char *q1, *q2;
+            FuncionCodigo *fn = NULL;
+
+            if (!fgets(linea, sizeof(linea), f)) break;
+            q1 = strchr(linea, '"');
+            q2 = q1 ? strchr(q1 + 1, '"') : NULL;
+            if (!q1 || !q2) continue;
+            id = atoi(linea);
+            largo_codigo = atoi(q2 + 1);
+            if (id < 1 || largo_codigo < 0) continue;
+            if (largo_codigo > FUNCIONES_CODIGO_MAX)
+                largo_codigo = FUNCIONES_CODIGO_MAX;
+
+            if (g.num_funciones >= FUNCIONES_MAX) {
+                /* no cabe: saltar el codigo y seguir con la siguiente */
+                fseek(f, (long)largo_codigo, SEEK_CUR);
+            } else {
+                fn = &g.funciones[g.num_funciones++];
+                memset(fn, 0, sizeof(*fn));
+                fn->id = id;
+                {
+                    int nn = (int)(q2 - q1 - 1);
+                    if (nn >= FUNCIONES_NOMBRE_MAX) nn = FUNCIONES_NOMBRE_MAX - 1;
+                    if (nn > 0) memcpy(fn->nombre, q1 + 1, (size_t)nn);
+                    fn->nombre[nn] = 0;
+                }
+                if (fread(fn->codigo, 1, (size_t)largo_codigo, f) ==
+                    (size_t)largo_codigo) {
+                    fn->largo = largo_codigo;
+                    fn->codigo[largo_codigo] = 0;
+                } else {
+                    fn->largo = 0;
+                    fn->codigo[0] = 0;
+                }
+            }
+            /* separador tras el codigo: '\n', '\r' o '\r\n' (los .logic
+             * editados fuera del gestor pueden venir en modo CRLF) */
+            {
+                int sep = fgetc(f);
+                if (sep == '\r') {
+                    int sep2 = fgetc(f);
+                    if (sep2 != '\n' && sep2 != EOF) ungetc(sep2, f);
+                }
+            }
+            if (fn) funciones_codigo_validar(fn);
+            if (id >= g.funcion_siguiente_id) g.funcion_siguiente_id = id + 1;
+        }
     }
     fclose(f);
     g.modulo_siguiente_id = max_id + 1;
@@ -1212,8 +1301,8 @@ static int elementos_raiz(int idx) {
 
 /* Inserta un elemento centrado en un punto de pantalla, con acople. */
 /* Cuerpo comun de insercion: coloca un elemento nuevo centrado en (x, y)
- * del cliente, con el acople del iman. `funcion` es el indice en
- * MODULOS_FUNCIONES o -1 para un item de mapa. */
+ * del cliente, con el acople del iman. `funcion` es -1 para un item de
+ * mapa, 0 para egine y >= 1 el id de una funcion lobo del proyecto. */
 static void modulos_insertar_en(int x, int y, int funcion) {
     Zona lienzo = modulos_lienzo_zona();
     ModuloElemento *e;
@@ -1259,8 +1348,8 @@ void modulos_insertar(int x, int y) {
     modulos_insertar_en(x, y, -1);
 }
 
-/* Inserta un elemento de funcion logica (p. ej. egine, el motor) en el
- * punto del lienzo donde se ha soltado. */
+/* Inserta un elemento de funcion logica (egine o una funcion de codigo
+ * lobo, por su id) en el punto del lienzo donde se ha soltado. */
 void modulos_insertar_funcion(int x, int y, int funcion) {
     modulos_insertar_en(x, y, funcion);
 }
@@ -1307,25 +1396,360 @@ int selector_mapa_en(int x, int y) {
 /* ------------------------------------------------------------------ */
 /* Funciones logicas del panel derecho                                  */
 /* ------------------------------------------------------------------ */
-/* Rectangulos de la seccion FUNCIONES del panel derecho. Por ahora solo
- * hay una ("egine"): se arrastra al lienzo como elemento del motor. */
-static const char *MODULOS_FUNCIONES[] = { "egine" };
+/* Rectangulos de la seccion FUNCIONES del panel derecho. El primero es
+ * "egine" (el motor) y despues van los botones con codigo lobo (fase 8)
+ * que se editan aqui mismo y se arrastran al lienzo igual que los
+ * items de mapa. Walk de la seccion: indice 0 = egine, 1..N los
+ * botones de codigo (indice del array g.funciones + 1) y N+1 el
+ * boton "+" que crea funciones nuevas. */
 
+/* Botones de la seccion sin contar el "+". */
 int modulos_funciones_num(void) {
-    return (int)(sizeof(MODULOS_FUNCIONES) / sizeof(MODULOS_FUNCIONES[0]));
+    return 1 + g.num_funciones;
+}
+
+/* Total del walk de la seccion (con el boton "+"). */
+int modulos_funciones_total(void) {
+    return modulos_funciones_num() + 1;
 }
 
 const char *modulos_funcion_nombre(int indice) {
-    if (indice < 0 || indice >= modulos_funciones_num()) return "";
-    return MODULOS_FUNCIONES[indice];
+    if (indice == 0) return "egine";
+    if (indice >= 1 && indice <= g.num_funciones)
+        return g.funciones[indice - 1].nombre;
+    if (indice == modulos_funciones_num()) return "+ NUEVA FUNCION";
+    return "";
 }
 
-/* Rectangulo de funcion bajo el cursor; -1 si no hay ninguno. */
-int modulos_funcion_en(int x, int y) {
-    int i;
-    for (i = 0; i < modulos_funciones_num(); i++)
-        if (zona_contiene(modulos_funcion_zona(i), x, y)) return i;
+/* Valor que toma el campo `funcion` de un elemento del lienzo al
+ * soltar un arrastre de este boton: 0 = egine, >= 1 id de funcion y
+ * -1 el "+" (que no se arrastra). */
+int modulos_funcion_id_de(int indice) {
+    if (indice == 0) return 0;
+    if (indice >= 1 && indice <= g.num_funciones)
+        return g.funciones[indice - 1].id;
     return -1;
+}
+
+int modulos_funcion_indice_de(int id) {
+    int i;
+    for (i = 0; i < g.num_funciones; i++)
+        if (g.funciones[i].id == id) return i;
+    return -1;
+}
+
+const char *modulos_funcion_nombre_id(int id) {
+    int i = modulos_funcion_indice_de(id);
+    return i >= 0 ? g.funciones[i].nombre : "";
+}
+
+/* Alto del boton de la seccion: el editor abierto crece hacia abajo
+ * con su area de codigo y su franja de error (mismo desglose que
+ * modulos_funcion_codigo_zona en ui.c). */
+int modulos_funcion_alto_de(int indice) {
+    if (indice >= 1 && indice <= g.num_funciones &&
+        g.funcion_abierta == indice - 1)
+        return MODULOS_FUNCION_ALTO + 2 +
+               4 + MODULOS_FUNCION_EDITOR_LINEAS *
+                   MODULOS_FUNCION_LINEA_ALTO +
+               12;
+    return MODULOS_FUNCION_ALTO;
+}
+
+/* Rectangulo de funcion bajo el cursor; -1 si no hay ninguno (solo
+ * cuenta los botones visibles con el scroll actual). */
+int modulos_funcion_en(int x, int y) {
+    int visibles = modulos_funciones_visibles();
+    int i;
+    for (i = 0; i < visibles; i++) {
+        int indice = g.funciones_scroll + i;
+        if (indice >= modulos_funciones_total()) break;
+        if (zona_contiene(modulos_funcion_zona(indice), x, y)) return indice;
+    }
+    return -1;
+}
+
+/* ------------------------------------------------------------------ */
+/* Edicion del codigo lobo de los botones FUNCIONES                     */
+/* ------------------------------------------------------------------ */
+
+/* Recompila el codigo con el mismo parser del motor y guarda su error
+ * ("" = compila). De "linea N: motivo" saca la linea para la franja. */
+void funciones_codigo_validar(FuncionCodigo *f) {
+    LoboPrograma prog;
+    if (lobo_parsear(f->codigo, &prog, f->error, sizeof(f->error))) {
+        f->error[0] = 0;
+        f->error_linea = 0;
+    } else {
+        const char *q = strstr(f->error, "linea ");
+        f->error_linea = q ? atoi(q + 6) : 0;
+    }
+}
+
+/* Crea un boton de codigo nuevo con nombre automatico y abre su
+ * editor para escribir en el. */
+void funciones_codigo_nueva(void) {
+    FuncionCodigo *f;
+    if (g.num_funciones >= FUNCIONES_MAX) {
+        app_estado("Demasiadas funciones (maximo %d)", FUNCIONES_MAX);
+        app_invalidar();
+        return;
+    }
+    f = &g.funciones[g.num_funciones++];
+    memset(f, 0, sizeof(*f));
+    f->id = g.funcion_siguiente_id++;
+    formatear(f->nombre, sizeof(f->nombre), "funcion %d", f->id);
+    g.funcion_abierta = g.num_funciones - 1;
+    modulos_funciones_scroll_ver(g.funcion_abierta + 1);
+    app_estado("Funcion %d creada", f->id);
+    app_invalidar();
+}
+
+/* Borra la funcion `indice` (del array g.funciones) y tambien los
+ * elementos del lienzo que la referencian por id. */
+void funciones_codigo_borrar(int indice) {
+    int id, i;
+    int total, visibles, maximo;
+    if (indice < 0 || indice >= g.num_funciones) return;
+    id = g.funciones[indice].id;
+    /* modulos_eliminar compacta el array: no avanzar i al borrar. */
+    for (i = 0; i < g.num_modulos; ) {
+        if (g.modulos[i].funcion == id) modulos_eliminar(i);
+        else i++;
+    }
+    for (i = indice; i < g.num_funciones - 1; i++)
+        g.funciones[i] = g.funciones[i + 1];
+    g.num_funciones--;
+    if (g.funcion_abierta == indice) g.funcion_abierta = -1;
+    else if (g.funcion_abierta > indice) g.funcion_abierta--;
+    total = modulos_funciones_total();
+    visibles = modulos_funciones_visibles();
+    maximo = total - visibles;
+    if (maximo < 0) maximo = 0;
+    if (g.funciones_scroll > maximo) g.funciones_scroll = maximo;
+    app_estado("Funcion %d eliminada", id);
+    app_invalidar();
+}
+
+/* Linea y columna (en caracteres) de la posicion del cursor. */
+static void funcion_cursor_lc(const FuncionCodigo *f, int *linea, int *col) {
+    int i, l = 0, c = 0;
+    for (i = 0; i < f->cursor && f->codigo[i]; i++) {
+        if (f->codigo[i] == '\n') { l++; c = 0; }
+        else c++;
+    }
+    *linea = l;
+    *col = c;
+}
+
+/* Coloca el cursor en linea/columna, recortado al texto real. */
+static void funcion_cursor_ir(FuncionCodigo *f, int linea, int col) {
+    int i = 0, l = 0;
+    if (linea < 0) linea = 0;
+    if (col < 0) col = 0;
+    while (l < linea && f->codigo[i]) {
+        if (f->codigo[i] == '\n') l++;
+        i++;
+    }
+    while (col > 0 && f->codigo[i] && f->codigo[i] != '\n') {
+        i++;
+        col--;
+    }
+    f->cursor = i;
+}
+
+/* Inserta texto en el cursor (recortado al maximo) y revalida. */
+static void funcion_insertar(FuncionCodigo *f, const char *texto) {
+    int n = (int)strlen(texto);
+    int espacio = FUNCIONES_CODIGO_MAX - f->largo;
+    int i;
+    if (n > espacio) n = espacio;
+    if (n <= 0) return;
+    for (i = f->largo; i >= f->cursor; i--)
+        f->codigo[i + n] = f->codigo[i];
+    memcpy(f->codigo + f->cursor, texto, (size_t)n);
+    f->cursor += n;
+    f->largo += n;
+    funciones_codigo_validar(f);
+}
+
+/* Borra n caracteres a la derecha del cursor y revalida. */
+static void funcion_borrar_der(FuncionCodigo *f, int n) {
+    int i;
+    if (n > f->largo - f->cursor) n = f->largo - f->cursor;
+    if (n <= 0) return;
+    for (i = f->cursor; i + n <= f->largo; i++)
+        f->codigo[i] = f->codigo[i + n];
+    f->largo -= n;
+    f->codigo[f->largo] = 0;
+    funciones_codigo_validar(f);
+}
+
+/* Borra n caracteres a la izquierda del cursor (retroceso). */
+static void funcion_borrar_izq(FuncionCodigo *f, int n) {
+    if (n > f->cursor) n = f->cursor;
+    if (n <= 0) return;
+    memmove(f->codigo + f->cursor - n, f->codigo + f->cursor,
+            (size_t)(f->largo - f->cursor + 1));
+    f->cursor -= n;
+    f->largo -= n;
+    funciones_codigo_validar(f);
+}
+
+/* Mueve el scroll del editor para que la linea del cursor se vea. */
+static void funcion_asegurar_visible(FuncionCodigo *f) {
+    int linea, col;
+    funcion_cursor_lc(f, &linea, &col);
+    if (linea < f->scroll) f->scroll = linea;
+    if (linea - f->scroll >= MODULOS_FUNCION_EDITOR_LINEAS)
+        f->scroll = linea - MODULOS_FUNCION_EDITOR_LINEAS + 1;
+}
+
+int funciones_codigo_abierta_linea(void) {
+    int linea, col;
+    if (g.funcion_abierta < 0 || g.funcion_abierta >= g.num_funciones)
+        return 0;
+    funcion_cursor_lc(&g.funciones[g.funcion_abierta], &linea, &col);
+    return linea;
+}
+
+int funciones_codigo_abierta_columna(void) {
+    int linea, col;
+    if (g.funcion_abierta < 0 || g.funcion_abierta >= g.num_funciones)
+        return 0;
+    funcion_cursor_lc(&g.funciones[g.funcion_abierta], &linea, &col);
+    return col;
+}
+
+/* Clic en el area de codigo del editor abierto: coloca el cursor en
+ * la linea y la columna donde se ha pulsado. */
+static void funciones_codigo_clic(int indice, int x, int y) {
+    FuncionCodigo *f;
+    Zona z;
+    int linea, col;
+    if (indice < 0 || indice >= g.num_funciones) return;
+    f = &g.funciones[indice];
+    z = modulos_funcion_codigo_zona(indice + 1);
+    linea = (y - z.y - 2) / MODULOS_FUNCION_LINEA_ALTO + f->scroll;
+    col = (x - z.x - 2) / 6;
+    funcion_cursor_ir(f, linea, col);
+    funcion_asegurar_visible(f);
+}
+
+/* Tecla de control en el editor abierto: flechas, inicio y fin,
+ * borrado, salto de linea y tabulacion. Escape pliega el editor. */
+void funciones_codigo_tecla(int vk, int ctrl) {
+    FuncionCodigo *f;
+    int linea, col;
+    if (g.funcion_abierta < 0 || g.funcion_abierta >= g.num_funciones)
+        return;
+    f = &g.funciones[g.funcion_abierta];
+    funcion_cursor_lc(f, &linea, &col);
+    switch (vk) {
+    case VK_LEFT:
+        if (ctrl) {
+            /* saltar una palabra hacia atras */
+            int i = f->cursor;
+            while (i > 0 && f->codigo[i - 1] == ' ') i--;
+            while (i > 0 && f->codigo[i - 1] != ' ' &&
+                   f->codigo[i - 1] != '\n') i--;
+            f->cursor = i;
+        } else if (f->cursor > 0) {
+            f->cursor--;
+        }
+        break;
+    case VK_RIGHT:
+        if (ctrl) {
+            /* saltar una palabra hacia delante */
+            int i = f->cursor;
+            while (f->codigo[i] && f->codigo[i] != ' ' &&
+                   f->codigo[i] != '\n') i++;
+            while (f->codigo[i] == ' ') i++;
+            f->cursor = i;
+        } else if (f->codigo[f->cursor]) {
+            f->cursor++;
+        }
+        break;
+    case VK_UP:
+        funcion_cursor_ir(f, linea - 1, col);
+        break;
+    case VK_DOWN:
+        funcion_cursor_ir(f, linea + 1, col);
+        break;
+    case VK_HOME:
+        if (ctrl) {
+            f->cursor = 0;
+        } else {
+            int i = f->cursor;
+            while (i > 0 && f->codigo[i - 1] != '\n') i--;
+            f->cursor = i;
+        }
+        break;
+    case VK_END:
+        if (ctrl) {
+            f->cursor = f->largo;
+        } else {
+            int i = f->cursor;
+            while (f->codigo[i] && f->codigo[i] != '\n') i++;
+            f->cursor = i;
+        }
+        break;
+    case VK_BACK:
+        funcion_borrar_izq(f, 1);
+        break;
+    case VK_DELETE:
+        funcion_borrar_der(f, 1);
+        break;
+    case VK_RETURN:
+        funcion_insertar(f, "\n");
+        break;
+    case VK_TAB: {
+        char tab[MODULOS_FUNCION_TABULACION + 1];
+        int i;
+        for (i = 0; i < MODULOS_FUNCION_TABULACION; i++) tab[i] = ' ';
+        tab[i] = 0;
+        funcion_insertar(f, tab);
+        break;
+    }
+    case VK_ESCAPE:
+        g.funcion_abierta = -1;
+        app_invalidar();
+        return;
+    default:
+        return; /* los caracteres imprimibles llegan por app_caracter */
+    }
+    funcion_asegurar_visible(f);
+    app_invalidar();
+}
+
+/* Caracter imprimible en el editor abierto (la fuente bitmap es ASCII
+ * y el lenguaje lobo no lleva acentos). */
+void funciones_codigo_caracter(int ch) {
+    char s[2];
+    if (g.funcion_abierta < 0 || g.funcion_abierta >= g.num_funciones)
+        return;
+    if (ch < 32 || ch > 126) return;
+    s[0] = (char)ch;
+    s[1] = 0;
+    funcion_insertar(&g.funciones[g.funcion_abierta], s);
+    funcion_asegurar_visible(&g.funciones[g.funcion_abierta]);
+    app_invalidar();
+}
+
+/* Clic dentro del aviso de borrado de una funcion: SI la elimina y
+ * cualquier otro clic solo cierra el aviso. */
+static void modulos_confirmar_clic(int x, int y, int boton) {
+    Zona si, no;
+    if (boton != 0) return;
+    confirmar_panel_zona(&si, &no);
+    if (zona_contiene(si, x, y)) {
+        int indice = g.confirmar_funcion;
+        g.confirmar_funcion = -1;
+        funciones_codigo_borrar(indice);
+    } else {
+        g.confirmar_funcion = -1;
+    }
+    app_invalidar();
 }
 
 static void modulos_pulsar(int x, int y, int boton) {
@@ -1342,6 +1766,16 @@ static void modulos_pulsar(int x, int y, int boton) {
         return;
     }
 
+    /* Un clic fuera del boton expandido cierra su editor; los clics
+     * dentro los maneja la seccion FUNCIONES justo debajo. */
+    if (g.funcion_abierta >= 0) {
+        if (!zona_contiene(modulos_funcion_zona(g.funcion_abierta + 1),
+                           x, y)) {
+            g.funcion_abierta = -1;
+            app_invalidar();
+        }
+    }
+
     /* Boton del panel derecho: un clic elige item y un arrastre lo inserta. */
     if (boton == 0 && zona_contiene(modulos_boton_zona(), x, y)) {
         g.modulo_boton_pulsado = 1;
@@ -1353,8 +1787,20 @@ static void modulos_pulsar(int x, int y, int boton) {
         return;
     }
 
-    /* Rectangulos de la seccion FUNCIONES: un clic sin arrastre avisa de
-     * como usarlos y un arrastre inserta la funcion en el lienzo. */
+    /* Clic derecho sobre un boton de codigo: pedir confirmacion para
+     * borrarlo (nunca en mitad de un arrastre de la seccion). */
+    if (boton == 1 && g.modulo_funcion_pulsada < 0) {
+        int f = modulos_funcion_en(x, y);
+        if (f >= 1 && f <= g.num_funciones) {
+            g.confirmar_funcion = f - 1;
+            app_invalidar();
+            return;
+        }
+    }
+
+    /* Rectangulos de la seccion FUNCIONES: un clic abre el editor de
+     * codigo (o crea una funcion con el "+") y un arrastre inserta la
+     * funcion en el lienzo. El "+" se pulsa pero nunca arrastra. */
     if (boton == 0) {
         int f = modulos_funcion_en(x, y);
         if (f >= 0) {
@@ -1439,8 +1885,8 @@ static void modulos_pulsar(int x, int y, int boton) {
 
 static void modulos_soltar(int x, int y) {
     /* Soltar un rectangulo de la seccion FUNCIONES: si hubo arrastre se
-     * inserta la funcion como elemento del lienzo (egine = el motor); si
-     * fue un clic, recuerda como se usa. */
+     * inserta la funcion como elemento del lienzo (egine o una funcion
+     * de codigo lobo); si fue un clic, abre o pliega su editor. */
     if (g.modulo_funcion_pulsada >= 0) {
         int f = g.modulo_funcion_pulsada;
         g.modulo_funcion_pulsada = -1;
@@ -1449,10 +1895,25 @@ static void modulos_soltar(int x, int y) {
             g.modulo_arrastrando = 0;
             g.modulo_snap_linea_x = -1;
             g.modulo_snap_linea_y = -1;
-            modulos_insertar_funcion(x, y, f);
+            if (f < modulos_funciones_num())
+                modulos_insertar_funcion(x, y, modulos_funcion_id_de(f));
         } else if (modulos_funcion_en(x, y) == f) {
-            app_estado("%s: arrastra al lienzo para usarlo",
-                       modulos_funcion_nombre(f));
+            if (f == modulos_funciones_num()) {
+                funciones_codigo_nueva();
+            } else if (f == 0) {
+                app_estado("egine: arrastra al lienzo para usarlo");
+            } else if (g.funcion_abierta == f - 1) {
+                /* El boton abierto: la cabecera pliega el editor y el
+                 * area de codigo coloca el cursor. */
+                if (zona_contiene(modulos_funcion_codigo_zona(f), x, y))
+                    funciones_codigo_clic(f - 1, x, y);
+                else if (zona_contiene(modulos_funcion_cabecera_zona(f), x, y))
+                    g.funcion_abierta = -1;
+                /* la franja de error solo consume el clic */
+            } else {
+                g.funcion_abierta = f - 1;
+                modulos_funciones_scroll_ver(f);
+            }
         }
         app_invalidar();
         return;
@@ -1516,8 +1977,10 @@ static void modulos_mover(int x, int y) {
         }
     }
 
-    /* El mismo umbral al tirar de un rectangulo de la seccion FUNCIONES. */
-    if (g.modulo_funcion_pulsada >= 0 && !g.modulo_funcion_movido) {
+    /* El mismo umbral al tirar de un rectangulo de la seccion FUNCIONES
+     * (el boton "+" no se arrastra). */
+    if (g.modulo_funcion_pulsada >= 0 && !g.modulo_funcion_movido &&
+        g.modulo_funcion_pulsada < modulos_funciones_num()) {
         int dx = x - g.modulo_funcion_x;
         int dy = y - g.modulo_funcion_y;
         if (dx * dx + dy * dy >= 16) {
@@ -1597,6 +2060,20 @@ static void modulos_rueda(int x, int y, int delta, int ctrl) {
         }
         return;
     }
+    /* Rueda sobre la seccion FUNCIONES: desplaza sus botones. */
+    if (zona_contiene(modulos_funciones_seccion_zona(), x, y)) {
+        int maximo = modulos_funciones_total() -
+                     modulos_funciones_visibles();
+        int scroll = g.funciones_scroll + (delta > 0 ? -1 : 1);
+        if (maximo < 0) maximo = 0;
+        if (scroll < 0) scroll = 0;
+        if (scroll > maximo) scroll = maximo;
+        if (scroll != g.funciones_scroll) {
+            g.funciones_scroll = scroll;
+            app_invalidar();
+        }
+        return;
+    }
     if (!zona_contiene(modulos_lienzo_zona(), x, y)) return;
     if (ctrl) {
         g.pan_x += delta > 0 ? MODULOS_CUADRICULA : -MODULOS_CUADRICULA;
@@ -1614,6 +2091,13 @@ void app_pulsar(int x, int y, int boton) {
      * interfaz mientras estan abiertos. */
     if (g.confirmar_borrado || g.confirmar_tile >= 0 || g.capa_menu_abierto >= 0) {
         clic_panel_derecho(x, y, boton);
+        return;
+    }
+
+    /* El aviso de borrado de una funcion de codigo tambien bloquea el
+     * resto de la interfaz mientras esta abierto. */
+    if (g.confirmar_funcion >= 0) {
+        modulos_confirmar_clic(x, y, boton);
         return;
     }
 
@@ -1958,13 +2442,31 @@ void app_tecla(int vk, int ctrl, int shift) {
     if (ctrl && vk == 'S') { dialogo_guardar_png(); return; }
     if (ctrl && vk == 'M') { app_cambiar_vista(g.vista == VISTA_MAPA ? VISTA_PINTAR : VISTA_MAPA); return; }
     if (vk == VK_F1) { g.info_visible = !g.info_visible; app_invalidar(); return; }
-    if (g.vista == VISTA_MODULOS) return;
+    /* El aviso de borrado de una funcion bloquea el teclado: solo
+     * Escape lo cierra. */
+    if (g.confirmar_funcion >= 0) {
+        if (vk == VK_ESCAPE) {
+            g.confirmar_funcion = -1;
+            app_invalidar();
+        }
+        return;
+    }
+    /* Editor de codigo lobo abierto: las teclas de control son suyas. */
+    if (g.vista == VISTA_MODULOS) {
+        if (g.funcion_abierta >= 0) funciones_codigo_tecla(vk, ctrl);
+        return;
+    }
     if (g.vista == VISTA_PINTAR && texto_tecla(vk, ctrl, shift)) return;
     pintura_tecla(vk, ctrl, shift);
 }
 
 void app_caracter(int ch) {
-    if (g.vista == VISTA_MODULOS) return;
+    /* Editor de codigo lobo abierto: los caracteres imprimibles son
+     * suyos (la fuente bitmap es ASCII, 32..126). */
+    if (g.vista == VISTA_MODULOS) {
+        if (g.funcion_abierta >= 0) funciones_codigo_caracter(ch);
+        return;
+    }
     if (g.vista == VISTA_PINTAR && texto_caracter(ch)) return;
     pintura_caracter(ch);
 }

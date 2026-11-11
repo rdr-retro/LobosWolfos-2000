@@ -13,6 +13,7 @@ pid.txt
 
 # Capturas y diferencias de pruebas
 tp_*.png
+tp_*.bmp
 diff_*.png
 
 # Notas de desarrollo locales

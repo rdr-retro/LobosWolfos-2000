@@ -27,10 +27,9 @@ Se actualiza con cada entrega.
   - Los **items** (mapas `.mav` de `maps/`) son las pantallas o niveles del
     juego: se eligen en el botón del item y se arrastran al lienzo.
   - La sección **FUNCIONES** del panel derecho tiene los módulos
-    arrastrables del juego. El primero es **egine**, el motor.
-  - En el futuro habrá más botones arrastrables con **partes de código
-    editable dentro del propio botón**: al escribir código en el botón, el
-    botón cambia (ver fase 8).
+    arrastrables del juego. El primero es **egine**, el motor; el resto
+    son botones con **código lobo editable dentro del propio botón** (el
+    botón cambia al escribir; ver fase 8).
 - Menú **COMPILE** (entre COLORES e INFO): las dos salidas de compilación.
 - Efecto imán entre elementos, lista de elementos plegable, guardar
   lógica `.logic`.
@@ -116,7 +115,7 @@ escritorio **no se toca**: se trabaja sobre una copia.
 | 5 | Kernel loboswolfos: copia reducida de rocky que arranca por USB con framebuffer y entrada | **Hecho (10-11-2026)** |
 | 6 | Núcleo ASM x86_64 + el mismo juego corriendo sobre loboswolfos | **Hecho (11-11-2026)** |
 | 7 | **Compilar para BIOS** desde el menú COMPILE: genera la imagen USB flasheable (y flashearla con la herramienta de rocky como guía) | **Hecho (11-11-2026)** |
-| 8 | Más botones FUNCIONES arrastrables con **código editable dentro del botón**: al escribir el código, el botón cambia su aspecto; el código pasa a formar parte del juego compilado | Pendiente |
+| 8 | Más botones FUNCIONES arrastrables con **código editable dentro del botón**: al escribir el código, el botón cambia su aspecto; el código pasa a formar parte del juego compilado | **Hecho (11-11-2026)** |
 
 Orden de trabajo por defecto: 1 → 2 → 3 → 4 (primero Windows, que es
 inmediato), y en paralelo cuando toque 5 → 6 → 7. La fase 8 llega cuando
@@ -280,18 +279,44 @@ el motor ya compila.
   compila la imagen sin dialogo (como `--compilar-windows`) y el xtask
   tiene `probar-imagen <ruta>` para arrancar en QEMU una imagen ya
   montada (la del editor) sin reconstruirla.
+- **11-11-2026 (fase 8)** — El código de los botones FUNCIONES es
+  **lobo**, un lenguaje propio de texto plano interpretado en los dos
+  destinos por el mismo parser escrito dos veces (`motor/lobo.c`, que
+  enlazan el editor y `game.exe`, y `loboswolfos/kernel/src/lobo.rs`,
+  con la misma numeracion de opcodes). Sentencias: `si/sino/fin`,
+  `mientras/fin`, asignaciones y expresiones sueltas; expresiones con
+  aritmetica (`+ - * / %`), comparaciones, `&`/`|`/`no`/`!`, las
+  variables del juego (`x`, `y`, `vel`, `fotograma`), locales por script
+  (preescaneadas, maximo 16), teclas `tecla_*` y las funciones
+  `choca(x, y)` y `cerrar()`. La division entre 0 (y el caso
+  INT_MIN/-1) da 0 y la aritmetica envuelve como unsigned. VM de pila:
+  32 valores, 256 instrucciones y 200000 pasos por fotograma (un bucle
+  sin salida no cuelga el juego). Los errores son «linea N: motivo» y
+  el editor los pinta en el propio boton mientras se escribe.
+- **11-11-2026 (fase 8)** — El `.logic` pasa a **LOGIC2**: tras los
+  elementos van el numero de funciones y, por cada una, la cabecera
+  `<id> "<nombre>" <largo>`, su codigo crudo de `largo` bytes y un
+  separador. El campo funcion del elemento referencia ids: -1 item de
+  mapa, 0 egine y >= 1 boton FUNCIONES. Los ids colgantes (funciones
+  borradas) se conservan y el motor los salta; los LOGIC1 antiguos
+  siguen cargando igual.
+- **11-11-2026 (fase 8)** — Modo scripts en el motor: cuando el
+  proyecto usa funciones, el codigo lobo manda cada fotograma (un
+  script por elemento, compartiendo programa por id y cada uno con sus
+  locales) y el movimiento por defecto queda fuera; al final solo
+  vuelven `x` e `y` (vel y fotograma son de entrada, no de vuelta).
+  `choca(x, y)` prueba la caja del sprite contra el mapa y `cerrar()`
+  cierra el juego. Sin scripts, el juego corre como en la fase 6.
+- **11-11-2026 (fase 8)** — El xtask monta una `proyecto.logic` de
+  prueba (un mapa y un boton FUNCIONES que pasea al lobo) cuando el
+  raiz no tiene logica propia, y `probar-juego` exige en la serie la
+  linea `egine: lobo: N scripts.` y ningun `egine: lobo: error`.
 
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,
   FAT32 u otro). Hoy no hay ninguno: la zona del juego lleva el blob LGB1
   crudo apuntado por el bloque RKYCFG, que de momento basta.
-- Lenguaje del código de los botones de la fase 8 (texto plano, algo tipo
-  `.rka` de rocky, u otro propio). La restricción que fija la fase 6:
-  ese código tiene que correr en **los dos destinos** (el `game.exe` de
-  32 bits con el motor en C y el kernel loboswolfos `no_std`), asi que o
-  se interpreta en ambos nucleos o se compila a cada uno; el proyecto viaja
-  en el mismo blob LGB1 en los dos casos.
 
 ## 6. Reglas de trabajo
 

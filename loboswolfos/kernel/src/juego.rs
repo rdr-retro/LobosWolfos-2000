@@ -12,13 +12,17 @@
 //!   - el ritmo lo marca el PIT a 100 Hz (cada tic avanza 3/5 de
 //!     fotograma: 60 actualizaciones por segundo exactas),
 //!   - la entrada sondea el teclado (flechas E0, WASD, espacio y Escape
-//!     en input.rs) y, para las pruebas por serie, las letras ASCII.
+//!     en input.rs) y, para las pruebas por serie, las letras ASCII,
+//!   - los botones FUNCIONES del proyecto corren su codigo lobo cada
+//!     fotograma (fase 8, lobo.rs): cuando hay scripts, el codigo manda
+//!     y el movimiento por defecto queda fuera (como juego.c).
 
 use crate::activo;
 use crate::cpu;
 use crate::gfx;
 use crate::input;
-use crate::motor::{self, MotorMapa};
+use crate::lobo;
+use crate::motor::{self, MotorCelda, MotorMapa};
 use crate::motor::{
     MOTOR_ENT_ABAJO, MOTOR_ENT_ARRIBA, MOTOR_ENT_CERRAR, MOTOR_ENT_DERECHA, MOTOR_ENT_IZQUIERDA,
     MOTOR_ENT_SALTO,
@@ -44,6 +48,116 @@ static FB: SyncCell<[u32; (VENTANA_ANCHO * VENTANA_ALTO) as usize]> =
 static SPRITE: SyncCell<[u32; (SPRITE_LADO * SPRITE_LADO) as usize]> =
     SyncCell::new([0; (SPRITE_LADO * SPRITE_LADO) as usize]);
 
+/* ------------------------------------------------------------------ */
+/* Scripts lobo: el codigo de los botones FUNCIONES (fase 8)           */
+/* ------------------------------------------------------------------ */
+
+/* Un script por elemento del lienzo con funcion de codigo: todos ven
+ * el mismo estado del juego (la posicion del lobo, las teclas) y cada
+ * uno guarda su maquina (sus variables locales). Los elementos que
+ * repiten funcion comparten el programa compilado. */
+static PROGRAMAS: SyncCell<[lobo::LoboPrograma; activo::FUNCIONES_MAX]> =
+    SyncCell::new([lobo::LoboPrograma::NUEVO; activo::FUNCIONES_MAX]);
+static PROG_ID: SyncCell<[i32; activo::FUNCIONES_MAX]> =
+    SyncCell::new([0; activo::FUNCIONES_MAX]);
+static NUM_PROGRAMAS: SyncCell<usize> = SyncCell::new(0);
+
+/// Un script corriendo: su programa (compartido por id) y su maquina.
+struct Script {
+    /// Indice del programa en PROGRAMAS.
+    prog: usize,
+    maquina: lobo::LoboMaquina,
+}
+
+impl Script {
+    const NUEVO: Script = Script {
+        prog: 0,
+        maquina: lobo::LoboMaquina::NUEVA,
+    };
+}
+
+static SCRIPTS: SyncCell<[Script; activo::USADAS_MAX]> =
+    SyncCell::new([Script::NUEVO; activo::USADAS_MAX]);
+static NUM_SCRIPTS: SyncCell<usize> = SyncCell::new(0);
+
+/// Compila los scripts del proyecto y prepara una maquina por elemento
+/// (el puerto de scripts_preparar de juego.c). Las funciones vacias o
+/// borradas se saltan; las que no compilan se avisan por la serie y
+/// tambien se saltan: el resto del juego sigue corriendo.
+fn scripts_preparar() {
+    let ids = activo::funciones_usadas();
+    let programas = unsafe { &mut *PROGRAMAS.get() };
+    let prog_id = unsafe { &mut *PROG_ID.get() };
+    let scripts = unsafe { &mut *SCRIPTS.get() };
+    let mut num_programas = 0usize;
+    let mut num_scripts = 0usize;
+
+    for &id in ids {
+        let Some(codigo) = activo::funcion_codigo(id) else {
+            continue; // id colgante: conservado, pero no hay codigo
+        };
+        if codigo.is_empty() {
+            continue;
+        }
+
+        // Los elementos que repiten funcion comparten el programa.
+        let mut prog = None;
+        for j in 0..num_programas {
+            if prog_id[j] == id {
+                prog = Some(j);
+                break;
+            }
+        }
+        let prog = match prog {
+            Some(j) => j,
+            None => {
+                if num_programas >= activo::FUNCIONES_MAX {
+                    continue; // a lo sumo hay FUNCIONES_MAX funciones
+                }
+                let mut error = [0u8; lobo::LOBO_ERROR_MAX];
+                if !lobo::parsear(codigo, &mut programas[num_programas], &mut error) {
+                    let n = error.iter().position(|&b| b == 0).unwrap_or(error.len());
+                    let msg = core::str::from_utf8(&error[..n]).unwrap_or("(ilegible)");
+                    println!("egine: lobo: error {} {}.", id, msg);
+                    continue;
+                }
+                prog_id[num_programas] = id;
+                num_programas += 1;
+                num_programas - 1
+            }
+        };
+        scripts[num_scripts].prog = prog;
+        scripts[num_scripts].maquina.reiniciar();
+        num_scripts += 1;
+    }
+
+    unsafe { *NUM_PROGRAMAS.get() = num_programas };
+    unsafe { *NUM_SCRIPTS.get() = num_scripts };
+    println!("egine: lobo: {} scripts.", num_scripts);
+}
+
+/// Colision AABB de la caja del sprite contra las celdas del mapa,
+/// fuera del Juego para poder cerrarla sobre datos copiados (los
+/// scripts escriben x e y al final, como juego.c: no hace falta el
+/// prestamo del Juego mientras corren).
+fn choca_caja(x: i32, y: i32, celdas: &[MotorCelda], lado: i32) -> bool {
+    for c in celdas {
+        if motor::aabb(
+            x,
+            y,
+            SPRITE_LADO,
+            SPRITE_LADO,
+            c.x * lado,
+            c.y * lado,
+            lado,
+            lado,
+        ) {
+            return true;
+        }
+    }
+    false
+}
+
 struct Juego {
     mapa: MotorMapa,
     /// Posicion del sprite en el mundo.
@@ -51,16 +165,62 @@ struct Juego {
     y: i32,
     /// Bits MOTOR_ENT_*.
     entrada: u32,
+    /// Contador de actualizaciones (lo leen los scripts).
+    fotograma: i32,
     corriendo: bool,
 }
 
 impl Juego {
-    /// Movimiento separado por eje para deslizar contra los tiles.
+    /// Un fotograma de logica: los scripts lobo del proyecto si los hay
+    /// (fase 8), o el movimiento por defecto si no.
     fn actualizar(&mut self) {
-        let mut vx = 0;
-        let mut vy = 0;
         let e = self.entrada;
 
+        self.fotograma += 1;
+
+        /* Escape cierra siempre, alla donde se mueva el lobo. */
+        if e & MOTOR_ENT_CERRAR != 0 {
+            self.corriendo = false;
+        }
+
+        let num_scripts = unsafe { *NUM_SCRIPTS.get() }.min(activo::USADAS_MAX);
+        if num_scripts > 0 {
+            /* Modo scripts (fase 8): el codigo lobo de los botones
+             * FUNCIONES manda y el movimiento por defecto queda fuera.
+             * Los scripts ven una copia del estado y al final solo se
+             * traen de vuelta x e y (vel y fotograma son de entrada, no
+             * de vuelta: como juego.c). */
+            let mut st = lobo::LoboEstado {
+                x: self.x,
+                y: self.y,
+                vel: SPRITE_VEL,
+                fotograma: self.fotograma,
+                entrada: e, /* LOBO_TECLA_* == MOTOR_ENT_* */
+            };
+            /* El mapa se copia a datos sueltos para que el cierre de
+             * choca() no tome prestado el Juego mientras corren. */
+            let celdas_ptr = self.mapa.celdas;
+            let num_celdas = self.mapa.num_celdas;
+            let lado = self.mapa.lado;
+            let celdas =
+                unsafe { core::slice::from_raw_parts(celdas_ptr, num_celdas as usize) };
+            let programas = unsafe { &*PROGRAMAS.get() };
+            let scripts = unsafe { &mut *SCRIPTS.get() };
+            for s in scripts.iter_mut().take(num_scripts) {
+                let mut choca = |cx: i32, cy: i32| choca_caja(cx, cy, celdas, lado);
+                lobo::ejecutar(&programas[s.prog], &mut st, &mut choca, &mut s.maquina);
+                if s.maquina.cerrar {
+                    self.corriendo = false;
+                }
+            }
+            self.x = st.x;
+            self.y = st.y;
+            return;
+        }
+
+        /* Movimiento por defecto (sin scripts en el proyecto). */
+        let mut vx = 0;
+        let mut vy = 0;
         if e & MOTOR_ENT_IZQUIERDA != 0 {
             vx -= SPRITE_VEL;
         }
@@ -72,9 +232,6 @@ impl Juego {
         }
         if e & MOTOR_ENT_ABAJO != 0 {
             vy += SPRITE_VEL;
-        }
-        if e & MOTOR_ENT_CERRAR != 0 {
-            self.corriendo = false;
         }
 
         if vx != 0 {
@@ -97,16 +254,17 @@ impl Juego {
         let celdas = unsafe {
             core::slice::from_raw_parts(self.mapa.celdas, self.mapa.num_celdas as usize)
         };
+        let lado = self.mapa.lado;
         for c in celdas {
             if motor::aabb(
                 x,
                 y,
                 ancho,
                 alto,
-                c.x * self.mapa.lado,
-                c.y * self.mapa.lado,
-                self.mapa.lado,
-                self.mapa.lado,
+                c.x * lado,
+                c.y * lado,
+                lado,
+                lado,
             ) {
                 return true;
             }
@@ -245,6 +403,9 @@ pub fn arrancar(mi: &gfx::ModeInfo) -> ! {
         println!("egine: sin proyecto que cargar; el kernel se queda en modo texto.");
         crate::bucle_texto()
     };
+    // Compila los botones FUNCIONES del proyecto (fase 8): el resto del
+    // juego sigue corriendo aunque alguno no compile.
+    scripts_preparar();
     let fb = unsafe { &mut *FB.get() };
 
     let mut juego = Juego {
@@ -252,6 +413,7 @@ pub fn arrancar(mi: &gfx::ModeInfo) -> ! {
         x: 16,
         y: 16,
         entrada: 0,
+        fotograma: 0,
         corriendo: true,
     };
     // El hueco de nacimiento con margen, para no empezar pegado a un muro.
