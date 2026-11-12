@@ -206,6 +206,8 @@ modo tiles o del editor de mapas y vuelve al lienzo normal, y **Gestor de
 lógica**, que abre un espacio de trabajo con los paneles izquierdo, derecho e
 inferior (el derecho un poco más ancho), manteniendo las pestañas y la
 barra de menús. Al elegir **Gestor de lógica** de nuevo se vuelve a Pintar.
+También incluye **Editor de menus**, un hueco reservado para el futuro editor
+de menús del juego: de momento se puede pulsar pero no hace nada.
 
 El panel izquierdo muestra la lista de elementos del lienzo (`Elemento 1`,
 `Elemento 2`…) y ocupa todo el panel. Los elementos unidos entre sí por el

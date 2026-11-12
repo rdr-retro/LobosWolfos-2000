@@ -375,6 +375,9 @@ el motor ya compila.
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,
   FAT32 u otro). Hoy no hay ninguno: la zona del juego lleva el blob LGB1
   crudo apuntado por el bloque RKYCFG, que de momento basta.
+- **Editor de menus** del juego: el menú MODO ya reserva su entrada, pero
+  de momento no hace nada; falta decidir su formato y cómo se guarda en el
+  proyecto.
 
 ## 6. Reglas de trabajo
 

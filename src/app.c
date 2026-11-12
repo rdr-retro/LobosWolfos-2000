@@ -163,6 +163,10 @@ static void accion_modo(int opcion) {
             /* Gestor de logica: panel de elementos. */
             app_alternar_gestor_modulos();
             break;
+        case 5:
+            /* Editor de menus: de momento sin funcion, solo ocupa su
+             * sitio en el menu MODO. */
+            break;
         default:
             break;
     }
