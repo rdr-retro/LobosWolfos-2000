@@ -2,7 +2,6 @@
  * Entrada de la aplicacion: menus, paneles, zoom, atajos y dialogos.
  * ========================================================================== */
 #include "app.h"
-#include "plantillas.h"
 
 static int arrastre = 0;          /* 0 nada, 1 panel, 10 zoom, 11 grosor, 12 opciones, 20 info */
 static int arrastre_offset_x = 0;
@@ -1486,49 +1485,21 @@ int selector_mapa_en(int x, int y) {
  * botones de codigo (indice del array g.funciones + 1) y N+1 el
  * boton "+" que crea funciones nuevas. */
 
-/* Botones de la seccion sin contar el "+" ni la biblioteca. */
+/* Botones de la seccion sin contar el "+". */
 int modulos_funciones_num(void) {
     return 1 + g.num_funciones;
 }
 
-/* Cabecera de la biblioteca de plantillas (fase 10): va justo despues
- * del "+ NUEVA FUNCION". */
-int modulos_plantilla_cabecera(void) {
+/* Total del walk de la seccion (con el boton "+"). */
+int modulos_funciones_total(void) {
     return modulos_funciones_num() + 1;
 }
 
-/* Total del walk de la seccion: egine, funciones, "+", cabecera y la
- * biblioteca de plantillas. */
-int modulos_funciones_total(void) {
-    return modulos_plantilla_cabecera() + 1 + plantillas_num();
-}
-
-/* Plantilla del walk `indice`, o -1 si ese hueco no es una plantilla. */
-int modulos_plantilla_de_walk(int indice) {
-    int base = modulos_plantilla_cabecera() + 1;
-    if (indice < base) return -1;
-    indice -= base;
-    if (indice < 0 || indice >= plantillas_num()) return -1;
-    return indice;
-}
-
-/* Se puede arrastrar al lienzo: egine, una funcion del proyecto o una
- * plantilla. El "+" y la cabecera solo se pulsan. */
-int modulos_funcion_arrastrable(int indice) {
-    if (indice == 0) return 1;
-    if (indice >= 1 && indice <= g.num_funciones) return 1;
-    return modulos_plantilla_de_walk(indice) >= 0;
-}
-
 const char *modulos_funcion_nombre(int indice) {
-    int p;
     if (indice == 0) return "egine";
     if (indice >= 1 && indice <= g.num_funciones)
         return g.funciones[indice - 1].nombre;
     if (indice == modulos_funciones_num()) return "+ NUEVA FUNCION";
-    if (indice == modulos_plantilla_cabecera()) return "PLANTILLAS";
-    p = modulos_plantilla_de_walk(indice);
-    if (p >= 0) return plantillas_nombre(p);
     return "";
 }
 
@@ -1556,13 +1527,8 @@ const char *modulos_funcion_nombre_id(int id) {
 
 /* Alto del boton de la seccion: el editor abierto crece hacia abajo
  * con su area de codigo y su franja de error (mismo desglose que
- * modulos_funcion_codigo_zona en ui.c). La cabecera y las plantillas
- * tienen su propio alto (fase 10). */
+ * modulos_funcion_codigo_zona en ui.c). */
 int modulos_funcion_alto_de(int indice) {
-    if (indice == modulos_plantilla_cabecera())
-        return MODULOS_PLANTILLA_CABECERA_ALTO;
-    if (modulos_plantilla_de_walk(indice) >= 0)
-        return MODULOS_PLANTILLA_ALTO;
     if (indice >= 1 && indice <= g.num_funciones &&
         g.funcion_abierta == indice - 1)
         return MODULOS_FUNCION_ALTO + 2 +
@@ -1600,60 +1566,6 @@ void funciones_codigo_validar(FuncionCodigo *f) {
         const char *q = strstr(f->error, "linea ");
         f->error_linea = q ? atoi(q + 6) : 0;
     }
-}
-
-/* 1 si ya hay una funcion del proyecto con ese nombre. */
-static int funcion_nombre_existe(const char *nombre) {
-    int i;
-    for (i = 0; i < g.num_funciones; i++)
-        if (strcmp(g.funciones[i].nombre, nombre) == 0) return 1;
-    return 0;
-}
-
-/* Nombre unico a partir de uno base: "patrulla", "patrulla 2", etc. */
-static void funcion_nombre_unico(const char *base, char *dst, int tam) {
-    int n;
-    for (n = 1; n <= FUNCIONES_MAX + 1; n++) {
-        if (n == 1) recortar_texto(dst, base, tam);
-        else formatear(dst, tam, "%s %d", base, n);
-        if (!funcion_nombre_existe(dst)) return;
-    }
-    recortar_texto(dst, base, tam);
-}
-
-/* Crea una funcion copiando una plantilla de la biblioteca (fase 10).
- * La copia es una funcion normal: se puede editar, guardar, borrar y
- * arrastrar como cualquier otra. */
-int funciones_codigo_plantilla(int plantilla, int abrir) {
-    FuncionCodigo *f;
-    const char *codigo;
-    int idx;
-    if (plantilla < 0 || plantilla >= plantillas_num()) return -1;
-    if (g.num_funciones >= FUNCIONES_MAX) {
-        app_estado("Demasiadas funciones (maximo %d)", FUNCIONES_MAX);
-        app_invalidar();
-        return -1;
-    }
-    idx = g.num_funciones;
-    f = &g.funciones[idx];
-    memset(f, 0, sizeof(*f));
-    f->id = g.funcion_siguiente_id++;
-    funcion_nombre_unico(plantillas_nombre(plantilla), f->nombre,
-                         sizeof(f->nombre));
-    codigo = plantillas_codigo(plantilla);
-    recortar_texto(f->codigo, codigo, sizeof(f->codigo));
-    f->largo = (int)strlen(f->codigo);
-    f->cursor = f->largo;
-    funciones_codigo_validar(f);
-    g.num_funciones++;
-    if (abrir) {
-        g.funcion_abierta = idx;
-        modulos_funciones_scroll_ver(idx + 1);
-    }
-    app_estado("Plantilla \"%s\" creada (funcion %d)",
-               plantillas_nombre(plantilla), f->id);
-    app_invalidar();
-    return idx;
 }
 
 /* Crea un boton de codigo nuevo con nombre automatico y abre su
@@ -2055,34 +1967,21 @@ static void modulos_pulsar(int x, int y, int boton) {
 
 static void modulos_soltar(int x, int y) {
     /* Soltar un rectangulo de la seccion FUNCIONES: si hubo arrastre se
-     * inserta la funcion como elemento del lienzo (egine, una funcion
-     * de codigo lobo o una plantilla de la biblioteca); si fue un clic,
-     * abre o pliega su editor o crea la funcion/plantilla. */
+     * inserta la funcion como elemento del lienzo (egine o una funcion
+     * de codigo lobo); si fue un clic, abre o pliega su editor. */
     if (g.modulo_funcion_pulsada >= 0) {
         int f = g.modulo_funcion_pulsada;
-        int plantilla = modulos_plantilla_de_walk(f);
         g.modulo_funcion_pulsada = -1;
         g.modulo_funcion_movido = 0;
         if (g.modulo_arrastrando == 4) {
             g.modulo_arrastrando = 0;
             g.modulo_snap_linea_x = -1;
             g.modulo_snap_linea_y = -1;
-            if (f < modulos_funciones_num()) {
+            if (f < modulos_funciones_num())
                 modulos_insertar_funcion(x, y, modulos_funcion_id_de(f));
-            } else if (plantilla >= 0) {
-                /* La plantilla se copia al soltarla: asi cada rectangulo
-                 * del lienzo tiene su propia funcion editable. */
-                int fi = funciones_codigo_plantilla(plantilla, 0);
-                if (fi >= 0)
-                    modulos_insertar_funcion(x, y, g.funciones[fi].id);
-            }
         } else if (modulos_funcion_en(x, y) == f) {
             if (f == modulos_funciones_num()) {
                 funciones_codigo_nueva();
-            } else if (plantilla >= 0) {
-                funciones_codigo_plantilla(plantilla, 1);
-            } else if (f == modulos_plantilla_cabecera()) {
-                /* la cabecera solo separa la biblioteca */
             } else if (f == 0) {
                 app_estado("egine: arrastra al lienzo para usarlo");
             } else if (g.funcion_abierta == f - 1) {
@@ -2161,10 +2060,9 @@ static void modulos_mover(int x, int y) {
     }
 
     /* El mismo umbral al tirar de un rectangulo de la seccion FUNCIONES
-     * (egine, funciones y plantillas; el "+" y la cabecera no se
-     * arrastran). */
+     * (el boton "+" no se arrastra). */
     if (g.modulo_funcion_pulsada >= 0 && !g.modulo_funcion_movido &&
-        modulos_funcion_arrastrable(g.modulo_funcion_pulsada)) {
+        g.modulo_funcion_pulsada < modulos_funciones_num()) {
         int dx = x - g.modulo_funcion_x;
         int dy = y - g.modulo_funcion_y;
         if (dx * dx + dy * dy >= 16) {

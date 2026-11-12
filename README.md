@@ -244,15 +244,6 @@ lienzo, el botón inserta un elemento que ejecuta su código cada fotograma.
 La opción **Guardar logica .logic** también guarda la función de cada
 elemento, y **Abrir lógica .logic** la recupera al cargar.
 
-Bajo **+ NUEVA FUNCION** está la biblioteca **PLANTILLAS**, una franja de
-rectángulos verdes con funciones ya escritas para empezar sin teclear:
-mover con flechas, movimiento horizontal, salto y gravedad, jugador de
-plataformas, patrulla, vaivén vertical, caída, temblor y cerrar con tecla.
-Un clic crea la función copiando el código y abre su editor; si arrastras
-el rectángulo al lienzo, la función se crea y queda suelta como elemento.
-Cada copia es una función normal (con nombre único) que puedes editar,
-guardar y compilar como cualquier otra.
-
 Los rectángulos del lienzo que ejecutan código se ordenan **de arriba a
 abajo**: el primero por altura corre primero, como las líneas de un
 programa. Los items de mapa van siempre delante para elegir el mapa del
