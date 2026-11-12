@@ -4,10 +4,11 @@
  * ========================================================================== */
 #include "app.h"
 
-#define MENU_TOTAL 8
+#define MENU_TOTAL 9
 static const char *MENU_ETIQUETAS[MENU_TOTAL] = {
     "ARCHIVO", "MODO", "EDITAR",
-    "SELECCIONAR", "CAPA", "COLORES", "COMPILE", "INFO"
+    "SELECCIONAR", "CAPA", "COLORES", "AJUSTES DEL PROYECTO",
+    "COMPILE", "INFO"
 };
 
 #define MENU_MARGEN 6
@@ -77,12 +78,22 @@ Zona barra_abajo_zona(void) {
     return zona_hacer(SIDEBAR_ANCHO, g.alto - alto, ancho_util(), alto);
 }
 
-Zona zona_trabajo(void) {
+/* Area de trabajo normal del modo pintar, con la barra lateral y las barras
+ * de arriba y abajo. Se usa tambien para calcular el zoom que hace caber un
+ * documento, aunque en ese momento se este en otra vista. */
+Zona zona_trabajo_pintar(void) {
     Zona abajo = barra_abajo_zona();
     int arriba = AREA_SUP_ALTO + BARRA_ALTO;
     int alto = abajo.y - arriba;
     if (alto < MIN_LADO) alto = MIN_LADO;
     return zona_hacer(SIDEBAR_ANCHO, arriba, ancho_util(), alto);
+}
+
+Zona zona_trabajo(void) {
+    /* El editor de menus usa el hueco central de los paneles del gestor
+     * para mostrar el lienzo del modo pintar (fase 13). */
+    if (g.vista == VISTA_MENUS) return modulos_lienzo_zona();
+    return zona_trabajo_pintar();
 }
 
 /* Ancho de los paneles laterales del gestor: el izquierdo igual al derecho
@@ -770,7 +781,7 @@ int menu_num_filas(int menu) {
         case 1: return 6;
         case 2: return 5;
         case 3: return 3;
-        case 6: return 2;
+        case 7: return 2;
         default: return 0;
     }
 }
@@ -816,7 +827,7 @@ Zona menu_panel_zona(int menu) {
             if (ancho > interior) ancho = interior;
             return zona_hacer(etiqueta.x, zona_abajo(etiqueta), ancho,
                               3 + MENU_FILA_ALTO * 3 + 3);
-        case 6:
+        case 7:
             interior = texto_menu_ancho(COMPILE_TEXTO[0]);
             if (texto_menu_ancho(COMPILE_TEXTO[1]) > interior)
                 interior = texto_menu_ancho(COMPILE_TEXTO[1]);
@@ -870,7 +881,7 @@ int menu_fila_activa(int menu, int fila) {
             if (fila == 0) return 1;
             if (fila == 1 || fila == 2) return g.sel.activa;
             return 0;
-        case 6:
+        case 7:
             return 1;
         default:
             return 0;
@@ -1347,7 +1358,8 @@ void ui_dibujar_menu_desplegable(void) {
                 if (hover) dibujar_rect_z(z, MENU_BARRA_HOVER);
                 if ((i == 0 && g.vista == VISTA_PINTAR && !g.modo_tiles) ||
                     (i == 2 && g.modo_tiles) || (i == 3 && mapa) ||
-                    (i == 4 && g.vista == VISTA_MODULOS)) {
+                    (i == 4 && g.vista == VISTA_MODULOS) ||
+                    (i == 5 && g.vista == VISTA_MENUS)) {
                     dibujar_rect(z.x + 1, z.y + 6, z.x + 4, zona_abajo(z) - 6,
                                  hover ? MENU_BARRA_HOVER_TXT : BOTON_SELECCION);
                 }
@@ -1362,7 +1374,7 @@ void ui_dibujar_menu_desplegable(void) {
                 dibujar_fila_menu(z, SELECCIONAR_TEXTO[i], SELECCIONAR_ATAJO[i], hover,
                                   activo, 0x00909090u);
                 break;
-            case 6:
+            case 7:
                 dibujar_fila_menu(z, COMPILE_TEXTO[i], NULL, hover, activo,
                                   0x00909090u);
                 break;
@@ -4041,9 +4053,9 @@ static void elementos_dibujar_panel(void) {
     }
 }
 
-/* Paneles del gestor de logica: dos laterales (el derecho mas ancho) y
- * barra inferior, completamente vacios. */
-static void ui_dibujar_paneles_vacios(void) {
+/* Marcos del gestor de logica y del editor de menus: dos laterales (el
+ * derecho mas ancho) y barra inferior. */
+static void ui_dibujar_marcos_paneles(void) {
     int panel = modulos_panel_ancho();
     int panel_der = modulos_panel_derecho_ancho();
     Zona sidebar = zona_hacer(0, AREA_SUP_ALTO, panel, g.alto - AREA_SUP_ALTO);
@@ -4064,6 +4076,12 @@ static void ui_dibujar_paneles_vacios(void) {
     dibujar_rect_z(abajo, BARRA);
     dibujar_rect(abajo.x, abajo.y, zona_derecha(abajo), abajo.y + 1,
                  BARRA_BORDE);
+}
+
+/* Paneles del gestor de logica: los marcos con la lista de elementos, el
+ * boton del item y la seccion de funciones. */
+static void ui_dibujar_paneles_modulos(void) {
+    ui_dibujar_marcos_paneles();
 
     /* Lista de elementos en el panel izquierdo. */
     elementos_dibujar_panel();
@@ -4075,12 +4093,17 @@ static void ui_dibujar_paneles_vacios(void) {
     ui_dibujar_funciones_modulos();
 }
 
+/* Editor de menus: los mismos paneles, completamente vacios. */
+static void ui_dibujar_paneles_menus(void) {
+    ui_dibujar_marcos_paneles();
+}
+
 /* Mensaje de estado flotante, centrado sobre la barra inferior. En el gestor
  * se centra en el hueco entre sus paneles laterales. */
 static void ui_dibujar_estado(void) {
     int margen, ancho, w, x, y;
     if (!g.estado[0] || GetTickCount() >= g.estado_hasta) return;
-    if (g.vista == VISTA_MODULOS) {
+    if (g.vista == VISTA_MODULOS || g.vista == VISTA_MENUS) {
         margen = modulos_panel_ancho();
         ancho = g.ancho - margen - modulos_panel_derecho_ancho();
     } else {
@@ -4102,9 +4125,23 @@ void ui_dibujar(void) {
     /* Gestor de logica: paneles, lista, lienzo desplazable y boton. */
     if (g.vista == VISTA_MODULOS) {
         dibujar_rect(0, 0, g.ancho, g.alto, FONDO);
-        ui_dibujar_paneles_vacios();
+        ui_dibujar_paneles_modulos();
         modulos_dibujar_lienzo();
         ui_dibujar_selector_mapa();
+        ui_dibujar_pestanas();
+        ui_dibujar_barra_menus();
+        ui_dibujar_menu_desplegable();
+        ui_dibujar_estado();
+        ui_dibujar_confirmaciones();
+        return;
+    }
+
+    /* Editor de menus: los mismos paneles pero vacios y el lienzo del modo
+     * pintar en el centro. */
+    if (g.vista == VISTA_MENUS) {
+        dibujar_rect(0, 0, g.ancho, g.alto, FONDO);
+        ui_dibujar_paneles_menus();
+        pintura_dibujar_lienzo();
         ui_dibujar_pestanas();
         ui_dibujar_barra_menus();
         ui_dibujar_menu_desplegable();

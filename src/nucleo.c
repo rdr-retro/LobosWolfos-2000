@@ -443,6 +443,8 @@ void app_actualizar_titulo(void) {
     if (!g.hwnd) return;
     if (g.vista == VISTA_MODULOS) {
         strcpy(titulo, "LobosWolfos 2000 - Gestor de lógica");
+    } else if (g.vista == VISTA_MENUS) {
+        strcpy(titulo, "LobosWolfos 2000 - Editor de menús");
     } else if (g.hover_herramienta >= 0) {
         nombre = ui_nombre_herramienta(g.hover_herramienta);
         _snprintf(titulo, sizeof(titulo), "LobosWolfos 2000 - %s", nombre);
@@ -815,7 +817,11 @@ void app_guardar_imagen(const char *ruta, int png) {
 }
 
 void app_cambiar_vista(Vista vista) {
+    int desde_paneles;
+    int saliendo_menus;
     if (vista == g.vista) return;
+    desde_paneles = (g.vista == VISTA_MODULOS || g.vista == VISTA_MENUS);
+    saliendo_menus = (g.vista == VISTA_MENUS);
     g.vista = vista;
     g.menu_abierto = -1;
     /* Cancela cualquier arrastre del gestor al cambiar de modo. */
@@ -828,6 +834,12 @@ void app_cambiar_vista(Vista vista) {
     g.modulo_boton_movido = 0;
     g.selector_mapa_abierto = 0;
     g.selector_mapa_hover = -1;
+    /* Al volver de una vista con paneles (gestor o editor de menus) el
+     * lienzo se recoloca centrado en el area de trabajo normal. Tambien se
+     * recoloca al salir del editor de menus hacia cualquier otra vista, para
+     * no arrastrar el zoom de encaje. */
+    if (vista == VISTA_PINTAR && desde_paneles) lienzo_actualizar();
+    else if (saliendo_menus) lienzo_actualizar();
     app_actualizar_titulo();
     app_invalidar();
 }
@@ -862,6 +874,31 @@ void app_alternar_gestor_modulos(void) {
     g.confirmar_borrado = 0;
     g.confirmar_tile = -1;
     app_cambiar_vista(VISTA_MODULOS);
+}
+
+/* Editor de menus: mismos paneles que el gestor pero vacios, con el lienzo
+ * del modo pintar en el centro. Elegirlo de nuevo vuelve a Pintar. */
+void app_alternar_editor_menus(void) {
+    if (g.vista == VISTA_MENUS) {
+        app_cambiar_vista(VISTA_PINTAR);
+        return;
+    }
+    /* Cierra cualquier edicion en curso antes de cambiar de vista. */
+    if (g.texto_activo) texto_confirmar();
+    if (g.curva_activa) pintura_figura_confirmar(0, 0, 0);
+    if (g.preview_activa) pintura_figura_cancelar();
+    if (g.sel.activa && g.sel.flotante)
+        seleccion_soltar(&g.sel, &g.doc, &g.deshacer);
+    g.pintando = 0;
+    g.poligono_activo = 0;
+    g.lienzo_tirador = -1;
+    g.sel_tirador = -1;
+    g.capa_menu_abierto = -1;
+    g.confirmar_borrado = 0;
+    g.confirmar_tile = -1;
+    app_cambiar_vista(VISTA_MENUS);
+    /* El lienzo se centra en el hueco entre los paneles del editor. */
+    lienzo_actualizar();
 }
 
 void app_poner_herramienta(int herramienta) {

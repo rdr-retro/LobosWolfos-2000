@@ -119,24 +119,39 @@ static Lienzo lienzo_centrado_en(Lienzo l, Zona zona) {
     return l;
 }
 
-int zoom_para_caber(int ancho, int alto) {
-    Zona util = zona_trabajo();
+/* Indice de zoom que hace caber un documento dentro de una zona. `maximo`
+ * limita el nivel mas alto que se puede elegir (4 = 100% para no ampliar los
+ * documentos pequenos; 18 = 4000% para aprovechar todo el hueco). */
+static int zoom_para_caber_en(Zona zona, int ancho, int alto, int maximo) {
+    Zona util = zona;
     int i;
     util.x += MANGO_TAM;
     util.y += MANGO_TAM;
     util.ancho = (util.ancho - MANGO_TAM * 2) > MIN_LADO ? util.ancho - MANGO_TAM * 2 : MIN_LADO;
     util.alto = (util.alto - MANGO_TAM * 2) > MIN_LADO ? util.alto - MANGO_TAM * 2 : MIN_LADO;
-    for (i = 4; i >= 0; i--) {
+    for (i = maximo; i >= 0; i--) {
         int p = ZOOM_NIVELES[i];
         if (lado_con_zoom(ancho, p) <= util.ancho && lado_con_zoom(alto, p) <= util.alto) return i;
     }
     return 0;
 }
 
+int zoom_para_caber(int ancho, int alto) {
+    /* El zoom persistente del documento siempre se calcula sobre el area del
+     * modo pintar, nunca sobre el hueco reducido de otra vista, y no amplia
+     * por encima del 100%. */
+    return zoom_para_caber_en(zona_trabajo_pintar(), ancho, alto, 4);
+}
+
 void lienzo_actualizar(void) {
+    int indice = g.zoom_idx;
+    /* En el editor de menus el lienzo se ajusta al hueco entre los paneles
+     * sin modificar el zoom guardado del modo pintar. */
+    if (g.vista == VISTA_MENUS)
+        indice = zoom_para_caber_en(zona_trabajo(), g.doc.ancho, g.doc.alto, 18);
     /* Igual que `lienzo_desde_logico`: el lienzo se recoloca siempre centrado
      * en el area de trabajo. El zoom no guarda desplazamientos manuales. */
-    g.lienzo = lienzo_desde_logico(g.doc.ancho, g.doc.alto, g.zoom_idx, zona_trabajo());
+    g.lienzo = lienzo_desde_logico(g.doc.ancho, g.doc.alto, indice, zona_trabajo());
 }
 
 void zoom_aplicar(int indice) {

@@ -206,8 +206,10 @@ modo tiles o del editor de mapas y vuelve al lienzo normal, y **Gestor de
 lógica**, que abre un espacio de trabajo con los paneles izquierdo, derecho e
 inferior (el derecho un poco más ancho), manteniendo las pestañas y la
 barra de menús. Al elegir **Gestor de lógica** de nuevo se vuelve a Pintar.
-También incluye **Editor de menus**, un hueco reservado para el futuro editor
-de menús del juego: de momento se puede pulsar pero no hace nada.
+También incluye **Editor de menus**: abre esos mismos paneles pero vacíos, con
+el lienzo del modo pintar en el hueco central, ajustado para que el documento
+se vea completo y sin cambiar el zoom guardado. Al elegirlo de nuevo se vuelve
+a Pintar; la pestaña de esta vista se llama `Menus`.
 
 El panel izquierdo muestra la lista de elementos del lienzo (`Elemento 1`,
 `Elemento 2`…) y ocupa todo el panel. Los elementos unidos entre sí por el
@@ -290,12 +292,15 @@ selector de items del gestor de lógica). Las imágenes se buscan primero en la
 carpeta `tiles_dir` junto al `.mav`, después junto al propio `.mav` y por
 último en la carpeta `tiles` del ejecutable.
 
-El menú **COMPILE** de la barra de menús, entre **COLORES** e **INFO**, ofrece
-**Compilar para BIOS** y **Compilar para Windows**. Ambos toman el proyecto
-activo — la lógica del gestor, los mapas que usan sus elementos y los tiles
-de esos mapas — y lo incrustan entero como archivos virtuales (blob `LGB1`).
-El mapa es opcional: si el lienzo no tiene ningún elemento de mapa, el
+El menú **COMPILE** de la barra de menús, entre **AJUSTES DEL PROYECTO** e
+**INFO**, ofrece **Compilar para BIOS** y **Compilar para Windows**. Ambos toman
+el proyecto activo — la lógica del gestor, los mapas que usan sus elementos y
+los tiles de esos mapas — y lo incrustan entero como archivos virtuales (blob
+`LGB1`). El mapa es opcional: si el lienzo no tiene ningún elemento de mapa, el
 proyecto se compila igual y el juego arranca con la ventana en negro.
+
+Entre **COLORES** y **COMPILE** hay un botón **AJUSTES DEL PROYECTO**, reservado
+para la configuración del proyecto; como CAPA y COLORES, no abre desplegable.
 
 **Compilar para Windows** produce un `game.exe` autónomo de 32 bits: el
 proyecto viaja incrustado dentro del propio ejecutable, así el juego

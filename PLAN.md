@@ -30,6 +30,9 @@ Se actualiza con cada entrega.
     arrastrables del juego. El primero es **egine**, el motor; el resto
     son botones con **código lobo editable dentro del propio botón** (el
     botón cambia al escribir; ver fase 8).
+- **Editor de menús**: la misma distribución de paneles que el gestor de
+  lógica, pero vacíos, y el lienzo del modo pintar ajustado en el centro
+  (ver fase 13).
 - Menú **COMPILE** (entre COLORES e INFO): las dos salidas de compilación.
 - Botones **play / pausa / stop** al extremo derecho de la barra: prueban
   el proyecto en una ventana del propio editor, sin compilar `game.exe`
@@ -369,15 +372,26 @@ el motor ya compila.
   moviendo `y`) y en QEMU (imagen BIOS sin mapa: pantalla negra,
   `egine: sin mapa: ventana en negro`, `1 scripts` y el rastro del
   sprite avanzando).
+- **12-11-2026 (fase 13)** — **Editor de menus** deja de ser un hueco
+  reservado: abre una vista propia (`VISTA_MENUS`) con los mismos paneles
+  del gestor de lógica completamente vacíos y el lienzo del modo pintar
+  en el hueco central. El lienzo se ajusta al hueco con un zoom temporal
+  (hasta 600 % en el documento inicial de 80x80) sin tocar el zoom
+  guardado del modo pintar, y vuelve a su sitio al salir. Se entra y sale
+  desde MODO y la pestaña se llama `Menus`; el resto de la interfaz
+  (pestañas, barra de menús y barra de estado) se mantiene. Verificado
+  por píxeles: paneles y barra inferior a cero píxeles oscuros, lienzo
+  blanco completo, y la captura de Pintar es idéntica antes y después de
+  entrar y salir. La barra de menús estrena además el botón **AJUSTES DEL
+  PROYECTO** entre COLORES y COMPILE, sin desplegable y reservado para la
+  configuración del proyecto; COMPILE e INFO se desplazan una posición y
+  siguen funcionando igual.
 
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,
   FAT32 u otro). Hoy no hay ninguno: la zona del juego lleva el blob LGB1
   crudo apuntado por el bloque RKYCFG, que de momento basta.
-- **Editor de menus** del juego: el menú MODO ya reserva su entrada, pero
-  de momento no hace nada; falta decidir su formato y cómo se guarda en el
-  proyecto.
 
 ## 6. Reglas de trabajo
 

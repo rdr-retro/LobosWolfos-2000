@@ -164,8 +164,9 @@ static void accion_modo(int opcion) {
             app_alternar_gestor_modulos();
             break;
         case 5:
-            /* Editor de menus: de momento sin funcion, solo ocupa su
-             * sitio en el menu MODO. */
+            /* Editor de menus: mismos paneles que el gestor, vacios, con
+             * el lienzo del modo pintar. */
+            app_alternar_editor_menus();
             break;
         default:
             break;
@@ -244,11 +245,14 @@ static void ejecutar_menu(int menu, int opcion) {
         case 4: accion_capa(opcion); break;
         case 5: accion_colores(opcion); break;
         case 6:
+            /* AJUSTES DEL PROYECTO: boton reservado, sin desplegable. */
+            break;
+        case 7:
             /* COMPILE: Compilar para BIOS (fase 7) y para Windows (fase 4). */
             if (opcion == 0) dialogo_compilar_bios();
             else if (opcion == 1) dialogo_compilar_windows();
             break;
-        case 7:
+        case 8:
             g.info_visible = 1;
             app_invalidar();
             break;
@@ -756,15 +760,16 @@ int clic_lienzo(int x, int y) {
 /* Entrada principal                                                   */
 /* ------------------------------------------------------------------ */
 static void clic_etiqueta_menu(int menu) {
-    if (menu == 7) {
+    if (menu == 8) {
         g.menu_abierto = -1;
         g.textura_menu_abierto = 0;
         g.info_visible = 1;
         app_invalidar();
         return;
     }
-    if (menu == 4 || menu == 5) {
-        /* CAPA y COLORES no tienen desplegable: solo su etiqueta. */
+    if (menu == 4 || menu == 5 || menu == 6) {
+        /* CAPA, COLORES y AJUSTES DEL PROYECTO no tienen desplegable: solo
+         * su etiqueta. */
         g.menu_abierto = -1;
         app_invalidar();
         return;
@@ -2292,6 +2297,9 @@ void app_pulsar(int x, int y, int boton) {
         return;
     }
 
+    /* El editor de menus solo muestra el lienzo: paneles y barras vacios. */
+    if (g.vista == VISTA_MENUS) return;
+
     if (g.vista == VISTA_PINTAR && texto_pulsar(x, y, boton)) return;
 
     if (clic_info(x, y)) return;
@@ -2333,6 +2341,7 @@ void app_soltar(int x, int y, int boton) {
         modulos_soltar(x, y);
         return;
     }
+    if (g.vista == VISTA_MENUS) return;
     if (g.arrastre_tiles) {
         tiles_modo_soltar();
         app_invalidar();
@@ -2389,6 +2398,13 @@ void app_mover(int x, int y, int botones) {
     /* En el gestor se actualiza el arrastre y el hover del boton. */
     if (g.vista == VISTA_MODULOS) {
         modulos_mover(x, y);
+        if (y < AREA_SUP_ALTO) app_invalidar();
+        return;
+    }
+
+    /* El editor de menus no tiene widgets propios: solo las pestanas y los
+     * menus de arriba necesitan repintarse al pasar el raton. */
+    if (g.vista == VISTA_MENUS) {
         if (y < AREA_SUP_ALTO) app_invalidar();
         return;
     }
@@ -2547,6 +2563,7 @@ void app_rueda(int x, int y, int delta, int ctrl) {
         modulos_rueda(x, y, delta, ctrl);
         return;
     }
+    if (g.vista == VISTA_MENUS) return;
     if (g.vista == VISTA_MAPA && zona_contiene(zona_trabajo(), x, y)) {
         mapa_rueda(x, y, delta, ctrl);
         return;
@@ -2602,6 +2619,7 @@ void app_tecla(int vk, int ctrl, int shift) {
         if (g.funcion_abierta >= 0) funciones_codigo_tecla(vk, ctrl);
         return;
     }
+    if (g.vista == VISTA_MENUS) return;
     if (g.vista == VISTA_PINTAR && texto_tecla(vk, ctrl, shift)) return;
     pintura_tecla(vk, ctrl, shift);
 }
@@ -2613,6 +2631,7 @@ void app_caracter(int ch) {
         if (g.funcion_abierta >= 0) funciones_codigo_caracter(ch);
         return;
     }
+    if (g.vista == VISTA_MENUS) return;
     if (g.vista == VISTA_PINTAR && texto_caracter(ch)) return;
     pintura_caracter(ch);
 }
@@ -2624,7 +2643,8 @@ void app_doble_clic(int x, int y) {
             pestanas_nueva_modo();
         return;
     }
-    if (g.vista == VISTA_MAPA || g.vista == VISTA_MODULOS) return;
+    if (g.vista == VISTA_MAPA || g.vista == VISTA_MODULOS ||
+        g.vista == VISTA_MENUS) return;
     pintura_doble_clic(x, y);
 }
 

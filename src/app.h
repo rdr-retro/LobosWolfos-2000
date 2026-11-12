@@ -678,7 +678,8 @@ typedef struct MiniaturaMapa {
 typedef enum {
     VISTA_PINTAR = 0,
     VISTA_MAPA,
-    VISTA_MODULOS
+    VISTA_MODULOS,
+    VISTA_MENUS
 } Vista;
 
 /* Estado de una pestana. Todas las pestanas comparten el mismo documento, el
@@ -1199,6 +1200,7 @@ int  menu_barra_en(int x, int y);
 Zona barra_zona(void);
 Zona barra_abajo_zona(void);
 Zona zona_trabajo(void);
+Zona zona_trabajo_pintar(void);
 Zona modulos_lienzo_zona(void);
 Zona modulos_boton_zona(void);
 Zona modulos_funcion_zona(int indice);
@@ -1407,6 +1409,7 @@ void app_guardar_imagen(const char *ruta, int png);
 void app_cambiar_vista(Vista vista);
 void app_alternar_mapa(void);
 void app_alternar_gestor_modulos(void);
+void app_alternar_editor_menus(void);
 void app_poner_herramienta(int herramienta);
 void app_agregar_color_paleta(u32 color);
 
