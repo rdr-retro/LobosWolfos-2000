@@ -97,7 +97,7 @@ int motor_aabb(int ax, int ay, int aw, int ah,
 
 /* Carga un mapa .mav (mismo formato que guarda el editor) con sus
  * imagenes resueltas. Devuelve 0 si falla. El resultado se libera con
- * mapa_liberar. */
+ * motor_mapa_liberar. */
 int activo_cargar_mapa(const char *ruta, MotorMapa *m);
 
 /* Carga un proyecto .logic del gestor y elige el mapa del primer
@@ -139,10 +139,19 @@ void activo_gdiplus_terminar(void);
  * archivos virtuales; 0 si el exe no lleva blob. */
 int activo_blob_cargar(void);
 
+/* Registra un blob LGB1 ya en memoria (sin el pie) como archivos
+ * virtuales del motor: es la via de la vista previa del editor, que
+ * reune el proyecto sin escribir ningun .exe. Sustituye a los virtuales
+ * anteriores y devuelve cuantas entradas registro. */
+int activo_blob_registrar(const unsigned char *datos, int largo);
+
+/* Libera los archivos virtuales registrados hasta ahora. */
+void activo_virtuales_limpiar(void);
+
 /* Guarda un framebuffer como BMP de 24 bits (para --captura). */
 int activo_guardar_bmp(const char *ruta, const u32 *pixeles,
                        int ancho, int alto);
 
-void mapa_liberar(MotorMapa *m);
+void motor_mapa_liberar(MotorMapa *m);
 
 #endif /* MOTOR_H */

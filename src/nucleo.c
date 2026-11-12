@@ -491,6 +491,8 @@ static u32 *icono_logo = NULL;
 static int logo_w = 0, logo_h = 0;
 static u32 *icono_guardar_tile = NULL;
 static int guardar_tile_w = 0, guardar_tile_h = 0;
+static u32 *icono_media[BARRA_MEDIA_BOTONES];
+static int media_w[BARRA_MEDIA_BOTONES], media_h[BARRA_MEDIA_BOTONES];
 
 u32 *recurso_png(int id, int *ancho, int *alto) {
     HRSRC hr;
@@ -520,6 +522,9 @@ static void cargar_iconos(void) {
     icono_logo = recurso_png(IDR_LOGO, &logo_w, &logo_h);
     icono_guardar_tile = recurso_png(IDR_SAVE, &guardar_tile_w, &guardar_tile_h);
     g.info_imagen = recurso_png(IDR_GBS, &g.info_w, &g.info_h);
+    icono_media[0] = recurso_png(IDR_PLAY, &media_w[0], &media_h[0]);
+    icono_media[1] = recurso_png(IDR_PAUSE, &media_w[1], &media_h[1]);
+    icono_media[2] = recurso_png(IDR_STOP, &media_w[2], &media_h[2]);
 }
 
 static void liberar_iconos(void) {
@@ -532,6 +537,10 @@ static void liberar_iconos(void) {
     icono_logo = NULL;
     if (icono_guardar_tile) free(icono_guardar_tile);
     icono_guardar_tile = NULL;
+    for (i = 0; i < BARRA_MEDIA_BOTONES; i++) {
+        if (icono_media[i]) free(icono_media[i]);
+        icono_media[i] = NULL;
+    }
     if (g.info_imagen) free(g.info_imagen);
     g.info_imagen = NULL;
 }
@@ -553,6 +562,14 @@ u32 *icono_guardar_imagen(int *ancho, int *alto) {
     if (ancho) *ancho = guardar_tile_w;
     if (alto) *alto = guardar_tile_h;
     return icono_guardar_tile;
+}
+
+/* Icono de un boton de reproduccion: 0 = play, 1 = pausa, 2 = stop. */
+u32 *icono_media_imagen(int indice, int *ancho, int *alto) {
+    if (indice < 0 || indice >= BARRA_MEDIA_BOTONES) return NULL;
+    if (ancho) *ancho = media_w[indice];
+    if (alto) *alto = media_h[indice];
+    return icono_media[indice];
 }
 
 /* ------------------------------------------------------------------ */
@@ -578,6 +595,7 @@ static void cargar_preferencias(void) {
     g.zoom_idx = 13;
     g.menu_abierto = -1;
     g.hover_menu = -1;
+    g.hover_media = -1;
     g.hover_herramienta = -1;
     g.hover_paleta = -1;
     g.hover_tile = -1;
@@ -690,6 +708,7 @@ int app_iniciar(void) {
 
 void app_terminar(void) {
     int i;
+    juego_ventana_terminar();
     pestanas_terminar();
     pila_liberar(&g.deshacer);
     pila_liberar(&g.rehacer);
@@ -1063,6 +1082,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             g.raton_x = -100;
             g.raton_y = -100;
             g.hover_herramienta = -1;
+            g.hover_media = -1;
             app_actualizar_titulo();
             app_invalidar();
             return 0;
@@ -1264,6 +1284,24 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
      * como BMP. Sirve para comparar la interfaz sin depender de PrintWindow
      * ni de la pantalla. */
     captura = arg_valor(cmd, "--captura");
+    /* En modo normal tambien se puede abrir una logica al arrancar (util
+     * para probar la vista previa sin pasar por el dialogo). En modo
+     * captura lo hace el bloque de abajo, con su orden de siempre. */
+    if (!captura) {
+        char *cargar_arg = arg_valor(cmd, "--abrir-logica");
+        if (cargar_arg) {
+            char logic_ruta[MAX_PATH];
+            int n = 0;
+            while (cargar_arg[n] && cargar_arg[n] != ' ' &&
+                   cargar_arg[n] != '\t' && n < MAX_PATH - 1) {
+                logic_ruta[n] = cargar_arg[n];
+                n++;
+            }
+            logic_ruta[n] = 0;
+            if (logic_ruta[0] && logica_cargar_archivo(logic_ruta))
+                g.vista = VISTA_MODULOS;
+        }
+    }
     if (captura) {
         int ok;
         char *menu_arg = arg_valor(cmd, "--menu");
@@ -1582,6 +1620,25 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 }
                 bios_ruta[n] = 0;
                 if (bios_ruta[0]) compilar_bios(bios_ruta);
+            }
+        }
+        /* Captura determinista de la vista previa del juego (fase 9):
+         * reune el proyecto en memoria y actualiza N fotogramas sin abrir
+         * ventana, para comparar con el game.exe compilado. */
+        {
+            char *juego_arg = arg_valor(cmd, "--captura-juego");
+            if (juego_arg) {
+                char juego_ruta[MAX_PATH];
+                char *fotos_arg = arg_valor(cmd, "--fotogramas");
+                int jn = 0, fotos = 60;
+                while (juego_arg[jn] && juego_arg[jn] != ' ' &&
+                       juego_arg[jn] != '\t' && jn < MAX_PATH - 1) {
+                    juego_ruta[jn] = juego_arg[jn];
+                    jn++;
+                }
+                juego_ruta[jn] = 0;
+                if (fotos_arg) fotos = atoi(fotos_arg);
+                if (juego_ruta[0]) juego_ventana_capturar(juego_ruta, fotos);
             }
         }
         /* Posicion final del raton: actualiza tambien el hover, como un

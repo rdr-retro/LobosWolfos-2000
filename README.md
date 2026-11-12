@@ -23,6 +23,8 @@ para cargar y guardar PNG.
   izquierdo lista los elementos del lienzo; hay una sola lógica y se guarda
   como archivo `.logic`.
 - Apertura y exportación de PNG/BMP y mapas `.mav`.
+- Vista previa del juego con los botones **play/pausa/stop** de la barra:
+  prueba el proyecto en una ventana sin compilar ni escribir ningún `.exe`.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
 
 ## Compilar
@@ -280,6 +282,31 @@ Windows. Las plantillas (el motor y el arranque del kernel) viajan dentro del
 propio editor, por lo que compilar no requiere tener MinGW ni Rust
 instalados.
 
+## Probar el juego sin compilar
+
+En el extremo derecho de la barra de menús hay tres botones: **play**,
+**pausa** y **stop**. Sirven para jugar el proyecto activo en una ventana
+aparte sin pasar por COMPILE ni escribir ningún `.exe`, cómodo para probar
+cambios sin llenar el disco.
+
+- **play** abre la vista previa (640x480) con el mapa, los tiles y el código
+  lobo del proyecto. Si está en pausa, la reanuda; si ya está jugando,
+  reinicia el proyecto para recoger los últimos cambios.
+- **pausa** alterna pausa y marcha. Hasta que se abre la vista previa, está
+  opacado y no responde.
+- **stop** cierra la vista previa (también `Escape` y la X de la ventana).
+  Hasta que se abre la vista previa, está opacado y no responde.
+
+La vista previa usa el mismo proyecto incrustado (blob `LGB1`) que
+**Compilar para Windows**, pero lo monta en memoria: no crea archivos ni
+necesita las plantillas del motor. Los controles son los mismos que en
+`game.exe` (cursores o `WASD`, `Espacio` para saltar y `Escape` para salir) y
+el editor sigue respondiendo mientras la ventana está abierta.
+
+Para comparar la vista previa con el ejecutable compilado hay una captura
+determinista sin ventana: `--captura-juego ruta --fotogramas N` guarda un BMP
+que coincide píxel a píxel con `game.exe --captura` para el mismo proyecto.
+
 Para flashear la imagen a un pendrive (desde una consola con permisos de
 administrador):
 
@@ -300,8 +327,10 @@ arrastres simulados) y, para la sección FUNCIONES (fase 8),
 `--codigo-teclas "texto"` (escribe en el editor abierto, con `\n`, `\t`,
 `\b` y `\\` como escapes), `--funcion-borrar x,y` (clic derecho simulado
 que pide confirmación de borrado) y `--modulos-rueda x,y,delta[,ctrl]`
-(la rueda del gestor, que desplaza la sección FUNCIONES). Cada flag está
-documentada junto a su procesado en `src\nucleo.c`.
+(la rueda del gestor, que desplaza la sección FUNCIONES). Para la vista
+previa (fase 9), `--captura-juego ruta` con `--fotogramas N` guarda un BMP
+determinista sin abrir ventana. Cada flag está documentada junto a su
+procesado en `src\nucleo.c`.
 
 ## Atajos
 
@@ -321,7 +350,8 @@ documentada junto a su procesado en `src\nucleo.c`.
 ## Estructura
 
 - `src/` — código fuente C y recursos de la interfaz. `src/compilar.c` es el
-  menú COMPILE (compilar el proyecto para Windows y para BIOS).
+  menú COMPILE (compilar el proyecto para Windows y para BIOS) y
+  `src/juego_ventana.c` la vista previa de los botones play/pausa/stop.
 - `motor/` — motor egine: núcleo en ensamblador 32 bits (`nucleo32.s`),
   interfaz común (`motor.h`), carga del proyecto (`activo.c`) y `juego.c`
   (`game.exe`).

@@ -1157,6 +1157,89 @@ void ui_dibujar_pestanas(void) {
 /* ------------------------------------------------------------------ */
 /* Barra de menus: dibujo                                               */
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/* Barra de menus: botones play/pausa/stop (vista previa)              */
+/* ------------------------------------------------------------------ */
+
+/* Zona de uno de los tres botones del extremo derecho de la barra. */
+Zona barra_media_zona(int indice) {
+    int x = g.ancho - BARRA_MEDIA_MARGEN - BARRA_MEDIA_ANCHO;
+    if (indice < 0 || indice >= BARRA_MEDIA_BOTONES)
+        return zona_hacer(0, 0, 0, 0);
+    x += indice * (BARRA_MEDIA_LADO + BARRA_MEDIA_HUECO);
+    return zona_hacer(x, TAB_BARRA_ALTO, BARRA_MEDIA_LADO, MENU_BARRA_ALTO);
+}
+
+/* Boton (0, 1 o 2) bajo el punto, o -1 si el punto no cae en ninguno. */
+int barra_media_en(int x, int y) {
+    int i;
+    for (i = 0; i < BARRA_MEDIA_BOTONES; i++)
+        if (zona_contiene(barra_media_zona(i), x, y)) return i;
+    return -1;
+}
+
+/* Dibuja el PNG de un boton centrado y escalado con factor entero. Con
+ * `habilitado` a 0 se pinta al 35 % (boton opacado). */
+static void dibujar_icono_media(int indice, Zona z, int habilitado) {
+    u32 *pix;
+    int w = 0, h = 0;
+    int caja = 20;
+    int escala, dw, dh, x0, y0, dx, dy;
+    int alfa_base = habilitado ? 255 : 89; /* 35 % */
+
+    pix = icono_media_imagen(indice, &w, &h);
+    if (!pix || w <= 0 || h <= 0) return;
+    escala = caja / w;
+    if (caja / h < escala) escala = caja / h;
+    if (escala < 1) escala = 1;
+    dw = w * escala;
+    dh = h * escala;
+    x0 = z.x + (z.ancho - dw) / 2;
+    y0 = z.y + (z.alto - dh) / 2;
+    for (dy = 0; dy < dh; dy++) {
+        for (dx = 0; dx < dw; dx++) {
+            u32 c = pix[(size_t)(dy / escala) * w + (dx / escala)];
+            int alfa = (int)(c >> 24);
+            if (alfa == 0) continue;
+            alfa = alfa * alfa_base / 255;
+            if (alfa <= 0) continue;
+            dibujar_pixel(x0 + dx, y0 + dy,
+                          color_mezclar(dibujar_leer(x0 + dx, y0 + dy),
+                                        c, alfa));
+        }
+    }
+}
+
+/* Los tres botones, pegados al borde derecho de la barra de menus. Pausa
+ * y stop quedan opacados mientras no haya una vista previa abierta. */
+static void dibujar_botones_media(void) {
+    int estado = juego_ventana_estado();
+    int i;
+
+    /* Separador del grupo respecto a las etiquetas de menu. */
+    {
+        Zona p = barra_media_zona(0);
+        if (p.x > 4)
+            dibujar_rect(p.x - 5, p.y + 9, p.x - 4, zona_abajo(p) - 9,
+                         BARRA_BORDE);
+    }
+
+    for (i = 0; i < BARRA_MEDIA_BOTONES; i++) {
+        Zona z = barra_media_zona(i);
+        int habilitado = (i == 0) || (estado != JUEGO_VENTANA_CERRADO);
+        int hover = habilitado && i == g.hover_media;
+        if (z.ancho <= 0 || zona_derecha(z) > g.ancho + 1) continue;
+        if (hover) {
+            dibujar_rect_z(z, 0x00D2D6DAu);
+            dibujar_marco_z(z, 0x00B8BCC0u);
+        } else if (i == 1 && estado == JUEGO_VENTANA_PAUSA) {
+            /* En pausa el boton de pausa queda marcado. */
+            dibujar_rect_z(z, 0x00DCE6F2u);
+        }
+        dibujar_icono_media(i, z, habilitado);
+    }
+}
+
 void ui_dibujar_barra_menus(void) {
     int i;
     int mouse_en = menu_barra_en(g.raton_x, g.raton_y);
@@ -1178,6 +1261,7 @@ void ui_dibujar_barra_menus(void) {
                                MENU_ETIQUETAS[i], MENU_BARRA_TEXTO);
         }
     }
+    dibujar_botones_media();
     dibujar_rect(0, AREA_SUP_ALTO - 1, g.ancho, AREA_SUP_ALTO, BARRA_BORDE);
 }
 

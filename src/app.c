@@ -253,6 +253,29 @@ static void ejecutar_menu(int menu, int opcion) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Botones play/pausa/stop de la barra de menus                        */
+/* ------------------------------------------------------------------ */
+static void clic_media(int boton) {
+    switch (boton) {
+        case 0: /* play: abre la vista previa o reanuda la pausa */
+            juego_ventana_abrir();
+            break;
+        case 1: /* pausa: alterna pausa/marcha */
+            if (juego_ventana_estado() == JUEGO_VENTANA_PAUSA)
+                juego_ventana_reanudar();
+            else
+                juego_ventana_pausar();
+            break;
+        case 2: /* stop: cierra la ventana de prueba */
+            juego_ventana_detener();
+            break;
+        default:
+            break;
+    }
+    app_invalidar();
+}
+
+/* ------------------------------------------------------------------ */
 /* Menu desplegable                                                    */
 /* ------------------------------------------------------------------ */
 static int opcion_menu_en(int x, int y) {
@@ -2117,6 +2140,17 @@ void app_pulsar(int x, int y, int boton) {
         return;
     }
 
+    /* Botones play/pausa/stop del extremo derecho de la barra. Tienen
+     * prioridad sobre los menus desplegables. */
+    if (boton == 0) {
+        int media = barra_media_en(x, y);
+        if (media >= 0) {
+            if (g.menu_abierto >= 0) g.menu_abierto = -1;
+            clic_media(media);
+            return;
+        }
+    }
+
     /* Menu abierto: tiene prioridad. */
     if (g.menu_abierto >= 0) {
         int op = opcion_menu_en(x, y);
@@ -2239,6 +2273,15 @@ void app_mover(int x, int y, int botones) {
     /* Tambien se marca dentro cuando la prueba simula movimientos sin pasar
      * por WM_MOUSEMOVE; el hover y las capturas lo necesitan. */
     g.raton_dentro = 1;
+
+    /* Hover de los botones play/pausa/stop de la barra de menus. */
+    {
+        int media = barra_media_en(x, y);
+        if (media != g.hover_media) {
+            g.hover_media = media;
+            app_invalidar();
+        }
+    }
 
     /* En el gestor se actualiza el arrastre y el hover del boton. */
     if (g.vista == VISTA_MODULOS) {

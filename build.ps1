@@ -44,8 +44,11 @@ $Libs = @(
 )
 
 $Fuentes = @(
-    "nucleo.c", "fuente.c", "documento.c", "imagen.c", "pintura.c", "texto.c", "ui.c",
-    "tiles.c", "mapa.c", "tiles_modo.c", "pestanas.c", "app.c", "compilar.c"
+    "src\nucleo.c", "src\fuente.c", "src\documento.c", "src\imagen.c",
+    "src\pintura.c", "src\texto.c", "src\ui.c", "src\tiles.c", "src\mapa.c",
+    "src\tiles_modo.c", "src\pestanas.c", "src\app.c", "src\compilar.c",
+    "src\juego_ventana.c",
+    "motor\lobo.c", "motor\activo.c", "motor\nucleo32.s"
 )
 
 # El editor lleva la plantilla del motor como recurso (menu COMPILE):
@@ -53,7 +56,7 @@ $Fuentes = @(
 # Mismas piezas y banderas que motor\build.bat.
 Write-Host "Compilando el motor egine (plantilla del menu COMPILE)..." -ForegroundColor Cyan
 Push-Location (Join-Path $Aqui "motor")
-& $Gcc @CFlags nucleo32.s activo.c juego.c -o game.exe -lgdiplus -lgdi32 -luser32 -lkernel32 -lole32 -mwindows -static-libgcc
+& $Gcc @CFlags nucleo32.s activo.c juego.c lobo.c -o game.exe -lgdiplus -lgdi32 -luser32 -lkernel32 -lole32 -mwindows -static-libgcc
 if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Error "fallo la compilacion del motor"; exit 1 }
 Pop-Location
 
@@ -72,7 +75,7 @@ if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Error "windres fallo"; exit 1 }
 Write-Host "Compilando C..." -ForegroundColor Cyan
 foreach ($f in $Fuentes) {
     Write-Host "  $f"
-    & $Gcc @CFlags -c (Join-Path "src" $f) -o (Join-Path "obj" ([IO.Path]::GetFileNameWithoutExtension($f) + ".o"))
+    & $Gcc @CFlags -c $f -o (Join-Path "obj" ([IO.Path]::GetFileNameWithoutExtension($f) + ".o"))
     if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Error "gcc fallo con $f"; exit 1 }
 }
 

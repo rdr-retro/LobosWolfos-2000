@@ -52,6 +52,7 @@ static int gdiplus_ok;
 
 int activo_gdiplus_iniciar(void) {
     GdiplusStartupInput entrada;
+    if (gdiplus_ok) return 1; /* ya iniciado por la vista previa */
     entrada.GdiplusVersion = 1;
     entrada.DebugEventCallback = NULL;
     entrada.SuppressBackgroundThread = FALSE;
@@ -168,6 +169,29 @@ static int blob_parsear(const unsigned char *datos, int largo) {
         num++;
     }
     return num;
+}
+
+/* Libera todos los archivos virtuales registrados hasta ahora. */
+void activo_virtuales_limpiar(void) {
+    EntradaVirtual *e = g_virtuales;
+    while (e) {
+        EntradaVirtual *sig = e->sig;
+        free(e->nombre);
+        free(e->datos);
+        free(e);
+        e = sig;
+    }
+    g_virtuales = NULL;
+}
+
+/* Registra un blob LGB1 (sin el pie) como archivos virtuales del motor.
+ * Lo usa la vista previa del editor: reune el proyecto en memoria y lo
+ * carga sin escribir ningun archivo. Sustituye a los virtuales que
+ * hubiera. Devuelve el numero de entradas registradas. */
+int activo_blob_registrar(const unsigned char *datos, int largo) {
+    activo_virtuales_limpiar();
+    if (!datos || largo <= 0) return 0;
+    return blob_parsear(datos, largo);
 }
 
 /* Lee el pie LGB1 del final del propio ejecutable y registra su blob
@@ -432,7 +456,7 @@ static int extraer_cadena_lua(const char *texto, const char *clave,
 #define MOTOR_CELDAS_MAX 8192
 #define MOTOR_IMAGENES_MAX 256
 
-void mapa_liberar(MotorMapa *m) {
+void motor_mapa_liberar(MotorMapa *m) {
     int i;
     if (!m) return;
     for (i = 0; i < m->num_imagenes; i++) free(m->imagenes[i].pixeles);
@@ -465,7 +489,7 @@ int activo_cargar_mapa(const char *ruta, MotorMapa *m) {
 
     m->celdas = (MotorCelda *)calloc(MOTOR_CELDAS_MAX, sizeof(MotorCelda));
     m->imagenes = (MotorImagen *)calloc(MOTOR_IMAGENES_MAX, sizeof(MotorImagen));
-    if (!m->celdas || !m->imagenes) { mapa_liberar(m); free(contenido); return 0; }
+    if (!m->celdas || !m->imagenes) { motor_mapa_liberar(m); free(contenido); return 0; }
 
     p = strstr(contenido, "tiles");
     if (p) p = strstr(p, "{");

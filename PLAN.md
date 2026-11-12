@@ -31,6 +31,9 @@ Se actualiza con cada entrega.
     son botones con **código lobo editable dentro del propio botón** (el
     botón cambia al escribir; ver fase 8).
 - Menú **COMPILE** (entre COLORES e INFO): las dos salidas de compilación.
+- Botones **play / pausa / stop** al extremo derecho de la barra: prueban
+  el proyecto en una ventana del propio editor, sin compilar `game.exe`
+  ni la imagen USB (ver fase 9).
 - Efecto imán entre elementos, lista de elementos plegable, guardar
   lógica `.logic`.
 
@@ -116,6 +119,7 @@ escritorio **no se toca**: se trabaja sobre una copia.
 | 6 | Núcleo ASM x86_64 + el mismo juego corriendo sobre loboswolfos | **Hecho (11-11-2026)** |
 | 7 | **Compilar para BIOS** desde el menú COMPILE: genera la imagen USB flasheable (y flashearla con la herramienta de rocky como guía) | **Hecho (11-11-2026)** |
 | 8 | Más botones FUNCIONES arrastrables con **código editable dentro del botón**: al escribir el código, el botón cambia su aspecto; el código pasa a formar parte del juego compilado | **Hecho (11-11-2026)** |
+| 9 | Botones **play/pausa/stop** en la barra de menús: probar el proyecto en una ventana del editor sin compilar ni escribir ningún `.exe` | **Hecho (12-11-2026)** |
 
 Orden de trabajo por defecto: 1 → 2 → 3 → 4 (primero Windows, que es
 inmediato), y en paralelo cuando toque 5 → 6 → 7. La fase 8 llega cuando
@@ -311,6 +315,26 @@ el motor ya compila.
   prueba (un mapa y un boton FUNCIONES que pasea al lobo) cuando el
   raiz no tiene logica propia, y `probar-juego` exige en la serie la
   linea `egine: lobo: N scripts.` y ningun `egine: lobo: error`.
+- **12-11-2026 (fase 9)** — Los tres botones **play / pausa / stop** van
+  al extremo derecho de la barra de menus, siempre visibles. Pausa y
+  stop estan opacados al 35 % hasta que hay una vista previa abierta;
+  play abre la ventana, en pausa la reanuda y con el juego en marcha
+  reinicia el proyecto. Pausa alterna pausa/marcha y stop cierra
+  (igual que Escape y la X de la ventana). Los iconos son RCDATA
+  (`IDR_PLAY`, `IDR_PAUSE`, `IDR_STOP`) y se pintan a 20 px.
+- **12-11-2026 (fase 9)** — La vista previa **no escribe ningun
+  ejecutable**: `compilar_blob_memoria` reutiliza `compilar_reunir` y
+  `activo_blob_registrar` registra esas entradas como archivos
+  virtuales del motor, así que `src/juego_ventana.c` monta el mismo
+  mapa, tiles y scripts que `game.exe` pero en memoria. La ventana
+  (clase `LobosWolfosVistaPrevia`, 640x480) avanza con un timer de
+  16 ms y no bloquea al editor.
+- **12-11-2026 (fase 9)** — `game.exe` y la vista previa comparten el
+  modo scripts y el bucle de `motor/juego.c` (adaptado), y la captura
+  determinista `--captura-juego ruta --fotogramas N` produce un BMP
+  idéntico al de `game.exe --captura` con el mismo proyecto. El símbolo
+  `mapa_liberar` del motor pasa a `motor_mapa_liberar` para no chocar
+  con el `mapa_liberar(void)` del editor al enlazar los dos.
 
 ## 5. Pendiente de decidir
 

@@ -329,6 +329,36 @@ static int compilar_reunir(Bloque *blob, char separador) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Blob en memoria para la vista previa (fase 9)                       */
+/* ------------------------------------------------------------------ */
+
+/* Monta el proyecto activo como blob LGB1 en memoria: las mismas
+ * entradas que "Compilar para Windows" (proyecto.logic, mapas y tiles),
+ * sin plantilla ni pie. La vista previa del editor lo registra como
+ * archivos virtuales del motor para probar el juego sin escribir ningun
+ * ejecutable. Devuelve 1 y deja *datos (malloc) y *largo; el llamador
+ * los libera con free. Si falla, compilar_error_msj explica el motivo. */
+int compilar_blob_memoria(unsigned char **datos, int *largo) {
+    Bloque blob;
+    if (!datos || !largo) return 0;
+    *datos = NULL;
+    *largo = 0;
+    memset(&blob, 0, sizeof(blob));
+    if (!compilar_reunir(&blob, '\\')) {
+        free(blob.datos);
+        return 0;
+    }
+    *datos = blob.datos;
+    *largo = blob.largo;
+    return 1;
+}
+
+/* Texto del ultimo fallo de compilacion o de reunion del proyecto. */
+const char *compilar_ultimo_error(void) {
+    return compilar_error_msj;
+}
+
+/* ------------------------------------------------------------------ */
 /* Compilacion                                                         */
 /* ------------------------------------------------------------------ */
 

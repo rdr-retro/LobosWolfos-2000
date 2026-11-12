@@ -27,4 +27,9 @@
 #define IDR_MOTOR      126 /* plantilla game.exe del motor egine */
 #define IDR_KERNEL     127 /* plantilla de arranque de loboswolfos (Compilar para BIOS) */
 
+/* Botones play/pausa/stop de la barra de menus (vista previa del juego). */
+#define IDR_PLAY       128
+#define IDR_PAUSE      129
+#define IDR_STOP       130
+
 #endif

@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
             printf("  imagen 0: pixeles=%s ancho=%d alto=%d\n",
                    m.imagenes[0].pixeles ? "cargada" : "NULL",
                    m.imagenes[0].ancho, m.imagenes[0].alto);
-        mapa_liberar(&m);
+        motor_mapa_liberar(&m);
         activo_gdiplus_terminar();
     }
 

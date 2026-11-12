@@ -105,6 +105,15 @@ typedef unsigned char  u8;
 #define BARRA_ALTO        60
 #define BARRA_ABAJO_ALTO  32
 
+/* Botones play/pausa/stop del extremo derecho de la barra de menus. */
+#define BARRA_MEDIA_BOTONES 3
+#define BARRA_MEDIA_LADO    30
+#define BARRA_MEDIA_HUECO   2
+#define BARRA_MEDIA_MARGEN  6
+#define BARRA_MEDIA_ANCHO \
+    (BARRA_MEDIA_BOTONES * BARRA_MEDIA_LADO + \
+     (BARRA_MEDIA_BOTONES - 1) * BARRA_MEDIA_HUECO)
+
 #define SIDEBAR_MARGEN    6
 #define BOTON_LADO        32
 #define HUECO             3
@@ -743,6 +752,7 @@ typedef struct App {
 
     int menu_abierto;      /* -1 = ninguno */
     int hover_menu;
+    int hover_media;       /* boton play/pausa/stop bajo el cursor; -1 = no */
     int hover_herramienta;
     int hover_paleta;
     int hover_tile;
@@ -1079,6 +1089,7 @@ u32 *recurso_png(int id, int *ancho, int *alto);
 u32 *icono_herramienta(int indice, int *ancho, int *alto);
 u32 *icono_logo_imagen(int *ancho, int *alto);
 u32 *icono_guardar_imagen(int *ancho, int *alto);
+u32 *icono_media_imagen(int indice, int *ancho, int *alto);
 
 /* ------------------------------------------------------------------ */
 /* Tiles y mapa                                                        */
@@ -1348,6 +1359,28 @@ int  compilar_windows(const char *ruta);
 void dialogo_compilar_windows(void);
 int  compilar_bios(const char *ruta);
 void dialogo_compilar_bios(void);
+
+/* Vista previa del juego (juego_ventana.c, fase 9): los botones
+ * play/pausa/stop de la barra prueban el proyecto sin exportar .exe. */
+#define JUEGO_VENTANA_CERRADO  0
+#define JUEGO_VENTANA_JUGANDO  1
+#define JUEGO_VENTANA_PAUSA    2
+
+int  compilar_blob_memoria(unsigned char **datos, int *largo);
+const char *compilar_ultimo_error(void);
+
+int  juego_ventana_estado(void);
+int  juego_ventana_abrir(void);
+void juego_ventana_pausar(void);
+void juego_ventana_reanudar(void);
+void juego_ventana_detener(void);
+void juego_ventana_terminar(void);
+int  juego_ventana_capturar(const char *ruta, int fotogramas);
+
+/* Botones play/pausa/stop de la barra de menus (ui.c): zona 0 = play,
+ * 1 = pausa y 2 = stop. */
+Zona barra_media_zona(int indice);
+int  barra_media_en(int x, int y);
 void dialogo_elegir_color(int para_fondo);
 int  dialogo_elegir_color_valor(u32 inicial, u32 *salida);
 int  dialogo_confirmar(const char *titulo, const char *mensaje);
