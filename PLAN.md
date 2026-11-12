@@ -120,6 +120,7 @@ escritorio **no se toca**: se trabaja sobre una copia.
 | 7 | **Compilar para BIOS** desde el menú COMPILE: genera la imagen USB flasheable (y flashearla con la herramienta de rocky como guía) | **Hecho (11-11-2026)** |
 | 8 | Más botones FUNCIONES arrastrables con **código editable dentro del botón**: al escribir el código, el botón cambia su aspecto; el código pasa a formar parte del juego compilado | **Hecho (11-11-2026)** |
 | 9 | Botones **play/pausa/stop** en la barra de menús: probar el proyecto en una ventana del editor sin compilar ni escribir ningún `.exe` | **Hecho (12-11-2026)** |
+| 10 | **Biblioteca de plantillas de funciones** y **orden de ejecución por posición**: los rectángulos apilados en el lienzo corren de arriba a abajo, como las líneas de un programa | **Hecho (12-11-2026)** |
 
 Orden de trabajo por defecto: 1 → 2 → 3 → 4 (primero Windows, que es
 inmediato), y en paralelo cuando toque 5 → 6 → 7. La fase 8 llega cuando
@@ -335,6 +336,24 @@ el motor ya compila.
   idéntico al de `game.exe --captura` con el mismo proyecto. El símbolo
   `mapa_liberar` del motor pasa a `motor_mapa_liberar` para no chocar
   con el `mapa_liberar(void)` del editor al enlazar los dos.
+- **12-11-2026 (fase 10)** — Bajo **+ NUEVA FUNCION** hay una franja
+  **PLANTILLAS** con nueve rectángulos verdes de funciones ya escritas
+  (`mover con flechas`, `mover horizontal`, `salto y gravedad`, `jugador
+  plataformas`, `patrulla`, `vaiven vertical`, `caer con gravedad`,
+  `temblor`, `cerrar con tecla`). Un clic crea la función copiando el
+  código y abre su editor; un arrastre la crea y suelta ya en el lienzo.
+  La copia es una `FuncionCodigo` normal con nombre único (`patrulla`,
+  `patrulla 2`...), así que se edita, guarda y compila como cualquier
+  otra. Las plantillas se validan con el mismo parser del motor
+  (`plantillas_validar`, `src/plantillas.c`).
+- **12-11-2026 (fase 10)** — Los elementos que ejecutan código se
+  ordenan por su **posición vertical** en el lienzo (y, luego x, luego
+  id): el de más arriba corre primero, como las líneas de un programa.
+  El orden se materializa al guardar el LOGIC2 (primero los items de
+  mapa en su orden de siempre, después las funciones de arriba a abajo),
+  sin tocar el parser del motor ni el kernel. El lienzo pinta el puesto
+  como badge `1..N` en cada tarjeta y la lista de ELEMENTOS lo antepone
+  como `#n`; la cabecera de FUNCIONES recuerda `ORDEN: 1 ARRIBA`.
 
 ## 5. Pendiente de decidir
 

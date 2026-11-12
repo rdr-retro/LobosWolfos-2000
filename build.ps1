@@ -47,7 +47,7 @@ $Fuentes = @(
     "src\nucleo.c", "src\fuente.c", "src\documento.c", "src\imagen.c",
     "src\pintura.c", "src\texto.c", "src\ui.c", "src\tiles.c", "src\mapa.c",
     "src\tiles_modo.c", "src\pestanas.c", "src\app.c", "src\compilar.c",
-    "src\juego_ventana.c",
+    "src\juego_ventana.c", "src\plantillas.c",
     "motor\lobo.c", "motor\activo.c", "motor\nucleo32.s"
 )
 

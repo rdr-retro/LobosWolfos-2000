@@ -183,6 +183,12 @@ typedef unsigned char  u8;
 #define MODULOS_FUNCION_LINEA_ALTO    12 /* alto de cada linea de codigo */
 #define MODULOS_FUNCION_TABULACION    4 /* espacios que inserta el tabulador */
 
+/* Fase 10: biblioteca de plantillas y orden de ejecucion. La cabecera
+ * separa las funciones del proyecto de los rectangulos de plantilla;
+ * cada plantilla es un rectangulo mas alto (nombre y resumen). */
+#define MODULOS_PLANTILLA_CABECERA_ALTO 20 /* franja PLANTILLAS */
+#define MODULOS_PLANTILLA_ALTO          34 /* rectangulo de una plantilla */
+
 /* Colores del lenguaje lobo sobre el fondo blanco del editor. */
 #define LOBO_CLAVE    0x000058C8u /* si, sino, fin, mientras, no */
 #define LOBO_NUMERO   0x00A04A00u
@@ -1203,12 +1209,20 @@ Zona modulos_lienzo_zona(void);
 Zona modulos_boton_zona(void);
 Zona modulos_funcion_zona(int indice);
 int  modulos_funciones_num(void);
-int  modulos_funciones_total(void);   /* egine + botones + boton "+": el
-                                       * walk de la seccion */
+int  modulos_funciones_total(void);   /* egine + botones + "+" + cabecera
+                                       * de plantillas + plantillas: el
+                                       * walk completo de la seccion */
 int  modulos_funcion_alto_de(int indice); /* alto del boton (expandido) */
 int  modulos_funciones_visibles(void);    /* botones que caben con el scroll */
 const char *modulos_funcion_nombre(int indice);
 int  modulos_funcion_en(int x, int y);
+/* Indice del walk de la cabecera PLANTILLAS y de la primera plantilla. */
+int  modulos_plantilla_cabecera(void);
+/* Plantilla del walk `indice` (-1 si ese hueco no es una plantilla). */
+int  modulos_plantilla_de_walk(int indice);
+/* 1 si el rectangulo del walk se puede arrastrar al lienzo (egine,
+ * funciones del proyecto o plantillas; nunca el "+" ni la cabecera). */
+int  modulos_funcion_arrastrable(int indice);
 /* Id de la funcion lobo del boton `indice` de la seccion (0 = egine). */
 int  modulos_funcion_id_de(int indice);
 /* Busca el indice del array g.funciones de la funcion con ese id
@@ -1217,6 +1231,12 @@ int  modulos_funcion_indice_de(int id);
 /* Nombre de la funcion con ese id ("" si no esta): los elementos del
  * lienzo guardan ids, no indices. */
 const char *modulos_funcion_nombre_id(int id);
+/* Orden de ejecucion (fase 10): rellena `orden` con los elementos que
+ * llevan funcion (egine o codigo lobo) de arriba a abajo, desempatando
+ * por x y por id. Devuelve cuantos hay. */
+int  modulos_orden_ejecucion(int *orden);
+/* Puesto 1..N del elemento `idx` dentro de ese orden (0 si no ejecuta). */
+int  modulos_orden_de(int idx, const int *orden, int n);
 /* Cabecera del boton expandido (el clic aqui lo pliega) y su area de
  * codigo blanca; `indice` es del walk de la seccion. */
 Zona modulos_funcion_cabecera_zona(int indice);
@@ -1226,6 +1246,10 @@ Zona modulos_funciones_seccion_zona(void);
 /* Ajusta el scroll de la seccion para ver el boton `indice` entero. */
 void modulos_funciones_scroll_ver(int indice);
 void funciones_codigo_nueva(void);
+/* Crea una funcion a partir de la plantilla `plantilla` (0..N-1). Con
+ * `abrir` != 0 deja su editor abierto; con 0 solo la crea (arrastre).
+ * Devuelve el indice en g.funciones, o -1 si no cabe. */
+int  funciones_codigo_plantilla(int plantilla, int abrir);
 void funciones_codigo_borrar(int indice);
 void funciones_codigo_validar(FuncionCodigo *f);
 /* Edicion del boton abierto: teclas de control y caracteres. */

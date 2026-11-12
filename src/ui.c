@@ -3,6 +3,7 @@
  * Todo se dibuja a mano sobre el buffer de 32 bits.
  * ========================================================================== */
 #include "app.h"
+#include "plantillas.h"
 
 #define MENU_TOTAL 8
 static const char *MENU_ETIQUETAS[MENU_TOTAL] = {
@@ -3563,8 +3564,54 @@ static void dibujar_elemento_codigo(int vx0, int vy0, int ancho, int alto,
     }
 }
 
+/* Rectangulo de una plantilla de la biblioteca en el lienzo (o en la
+ * previsualizacion de arrastre): etiqueta PLANTILLA, nombre y las
+ * primeras lineas del codigo que se copiara. */
+static void dibujar_elemento_plantilla(int vx0, int vy0, int ancho, int alto,
+                                       int plantilla, int activo, int claro) {
+    const char *nombre = plantillas_nombre(plantilla);
+    const char *codigo = plantillas_codigo(plantilla);
+    const char *p = codigo;
+    int linea = 0;
+    u32 color_etiqueta = claro ? 0x00408030u : 0x00A8D0A0u;
+    u32 color_nombre = claro ? MODULOS_FUNCION_TEXTO : 0x00FFFFFFu;
+    u32 color_codigo = claro ? 0x00606878u : 0x00D8E0E8u;
+
+    if (activo) {
+        color_nombre = 0x00FFFFFFu;
+        color_codigo = claro ? 0x00E8EEF4u : color_codigo;
+    }
+    fuente_dibujar(vx0 + 4, vy0 + 5, "PLANTILLA", color_etiqueta);
+    fuente_dibujar_escala(
+        vx0 + (ancho - fuente_texto_ancho_escala(nombre, 2)) / 2,
+        vy0 + 18, nombre, color_nombre, 2);
+    while (*p && linea < 2) {
+        const char *inicio = p;
+        while (*p && *p != '\n') p++;
+        dibujar_linea_lobo(vx0 + 4, vy0 + 40 + linea * 8, inicio,
+                           vx0 + ancho - 4, claro ? 0 : color_codigo);
+        if (*p == '\n') p++;
+        linea++;
+    }
+}
+
+/* Numero de orden de un rectangulo que ejecuta codigo (arriba = 1). Se
+ * pinta en la esquina superior derecha de la tarjeta. */
+static void dibujar_badge_orden(int vx0, int vy0, int vx1, int puesto) {
+    char num[16];
+    int ancho, x;
+    formatear(num, sizeof(num), "%d", puesto);
+    ancho = fuente_texto_ancho(num) + 6;
+    x = vx1 - ancho - 3;
+    if (x < vx0 + 3) x = vx0 + 3;
+    dibujar_rect(x, vy0 + 3, x + ancho, vy0 + 14, MODULOS_FUNCION_TEXTO);
+    fuente_dibujar(x + 3, vy0 + 5, num, 0x00FFFFFFu);
+}
+
 static void modulos_dibujar_lienzo(void) {
     Zona lienzo = modulos_lienzo_zona();
+    int orden[MODULOS_MAX];
+    int n_orden = modulos_orden_ejecucion(orden);
     int i;
 
     modulos_dibujar_rejilla(lienzo);
@@ -3620,6 +3667,12 @@ static void modulos_dibujar_lienzo(void) {
             formatear(etiqueta, sizeof(etiqueta), "Elemento %d", e->id);
             fuente_dibujar(vx0 + (e->ancho - fuente_texto_ancho(etiqueta)) / 2,
                            vy0 + (e->alto - 7) / 2, etiqueta, TEXTO_UI);
+        }
+        /* Puesto de ejecucion 1..N: el rectangulo de mas arriba corre
+         * primero, como las lineas de un programa (fase 10). */
+        if (e->funcion >= 0) {
+            int puesto = modulos_orden_de(i, orden, n_orden);
+            if (puesto > 0) dibujar_badge_orden(vx0, vy0, vx1, puesto);
         }
     }
 
@@ -3683,6 +3736,14 @@ static void modulos_dibujar_lienzo(void) {
                     x0 + (MODULOS_ELEMENTO_ANCHO -
                           fuente_texto_ancho_escala("egine", 3)) / 2,
                     y0 + 27, "egine", 0x00FFFFFFu, 3);
+            } else if (modulos_plantilla_de_walk(
+                           g.modulo_funcion_pulsada) >= 0) {
+                /* plantilla de la biblioteca: nombre y primeras lineas
+                 * del codigo que se copiara al soltar */
+                dibujar_elemento_plantilla(
+                    x0, y0, MODULOS_ELEMENTO_ANCHO, MODULOS_ELEMENTO_ALTO,
+                    modulos_plantilla_de_walk(g.modulo_funcion_pulsada),
+                    0, 0);
             } else {
                 /* funcion de codigo: nombre y vista previa en claro
                  * sobre el fondo oscuro de la previsualizacion */
@@ -3757,17 +3818,65 @@ void ui_dibujar_funciones_modulos(void) {
     int i;
 
     fuente_dibujar(t.x, t.y, "FUNCIONES", TEXTO_UI);
+    {
+        /* La pista del orden: el rectangulo de mas arriba es el primero. */
+        const char *pista = "ORDEN: 1 ARRIBA";
+        int ancho_pista = fuente_texto_ancho(pista);
+        if (ancho_pista + fuente_texto_ancho("FUNCIONES") + 12 < t.ancho)
+            fuente_dibujar(zona_derecha(t) - ancho_pista, t.y, pista,
+                           SEPARADOR);
+    }
 
     for (i = 0; i < visibles; i++) {
         int indice = g.funciones_scroll + i;
+        int plantilla;
         Zona z;
         int hover, pulsado;
         if (indice >= modulos_funciones_total()) break;
         z = modulos_funcion_zona(indice);
         if (zona_abajo(z) > zona_abajo(s)) break; /* no cabe entero */
+
+        if (indice == modulos_plantilla_cabecera()) {
+            /* Franja que separa las funciones del proyecto de la
+             * biblioteca de plantillas (fase 10). */
+            dibujar_rect_z(z, BARRA);
+            dibujar_rect(z.x, z.y, zona_derecha(z), z.y + 1, SEPARADOR);
+            dibujar_rect(z.x, zona_abajo(z) - 1, zona_derecha(z),
+                         zona_abajo(z), SEPARADOR);
+            fuente_dibujar(z.x + 8, z.y + 6, "PLANTILLAS", TEXTO_UI);
+            fuente_dibujar(zona_derecha(z) - 8 -
+                               fuente_texto_ancho("ARRASTRA"),
+                           z.y + 6, "ARRASTRA", SEPARADOR);
+            continue;
+        }
+
         hover = zona_contiene(z, g.raton_x, g.raton_y);
         pulsado = g.modulo_funcion_pulsada == indice &&
                   !g.modulo_funcion_movido && hover;
+
+        plantilla = modulos_plantilla_de_walk(indice);
+        if (plantilla >= 0) {
+            /* Rectangulo de la biblioteca: nombre y resumen; al pulsarlo
+             * se crea la funcion y al arrastrarlo se suelta ya en el
+             * lienzo. El verde lo distingue de las funciones propias. */
+            dibujar_rect_z(z, pulsado ? 0x00D8E8C8u
+                                     : (hover ? 0x00F0F8E8u : 0x00EEF6E9u));
+            dibujar_rect(z.x, z.y, zona_derecha(z), z.y + 1, 0x00F8FCF4u);
+            dibujar_rect(z.x, z.y, z.x + 1, zona_abajo(z), 0x00F8FCF4u);
+            dibujar_rect(z.x, zona_abajo(z) - 1, zona_derecha(z),
+                         zona_abajo(z), SEPARADOR);
+            dibujar_rect(zona_derecha(z) - 1, z.y, zona_derecha(z),
+                         zona_abajo(z), SEPARADOR);
+            dibujar_rect(z.x, z.y, z.x + 3, zona_abajo(z) - 1,
+                         0x00408030u);
+            texto_recortado(z.x + 8, z.y + 4,
+                            plantillas_nombre(plantilla),
+                            MODULOS_FUNCION_TEXTO, z.ancho - 12);
+            texto_recortado(z.x + 8, z.y + 16,
+                            plantillas_resumen(plantilla),
+                            0x00506848u, z.ancho - 12);
+            continue;
+        }
 
         dibujar_rect_z(z, pulsado ? 0x00D8DEE6u
                                  : (hover ? 0x00EDF2F7u : BARRA));
@@ -3918,6 +4027,8 @@ static void elementos_dibujar_panel(void) {
     int total = g.num_modulos;
     int visibles, filas;
     int orden[MODULOS_MAX], hijos[MODULOS_MAX];
+    int ejec[MODULOS_MAX];
+    int n_ejec = modulos_orden_ejecucion(ejec);
     char titulo[32];
     int i;
 
@@ -3952,6 +4063,15 @@ static void elementos_dibujar_panel(void) {
         else
             formatear(etiqueta, sizeof(etiqueta), "Elemento %d",
                       g.modulos[idx].id);
+        /* Puesto de ejecucion del elemento (fase 10), si corre codigo. */
+        if (g.modulos[idx].funcion >= 0) {
+            int puesto = modulos_orden_de(idx, ejec, n_ejec);
+            if (puesto > 0) {
+                char con[48];
+                formatear(con, sizeof(con), "#%d %s", puesto, etiqueta);
+                recortar_texto(etiqueta, con, sizeof(etiqueta));
+            }
+        }
         dibujar_rect_z(z, activo ? BOTON_SELECCION : BARRA);
         dibujar_marco_z(z, activo ? BOTON_SELECCION : BARRA_BORDE);
         tx = z.x + 6;
