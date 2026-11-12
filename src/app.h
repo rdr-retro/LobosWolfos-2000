@@ -1392,6 +1392,7 @@ void dialogo_abrir_mapa(void);
 void dialogo_guardar_mapa(void);
 void dialogo_guardar_logica(void);
 void dialogo_abrir_logica(void);
+void dialogo_guardar_wolfo(void);
 int  logica_guardar_archivo(const char *ruta);
 int  logica_cargar_archivo(const char *ruta);
 int  logica_guardar_memoria(char **datos, int *largo);
@@ -1421,6 +1422,7 @@ void dialogo_compilar_bios(void);
 #define JUEGO_VENTANA_PAUSA    2
 
 int  compilar_blob_memoria(unsigned char **datos, int *largo);
+int  compilar_guardar_wolfo(const char *ruta);
 const char *compilar_ultimo_error(void);
 
 int  juego_ventana_estado(void);

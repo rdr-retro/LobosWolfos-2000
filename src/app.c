@@ -74,7 +74,7 @@ static void accion_archivo(int opcion) {
     int fila = opcion;
     if (!modo_mapa) {
         /* Sin editor de mapas las filas son: Abrir, Borrar, PNG, BMP,
-         * Abrir logica y Guardar logica. */
+         * Abrir logica, Guardar logica y Guardar proyecto .wolfo. */
         switch (fila) {
             case 0: dialogo_abrir_imagen(); return;
             case 1: fila = 3; break;
@@ -82,6 +82,7 @@ static void accion_archivo(int opcion) {
             case 3: fila = 5; break;
             case 4: fila = 6; break;
             case 5: fila = 7; break;
+            case 6: fila = 8; break;
             default: return;
         }
     }
@@ -103,6 +104,7 @@ static void accion_archivo(int opcion) {
         case 5: dialogo_exportar_bmp(); break;
         case 6: dialogo_abrir_logica(); break;
         case 7: dialogo_guardar_logica(); break;
+        case 8: dialogo_guardar_wolfo(); break;
         default: break;
     }
 }
@@ -1115,6 +1117,49 @@ void dialogo_guardar_logica(void) {
         app_estado("Logica guardada: %s", ruta);
     else
         dialogo_error("No se pudo guardar la logica.");
+    app_invalidar();
+}
+
+/* Nombre propuesto para el paquete: el del proyecto sin los caracteres
+ * que Windows no admite en un nombre de archivo. */
+static void nombre_archivo_wolfo(char *dst, int tam) {
+    const char *p = g.ajustes.nombre;
+    int n = 0;
+
+    while (*p && n < tam - 7) {
+        char c = *p++;
+        if (c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' ||
+            c == '"' || c == '<' || c == '>' || c == '|')
+            c = '_';
+        dst[n++] = c;
+    }
+    dst[n] = 0;
+    if (n == 0) strcpy(dst, "proyecto");
+    strcat(dst, ".wolfo");
+}
+
+/* Dialogo para guardar el proyecto entero como paquete .wolfo: la
+ * logica, los mapas y los tiles en un solo archivo (fase 15). */
+void dialogo_guardar_wolfo(void) {
+    char ruta[MAX_PATH];
+    OPENFILENAMEA ofn;
+
+    nombre_archivo_wolfo(ruta, sizeof(ruta));
+    memset(&ofn, 0, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = g.hwnd;
+    ofn.lpstrFilter =
+        "Proyecto (*.wolfo)\0*.wolfo\0Todos los archivos\0*.*\0\0";
+    ofn.lpstrFile = ruta;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrDefExt = "wolfo";
+    ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY |
+                OFN_OVERWRITEPROMPT;
+    if (!GetSaveFileNameA(&ofn)) return;
+    if (compilar_guardar_wolfo(ruta))
+        app_estado("Proyecto guardado: %s", ruta);
+    else
+        dialogo_error(compilar_ultimo_error());
     app_invalidar();
 }
 

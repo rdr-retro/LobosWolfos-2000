@@ -354,6 +354,42 @@ int compilar_blob_memoria(unsigned char **datos, int *largo) {
     return 1;
 }
 
+/* Guarda el proyecto activo como paquete .wolfo (fase 15): el mismo
+ * blob LGB1 que viaja en el game.exe compilado (proyecto.logic, mapas y
+ * tiles) seguido del pie "LGB1" con su largo. El pie permite reconocer
+ * el archivo y localizar el blob desde el final, igual que hace el motor
+ * con el proyecto incrustado en su ejecutable. Devuelve 1 si se
+ * escribio; si no, compilar_error_msj explica el fallo. */
+int compilar_guardar_wolfo(const char *ruta) {
+    unsigned char *datos = NULL;
+    int largo = 0;
+    FILE *f;
+    u32 blob_largo;
+    int ok;
+
+    if (!ruta || !ruta[0]) return 0;
+    if (!compilar_blob_memoria(&datos, &largo)) return 0;
+    f = fopen(ruta, "wb");
+    if (!f) {
+        formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                  "No se pudo crear el archivo %s.", ruta);
+        free(datos);
+        return 0;
+    }
+    blob_largo = (u32)largo;
+    ok = fwrite(datos, 1, (size_t)largo, f) == (size_t)largo &&
+         fwrite(BLOB_MAGICO, 1, 4, f) == 4 &&
+         fwrite(&blob_largo, 1, 4, f) == 4;
+    fclose(f);
+    free(datos);
+    if (!ok) {
+        formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                  "Fallo al escribir el proyecto %s.", ruta);
+        return 0;
+    }
+    return 1;
+}
+
 /* Texto del ultimo fallo de compilacion o de reunion del proyecto. */
 const char *compilar_ultimo_error(void) {
     return compilar_error_msj;

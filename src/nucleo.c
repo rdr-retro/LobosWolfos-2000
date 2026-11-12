@@ -1655,6 +1655,22 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 logica_guardar_archivo(logic_ruta);
             }
         }
+        /* Guardado directo del paquete .wolfo (pruebas sin dialogo, fase
+         * 15): escribe logica, mapas y tiles en un solo archivo. */
+        {
+            char *wolfo_arg = arg_valor(cmd, "--guardar-wolfo");
+            if (wolfo_arg) {
+                char wolfo_ruta[MAX_PATH];
+                int n = 0;
+                while (wolfo_arg[n] && wolfo_arg[n] != ' ' &&
+                       wolfo_arg[n] != '\t' && n < MAX_PATH - 1) {
+                    wolfo_ruta[n] = wolfo_arg[n];
+                    n++;
+                }
+                wolfo_ruta[n] = 0;
+                if (wolfo_ruta[0]) compilar_guardar_wolfo(wolfo_ruta);
+            }
+        }
         /* Compilacion directa para Windows (pruebas sin dialogo, fase
          * 4): escribe el game.exe del proyecto activo en la ruta dada. */
         {

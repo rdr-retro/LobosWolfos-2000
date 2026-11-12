@@ -14,7 +14,7 @@ Se actualiza con cada entrega.
 | Pieza | Qué es | Dónde vive |
 |---|---|---|
 | **Editor** | El entorno de trabajo (este programa): pintar, tiles, mapas y el gestor de lógica donde se compone el juego. | Repositorio actual. C, Win32/GDI, 32 bits, Windows 2000/XP. |
-| **Proyecto del juego** | Lo que monta el usuario: lógica (elementos del lienzo), mapas `.mav`, tiles e items. | Archivo `.logic` + carpetas `maps/` y `tiles/` junto al editor. |
+| **Proyecto del juego** | Lo que monta el usuario: lógica (elementos del lienzo), mapas `.mav`, tiles e items. | Archivo `.logic` + carpetas `maps/` y `tiles/` junto al editor, o un paquete `.wolfo` que lo lleva todo junto. |
 | **Motor egine** | El corazón del juego: bucle, render, entrada y colisiones. Sus partes esenciales escritas en **ensamblador**. | Carpeta `motor/` (nueva): núcleo x86 de 32 bits, núcleo x86_64 e interfaz común. |
 | **Kernel loboswolfos** | El sistema operativo propio que arranca el juego desde la BIOS del PC. | Copia adaptada de `rocky` (`C:\Users\rdr-ryzen\Desktop\kernel`), reducida a lo que el juego necesita. |
 
@@ -406,6 +406,20 @@ el motor ya compila.
   las teclas lo editan, los valores viajan al `.logic` y vuelven al cargarlo,
   CANCELAR deja el archivo intacto y `game.exe --logica` captura 800x600 con
   el fondo verde elegido.
+- **12-11-2026 (fase 15)** — **ARCHIVO > Guardar proyecto .wolfo** empaqueta
+  el proyecto entero en un solo archivo: la lógica serializada como
+  `proyecto.logic` (con su línea `PROYECTO`), cada mapa que usan los
+  elementos del gestor y los tiles de esos mapas. Usa el mismo blob `LGB1`
+  que viaja en el `game.exe` compilado y añade al final el pie `LGB1` con su
+  longitud, de modo que el paquete se localiza y se puede reconstruir con
+  las mismas herramientas. La fila nueva va al final del menú ARCHIVO, en
+  las dos vistas (pintar y mapa), y el diálogo propone como nombre el del
+  proyecto con extensión `.wolfo`. Verificado por píxeles: el menú ARCHIVO
+  crece a 7 filas (9 en el editor de mapas) y muestra la fila nueva; el
+  paquete generado con `--guardar-wolfo` lleva el pie correcto y las
+  entradas `proyecto.logic`, `maps\mapa.mav` y `tile_2.png`, y al extraerlas
+  `game.exe --logica` arranca a 800x600 con el mapa y el fondo del
+  proyecto.
 
 ## 5. Pendiente de decidir
 

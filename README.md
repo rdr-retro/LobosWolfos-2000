@@ -23,6 +23,8 @@ para cargar y guardar PNG.
   izquierdo lista los elementos del lienzo; hay una sola lógica y se guarda
   como archivo `.logic`.
 - Apertura y exportación de PNG/BMP y mapas `.mav`.
+- Guardado del proyecto entero en un paquete `.wolfo` (lógica, mapas y tiles)
+  o solo de la lógica en un `.logic`.
 - **Ajustes del proyecto** (menú de la barra): nombre, resolución y relación de
   aspecto, límite de cuadros, velocidad del jugador y color de fondo; viajan
   con el `.logic` y los aplican la vista previa y `game.exe`.
@@ -236,6 +238,14 @@ del jugador y color de fondo. Los lectores antiguos la ignoran y los nuevos
 la aplican a la vista previa y al `game.exe`; un `.logic` sin esa línea usa
 los valores por defecto (640x480, 60 FPS, velocidad 3 y fondo negro).
 
+La opción **Guardar proyecto .wolfo** del menú **ARCHIVO** empaqueta el
+proyecto entero en un solo archivo: la lógica con sus ajustes
+(`proyecto.logic`), los mapas que usan sus elementos y los tiles de esos
+mapas. Usa el mismo blob `LGB1` que viaja incrustado en el `game.exe`
+compilado y termina con el pie `LGB1` y su longitud, así que un lector puede
+localizar el blob desde el final y reconstruir el proyecto en otra carpeta.
+El nombre propuesto es el del proyecto.
+
 Dentro del gestor, el panel derecho contiene el botón del **item**. Un clic
 (sin arrastrar) abre el selector de items: la lista de mapas `.mav` de la
 carpeta `maps` junto al ejecutable, cada uno con su miniatura y su nombre.
@@ -405,7 +415,8 @@ procesado en `src\nucleo.c`.
 ## Estructura
 
 - `src/` — código fuente C y recursos de la interfaz. `src/compilar.c` es el
-  menú COMPILE (compilar el proyecto para Windows y para BIOS),
+  menú COMPILE (compilar el proyecto para Windows y para BIOS) y el paquete
+  `.wolfo`,
   `src/juego_ventana.c` la vista previa de los botones play/pausa/stop y
   `src/ajustes.c` las propiedades del proyecto.
 - `motor/` — motor egine: núcleo en ensamblador 32 bits (`nucleo32.s`),
