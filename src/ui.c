@@ -4133,6 +4133,7 @@ void ui_dibujar(void) {
         ui_dibujar_menu_desplegable();
         ui_dibujar_estado();
         ui_dibujar_confirmaciones();
+        ui_dibujar_ajustes();
         return;
     }
 
@@ -4147,6 +4148,7 @@ void ui_dibujar(void) {
         ui_dibujar_menu_desplegable();
         ui_dibujar_estado();
         ui_dibujar_confirmaciones();
+        ui_dibujar_ajustes();
         return;
     }
 
@@ -4185,6 +4187,7 @@ void ui_dibujar(void) {
     ui_dibujar_menu_desplegable();
     texto_dibujar_barra();
     ui_dibujar_confirmaciones();
+    ui_dibujar_ajustes();
 
     /* Linea de estado de estructuras no usadas. */
     for (i = 0; i < 0; i++) { }

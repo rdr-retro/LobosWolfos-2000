@@ -23,6 +23,9 @@ para cargar y guardar PNG.
   izquierdo lista los elementos del lienzo; hay una sola lógica y se guarda
   como archivo `.logic`.
 - Apertura y exportación de PNG/BMP y mapas `.mav`.
+- **Ajustes del proyecto** (menú de la barra): nombre, resolución y relación de
+  aspecto, límite de cuadros, velocidad del jugador y color de fondo; viajan
+  con el `.logic` y los aplican la vista previa y `game.exe`.
 - Vista previa del juego con los botones **play/pausa/stop** de la barra:
   prueba el proyecto en una ventana sin compilar ni escribir ningún `.exe`.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
@@ -61,7 +64,8 @@ proyecto** (la carpeta con `maps/` y `tiles/`), no desde `motor/`:
 motor\game.exe
 ```
 
-Abre una ventana de 640x480, carga el mapa del proyecto (el del `.logic` de la
+Abre una ventana con la resolución del proyecto (640x480 por defecto), carga el
+mapa del proyecto (el del `.logic` de la
 lógica o el primero que haya en `maps/`) y lo dibuja con el **núcleo en
 ensamblador** (`motor/nucleo32.s`: limpiar y blit con MMX, render del mapa y
 colisiones AABB). Mueve el sprite con los cursores o `WASD`; `Escape` cierra.
@@ -76,12 +80,14 @@ Para pruebas automáticas sin ventana (captura determinista a BMP):
 motor\game.exe --captura captura.bmp --fotogramas 60 --tecla derecha
 ```
 
-Opciones: `--logica ruta` (proyecto `.logic`), `--mapa ruta` (un `.mav`
+Opción: `--logica ruta` (proyecto `.logic`), `--mapa ruta` (un `.mav`
 directo), `--captura ruta`, `--fotogramas N`, `--tecla nombre`
 (izquierda/derecha/arriba/abajo/saltar) y `--traza ruta` (una línea por
 fotograma con el contador y la posición del lobo; la cabecera
 `lobo: N scripts` confirma que los scripts lobo compilaron y uno que
-falla sale como `lobo: error <id> <motivo>`).
+falla sale como `lobo: error <id> <motivo>`). La resolución, el límite de
+cuadros, la velocidad y el color de fondo salen de los ajustes del proyecto
+guardados al final del `.logic`.
 
 `motor/prueba.c` es un banco de pruebas de consola del núcleo; se compila
 aparte siguiendo las instrucciones de su cabecera y se ejecuta desde la raíz
@@ -224,6 +230,12 @@ lógica .logic**, justo encima, carga uno de esos archivos de vuelta: la
 lógica del archivo sustituye a la activa y la vista entra al gestor para
 verla cargada.
 
+Al final del `.logic` se escribe una línea opcional `PROYECTO` con los
+ajustes del proyecto: nombre, resolución, límite de cuadros, FPS, velocidad
+del jugador y color de fondo. Los lectores antiguos la ignoran y los nuevos
+la aplican a la vista previa y al `game.exe`; un `.logic` sin esa línea usa
+los valores por defecto (640x480, 60 FPS, velocidad 3 y fondo negro).
+
 Dentro del gestor, el panel derecho contiene el botón del **item**. Un clic
 (sin arrastrar) abre el selector de items: la lista de mapas `.mav` de la
 carpeta `maps` junto al ejecutable, cada uno con su miniatura y su nombre.
@@ -297,10 +309,20 @@ El menú **COMPILE** de la barra de menús, entre **AJUSTES DEL PROYECTO** e
 el proyecto activo — la lógica del gestor, los mapas que usan sus elementos y
 los tiles de esos mapas — y lo incrustan entero como archivos virtuales (blob
 `LGB1`). El mapa es opcional: si el lienzo no tiene ningún elemento de mapa, el
-proyecto se compila igual y el juego arranca con la ventana en negro.
+proyecto se compila igual y el juego arranca con la ventana en el color de
+fondo del proyecto (negro por defecto).
 
-Entre **COLORES** y **COMPILE** hay un botón **AJUSTES DEL PROYECTO**, reservado
-para la configuración del proyecto; como CAPA y COLORES, no abre desplegable.
+Entre **COLORES** y **COMPILE** está el botón **AJUSTES DEL PROYECTO**, que
+abre las propiedades del proyecto en una ventana flotante (como CAPA y
+COLORES no tiene desplegable). Se puede editar el **nombre del proyecto**,
+elegir la **resolución** entre las relaciones de aspecto 4:3 y 16:9 (640x480,
+800x600, 1024x768, 1280x720, 1600x900 y 1920x1080), activar o desactivar
+**limitar cuadros** y elegir los **FPS** (30, 60, 75, 120, 144 o 240), ajustar
+la **velocidad del jugador** (1 a 10) y escoger el **color de fondo**. La
+ventana se arrastra por la barra de título, `Escape` cancela, `Enter` acepta y
+los botones **RESTABLECER**, **CANCELAR** y **ACEPTAR** hacen lo que indican.
+Los ajustes se aplican a la vista previa y al `game.exe` compilado; la imagen
+BIOS mantiene siempre su pantalla de 640x480.
 
 **Compilar para Windows** produce un `game.exe` autónomo de 32 bits: el
 proyecto viaja incrustado dentro del propio ejecutable, así el juego
@@ -319,9 +341,11 @@ En el extremo derecho de la barra de menús hay tres botones: **play**,
 aparte sin pasar por COMPILE ni escribir ningún `.exe`, cómodo para probar
 cambios sin llenar el disco.
 
-- **play** abre la vista previa (640x480) con el mapa, los tiles y el código
-  lobo del proyecto. Si el proyecto no tiene mapa, la ventana se abre en
-  negro y los programas corren igual. Si está en pausa, la reanuda; si ya
+- **play** abre la vista previa con el mapa, los tiles y el código
+  lobo del proyecto, con la resolución de los ajustes del proyecto (640x480
+  por defecto). Si el proyecto no tiene mapa, la ventana se abre con el color
+  de fondo elegido (negro por defecto) y los programas corren igual. Si está en
+  pausa, la reanuda; si ya
   está jugando, reinicia el proyecto para recoger los últimos cambios.
 - **pausa** alterna pausa y marcha. Hasta que se abre la vista previa, está
   opacado y no responde.
@@ -381,8 +405,9 @@ procesado en `src\nucleo.c`.
 ## Estructura
 
 - `src/` — código fuente C y recursos de la interfaz. `src/compilar.c` es el
-  menú COMPILE (compilar el proyecto para Windows y para BIOS) y
-  `src/juego_ventana.c` la vista previa de los botones play/pausa/stop.
+  menú COMPILE (compilar el proyecto para Windows y para BIOS),
+  `src/juego_ventana.c` la vista previa de los botones play/pausa/stop y
+  `src/ajustes.c` las propiedades del proyecto.
 - `motor/` — motor egine: núcleo en ensamblador 32 bits (`nucleo32.s`),
   interfaz común (`motor.h`), carga del proyecto (`activo.c`) y `juego.c`
   (`game.exe`).

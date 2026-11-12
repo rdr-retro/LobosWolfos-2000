@@ -639,12 +639,77 @@ int activo_funciones_usadas(int *ids, int max) {
     return n;
 }
 
+/* Ajustes del proyecto (fase 14): linea PROYECTO al final del .logic. */
+static char g_proy_nombre[64] = "Mi proyecto";
+static int g_proy_ancho = 640;
+static int g_proy_alto = 480;
+static int g_proy_limitar = 1;
+static int g_proy_fps = 60;
+static int g_proy_velocidad = 3;
+static unsigned int g_proy_fondo = 0x00000000u;
+
+static void ajustes_por_defecto(void) {
+    strcpy(g_proy_nombre, "Mi proyecto");
+    g_proy_ancho = 640;
+    g_proy_alto = 480;
+    g_proy_limitar = 1;
+    g_proy_fps = 60;
+    g_proy_velocidad = 3;
+    g_proy_fondo = 0x00000000u;
+}
+
+const char *activo_proyecto_nombre(void) { return g_proy_nombre; }
+int activo_proyecto_ancho(void) { return g_proy_ancho; }
+int activo_proyecto_alto(void) { return g_proy_alto; }
+int activo_proyecto_limitar_cuadros(void) { return g_proy_limitar; }
+int activo_proyecto_fps(void) { return g_proy_fps; }
+int activo_proyecto_velocidad(void) { return g_proy_velocidad; }
+unsigned int activo_proyecto_fondo(void) { return g_proy_fondo; }
+
+/* Lee la linea PROYECTO del trailer del .logic. */
+static int cargar_ajustes(const char *p, char *linea, int tam_linea) {
+    while (p && *p) {
+        const char *fin = strchr(p, '\n');
+        int n = fin ? (int)(fin - p) : (int)strlen(p);
+        const char *q1, *q2;
+        if (n >= tam_linea) n = tam_linea - 1;
+        memcpy(linea, p, (size_t)n);
+        linea[n] = '\0';
+        if (strncmp(linea, "PROYECTO", 8) == 0) {
+            q1 = strchr(linea, '"');
+            q2 = q1 ? strchr(q1 + 1, '"') : NULL;
+            if (q1 && q2) {
+                int nn = (int)(q2 - q1 - 1);
+                unsigned int fondo = 0;
+                if (nn >= (int)sizeof(g_proy_nombre)) nn = (int)sizeof(g_proy_nombre) - 1;
+                if (nn > 0) memcpy(g_proy_nombre, q1 + 1, (size_t)nn);
+                g_proy_nombre[nn] = '\0';
+                if (sscanf(q2 + 1, "%d %d %d %d %d %X", &g_proy_ancho,
+                           &g_proy_alto, &g_proy_limitar, &g_proy_fps,
+                           &g_proy_velocidad, &fondo) == 6) {
+                    g_proy_fondo = fondo;
+                    if (g_proy_ancho < 320 || g_proy_ancho > 4096) g_proy_ancho = 640;
+                    if (g_proy_alto < 200 || g_proy_alto > 4096) g_proy_alto = 480;
+                    if (g_proy_fps < 1 || g_proy_fps > 1000) g_proy_fps = 60;
+                    if (g_proy_velocidad < 1) g_proy_velocidad = 1;
+                    if (g_proy_velocidad > 10) g_proy_velocidad = 10;
+                    g_proy_limitar = g_proy_limitar ? 1 : 0;
+                    return 1;
+                }
+            }
+        }
+        p = fin ? fin + 1 : NULL;
+    }
+    return 0;
+}
+
 /* Parsea la seccion de funciones de un LOGIC2 desde `p` (justo despues
  * de los elementos): una linea con el numero de funciones y, por cada
  * una, la cabecera <id> "<nombre>" <largo>, su codigo crudo de largo
  * bytes (puede llevar saltos de linea) y un separador final. Tolerante
- * a lo que falte al final del archivo. */
-static void cargar_funciones(const char *p, char *linea, int tam_linea) {
+ * a lo que falte al final del archivo. Devuelve el puntero tras la
+ * seccion, donde empieza el trailer de ajustes. */
+static const char *cargar_funciones(const char *p, char *linea, int tam_linea) {
     int nf, k;
     nf = (int)strtol(p, NULL, 10);
     if (nf < 0 || nf > 100000) nf = 0;
@@ -682,6 +747,7 @@ static void cargar_funciones(const char *p, char *linea, int tam_linea) {
         while (largo > 0 && *p) { p++; largo--; }
         if (*p == '\n') p++; /* separador tras el codigo */
     }
+    return p;
 }
 
 int activo_cargar_proyecto(const char *ruta_logic, MotorMapa *m,
@@ -693,6 +759,7 @@ int activo_cargar_proyecto(const char *ruta_logic, MotorMapa *m,
     ruta_mapa[0] = '\0';
     g_num_funciones = 0;
     g_num_usadas = 0;
+    ajustes_por_defecto();
 
     if (ruta_logic && ruta_logic[0]) {
         char *contenido;
@@ -741,7 +808,9 @@ int activo_cargar_proyecto(const char *ruta_logic, MotorMapa *m,
         }
         /* LOGIC2: funciones de codigo lobo tras los elementos. */
         if (es_logic2 && p && *p)
-            cargar_funciones(p, linea, (int)sizeof(linea));
+            p = cargar_funciones(p, linea, (int)sizeof(linea));
+        /* Trailer opcional con los ajustes del proyecto (fase 14). */
+        if (p && *p) cargar_ajustes(p, linea, (int)sizeof(linea));
         free(contenido);
         (void)hay_egine; /* informacion para futuras fases */
     }

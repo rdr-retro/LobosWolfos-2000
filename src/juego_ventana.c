@@ -33,8 +33,13 @@ static HWND g_hwnd;
 static HDC g_memdc;
 static HBITMAP g_dib;
 static HGDIOBJ g_dib_anterior;
-static u32 *g_fb;              /* framebuffer 640x480 (DIB o malloc) */
+static u32 *g_fb;              /* framebuffer del juego (DIB o malloc) */
 static int g_clase_lista;
+static int jv_ancho = JV_ANCHO;
+static int jv_alto = JV_ALTO;
+static int jv_fps = JV_FPS;
+static int jv_limitar = 1;
+static int jv_velocidad = JV_SPRITE_VEL;
 
 static MotorMapa g_mapa;
 static char g_mapa_usado[MAX_PATH];
@@ -200,7 +205,7 @@ static int jv_actualizar(void) {
         int i;
         st.x = g_x;
         st.y = g_y;
-        st.vel = JV_SPRITE_VEL;
+        st.vel = jv_velocidad;
         st.fotograma = g_fotograma;
         st.entrada = g_entrada; /* LOBO_TECLA_* == MOTOR_ENT_* */
         st.choca = jv_lobo_choca;
@@ -218,10 +223,10 @@ static int jv_actualizar(void) {
     /* Movimiento por defecto (sin scripts en el proyecto). */
     {
         int vx = 0, vy = 0;
-        if (e & MOTOR_ENT_IZQUIERDA) vx -= JV_SPRITE_VEL;
-        if (e & MOTOR_ENT_DERECHA)   vx += JV_SPRITE_VEL;
-        if (e & MOTOR_ENT_ARRIBA)    vy -= JV_SPRITE_VEL;
-        if (e & MOTOR_ENT_ABAJO)     vy += JV_SPRITE_VEL;
+        if (e & MOTOR_ENT_IZQUIERDA) vx -= jv_velocidad;
+        if (e & MOTOR_ENT_DERECHA)   vx += jv_velocidad;
+        if (e & MOTOR_ENT_ARRIBA)    vy -= jv_velocidad;
+        if (e & MOTOR_ENT_ABAJO)     vy += jv_velocidad;
 
         /* movimiento separado por eje para deslizar contra los tiles */
         if (vx) {
@@ -243,20 +248,20 @@ static void jv_renderizar(void) {
     if (!g_fb) return;
 
     /* Sin mapa el proyecto corre igual, pero no se pinta nada: la
-     * ventana queda en negro (fase 12). */
+     * ventana queda con el color de fondo del proyecto (negro por defecto). */
     if (!g_mapa_usado[0]) {
-        motor_limpiar(g_fb, JV_ANCHO, JV_ALTO, 0x00000000u);
+        motor_limpiar(g_fb, jv_ancho, jv_alto, g.ajustes.fondo);
         return;
     }
 
     /* camara centrada en el sprite */
-    cam_x = g_x + JV_SPRITE_LADO / 2 - JV_ANCHO / 2;
-    cam_y = g_y + JV_SPRITE_LADO / 2 - JV_ALTO / 2;
+    cam_x = g_x + JV_SPRITE_LADO / 2 - jv_ancho / 2;
+    cam_y = g_y + JV_SPRITE_LADO / 2 - jv_alto / 2;
 
-    motor_limpiar(g_fb, JV_ANCHO, JV_ALTO, 0x00101826u);
-    motor_mapa_render(g_fb, JV_ANCHO, JV_ALTO, cam_x, cam_y, m->lado,
+    motor_limpiar(g_fb, jv_ancho, jv_alto, 0x00101826u);
+    motor_mapa_render(g_fb, jv_ancho, jv_alto, cam_x, cam_y, m->lado,
                       m->celdas, m->num_celdas, m->imagenes);
-    motor_blit_alpha(g_fb, JV_ANCHO, JV_ALTO,
+    motor_blit_alpha(g_fb, jv_ancho, jv_alto,
                      g_x - cam_x, g_y - cam_y,
                      g_sprite, JV_SPRITE_LADO, JV_SPRITE_LADO);
 }
@@ -266,7 +271,7 @@ static void jv_blit(HWND hwnd) {
     if (!hwnd || !g_memdc) return;
     dc = GetDC(hwnd);
     if (dc) {
-        BitBlt(dc, 0, 0, JV_ANCHO, JV_ALTO, g_memdc, 0, 0, SRCCOPY);
+        BitBlt(dc, 0, 0, jv_ancho, jv_alto, g_memdc, 0, 0, SRCCOPY);
         ReleaseDC(hwnd, dc);
     }
 }
@@ -319,6 +324,14 @@ static void jv_liberar(void) {
 static int jv_cargar_proyecto(int avisar) {
     unsigned char *blob = NULL;
     int largo = 0;
+
+    /* Ajustes del proyecto (fase 14): tamano de la ventana, ritmo y
+     * velocidad base. Se copian al abrir la vista previa. */
+    jv_ancho = limitar(g.ajustes.ancho, 320, 4096);
+    jv_alto = limitar(g.ajustes.alto, 200, 4096);
+    jv_fps = limitar(g.ajustes.fps, 1, 1000);
+    jv_limitar = g.ajustes.limitar_cuadros ? 1 : 0;
+    jv_velocidad = limitar(g.ajustes.velocidad, 1, 10);
 
     if (!compilar_blob_memoria(&blob, &largo)) {
         if (avisar)
@@ -379,7 +392,7 @@ static LRESULT CALLBACK jv_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         PAINTSTRUCT ps;
         HDC dc = BeginPaint(hwnd, &ps);
         if (g_memdc)
-            BitBlt(dc, 0, 0, JV_ANCHO, JV_ALTO, g_memdc, 0, 0, SRCCOPY);
+            BitBlt(dc, 0, 0, jv_ancho, jv_alto, g_memdc, 0, 0, SRCCOPY);
         EndPaint(hwnd, &ps);
         return 0;
     }
@@ -428,9 +441,10 @@ static int jv_crear_ventana(void) {
     }
 
     rect.left = 0; rect.top = 0;
-    rect.right = JV_ANCHO; rect.bottom = JV_ALTO;
+    rect.right = jv_ancho; rect.bottom = jv_alto;
     AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE);
-    _snprintf(titulo, sizeof(titulo), "Vista previa - %s",
+    _snprintf(titulo, sizeof(titulo), "Vista previa - %s - %s",
+              g.ajustes.nombre[0] ? g.ajustes.nombre : "proyecto",
               g_mapa_usado[0] ? g_mapa_usado : "sin mapa");
     titulo[sizeof(titulo) - 1] = '\0';
     hwnd = CreateWindowA(JV_CLASE, titulo, WS_OVERLAPPEDWINDOW,
@@ -445,8 +459,8 @@ static int jv_crear_ventana(void) {
     g_memdc = CreateCompatibleDC(pantalla);
     memset(&bmi, 0, sizeof(bmi));
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = JV_ANCHO;
-    bmi.bmiHeader.biHeight = -JV_ALTO;
+    bmi.bmiHeader.biWidth = jv_ancho;
+    bmi.bmiHeader.biHeight = -jv_alto;
     bmi.bmiHeader.biPlanes = 1;
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
@@ -492,7 +506,7 @@ int juego_ventana_abrir(void) {
     UpdateWindow(g_hwnd);
     SetForegroundWindow(g_hwnd);
     SetFocus(g_hwnd);
-    SetTimer(g_hwnd, 1, JV_MS_POR_FOTO, NULL);
+    SetTimer(g_hwnd, 1, jv_limitar ? (1000 / jv_fps) : 1, NULL);
     app_estado("Vista previa: %s",
                g_mapa_usado[0] ? g_mapa_usado : "sin mapa (ventana en negro)");
     app_invalidar();
@@ -548,7 +562,7 @@ int juego_ventana_capturar(const char *ruta, int fotogramas) {
     if (g_estado != JUEGO_VENTANA_CERRADO) juego_ventana_detener();
     if (!jv_cargar_proyecto(0)) return 0;
 
-    g_fb = (u32 *)malloc((size_t)JV_ANCHO * JV_ALTO * sizeof(u32));
+    g_fb = (u32 *)malloc((size_t)jv_ancho * jv_alto * sizeof(u32));
     if (!g_fb) {
         jv_liberar();
         return 0;
@@ -562,7 +576,7 @@ int juego_ventana_capturar(const char *ruta, int fotogramas) {
         jv_renderizar();
         if (!sigue) break;
     }
-    ok = activo_guardar_bmp(ruta, g_fb, JV_ANCHO, JV_ALTO);
+    ok = activo_guardar_bmp(ruta, g_fb, jv_ancho, jv_alto);
     free(g_fb);
     g_fb = NULL;
     jv_liberar();

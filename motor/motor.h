@@ -108,6 +108,17 @@ int activo_cargar_mapa(const char *ruta, MotorMapa *m);
 int activo_cargar_proyecto(const char *ruta_logic, MotorMapa *m,
                            char *mapa_usado, int tam_usado);
 
+/* Ajustes del proyecto (fase 14) leidos de la linea PROYECTO al final del
+ * .logic. Si el archivo no la trae se conservan los valores por defecto
+ * (640x480, 60 FPS, velocidad 3). */
+const char *activo_proyecto_nombre(void);
+int activo_proyecto_ancho(void);
+int activo_proyecto_alto(void);
+int activo_proyecto_limitar_cuadros(void);
+int activo_proyecto_fps(void);
+int activo_proyecto_velocidad(void);
+unsigned int activo_proyecto_fondo(void);
+
 /* ------------------------------------------------------------------ */
 /* Funciones de codigo lobo del proyecto (LOGIC2, fase 8)              */
 /* ------------------------------------------------------------------ */

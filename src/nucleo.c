@@ -1443,6 +1443,8 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
         if (strstr(cmd, "--info") != NULL) g.info_visible = 1;
         if (strstr(cmd, "--patron") != NULL) g.patron_visible = 1;
         if (strstr(cmd, "--mayus") != NULL) g.shift_simulado = 1;
+        /* Propiedades del proyecto abiertas (fase 14). */
+        if (strstr(cmd, "--ajustes") != NULL) ajustes_proyecto_abrir();
         if (herr_arg) {
             int h = atoi(herr_arg);
             if (h >= 0 && h < H_TOTAL) g.herramienta = (Herramienta)h;
@@ -1490,6 +1492,32 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                         if (p[1] == 'b') { app_tecla(VK_BACK, 0, 0); p += 2; continue; }
                         if (p[1] == '\\') { app_caracter('\\'); p += 2; continue; }
                         p++; /* escape desconocido: solo saltar la barra */
+                        continue;
+                    }
+                    app_caracter((unsigned char)*p);
+                    p++;
+                }
+            }
+        }
+        /* Teclado simulado general (fase 14): escribe caracteres y admite
+         * \b (borrar), \n (Enter) y \e (Escape) para editar el nombre del
+         * proyecto o aceptar/cancelar sus propiedades. Va despues de --clics
+         * y de --ajustes. */
+        {
+            char *t_arg = arg_valor(cmd, "--teclas");
+            if (t_arg) {
+                const char *p = t_arg;
+                while (*p) {
+                    if (p[0] == '\\' && p[1]) {
+                        if (p[1] == 'b') { app_tecla(VK_BACK, 0, 0); p += 2; continue; }
+                        if (p[1] == 'n') { app_tecla(VK_RETURN, 0, 0); p += 2; continue; }
+                        if (p[1] == 'e') { app_tecla(VK_ESCAPE, 0, 0); p += 2; continue; }
+                        if (p[1] == 'h') { app_tecla(VK_HOME, 0, 0); p += 2; continue; }
+                        if (p[1] == 'f') { app_tecla(VK_END, 0, 0); p += 2; continue; }
+                        if (p[1] == 'l') { app_tecla(VK_LEFT, 0, 0); p += 2; continue; }
+                        if (p[1] == 'r') { app_tecla(VK_RIGHT, 0, 0); p += 2; continue; }
+                        if (p[1] == '\\') { app_caracter('\\'); p += 2; continue; }
+                        p++;
                         continue;
                     }
                     app_caracter((unsigned char)*p);

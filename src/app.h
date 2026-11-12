@@ -665,6 +665,19 @@ typedef struct FuncionCodigo {
     int error_linea;            /* linea del error, 0 si no hay */
 } FuncionCodigo;
 
+/* Ajustes del proyecto (fase 14): propiedades que viajan con la logica y
+ * usa el juego (vista previa y game.exe). La imagen BIOS mantiene su
+ * pantalla de 640x480. */
+#define AJUSTES_NOMBRE_MAX 48
+typedef struct AjustesProyecto {
+    char nombre[AJUSTES_NOMBRE_MAX];
+    int ancho, alto;       /* resolucion de la ventana del juego */
+    int limitar_cuadros;   /* 1 = ritmo fijo, 0 = sin limite */
+    int fps;               /* cuadros por segundo cuando se limita */
+    int velocidad;         /* velocidad base del jugador (1..10) */
+    u32 fondo;             /* color de fondo cuando no hay mapa */
+} AjustesProyecto;
+
 /* Miniatura de un mapa `.mav` guardada en la cache de items. */
 typedef struct MiniaturaMapa {
     char nombre[MAPS_NOMBRE_MAX];
@@ -893,6 +906,18 @@ typedef struct App {
     int info_arrastrando;
     u32 *info_imagen;
     int info_w, info_h;
+
+    /* Ajustes del proyecto (fase 14): boton AJUSTES DEL PROYECTO. */
+    AjustesProyecto ajustes;
+    AjustesProyecto ajustes_ed;   /* copia en edicion */
+    int ajustes_visible;
+    int ajustes_x, ajustes_y;     /* -1 = posicion automatica */
+    int ajustes_arrastrando;
+    int ajustes_foco;             /* 0 = campo nombre, -1 = ninguno */
+    int ajustes_cursor;           /* cursor dentro del nombre */
+    int ajustes_hover;            /* control bajo el raton o -1 */
+    int ajustes_control;          /* control pulsado o -1 */
+    int ajustes_off_x, ajustes_off_y;
 
     /* Visor del patron de textura */
     int patron_visible;
@@ -1190,6 +1215,7 @@ void ui_dibujar_barra_abajo(void);
 void ui_dibujar_panel_derecho(void);
 void ui_dibujar_opciones(void);
 void ui_dibujar_info(void);
+void ui_dibujar_ajustes(void);
 void ui_dibujar_menu_desplegable(void);
 /* (cursor del raton: solo el cursor de Windows, sin circulo dibujado) */
 void ui_dibujar_texturas(void);
@@ -1369,6 +1395,18 @@ void dialogo_abrir_logica(void);
 int  logica_guardar_archivo(const char *ruta);
 int  logica_cargar_archivo(const char *ruta);
 int  logica_guardar_memoria(char **datos, int *largo);
+
+/* Ajustes del proyecto (ajustes.c, fase 14) */
+void ajustes_proyecto_iniciar(void);
+void ajustes_proyecto_abrir(void);
+void ajustes_proyecto_cerrar(int aplicar);
+int  ajustes_pulsar(int x, int y, int boton);
+void ajustes_soltar(int x, int y);
+void ajustes_mover(int x, int y);
+int  ajustes_tecla(int vk, int ctrl);
+int  ajustes_caracter(int ch);
+int  ajustes_proyecto_linea(char *dst, int tam);
+int  ajustes_proyecto_cargar_linea(const char *linea);
 
 /* Menu COMPILE (compilar.c) */
 int  compilar_windows(const char *ruta);

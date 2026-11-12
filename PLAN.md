@@ -34,6 +34,9 @@ Se actualiza con cada entrega.
   lógica, pero vacíos, y el lienzo del modo pintar ajustado en el centro
   (ver fase 13).
 - Menú **COMPILE** (entre COLORES e INFO): las dos salidas de compilación.
+- **Ajustes del proyecto** (AJUSTES DEL PROYECTO, entre COLORES y COMPILE):
+  nombre, resolución, límite de cuadros, velocidad y color de fondo, guardados
+  con el `.logic` y aplicados a la vista previa y a `game.exe` (ver fase 14).
 - Botones **play / pausa / stop** al extremo derecho de la barra: prueban
   el proyecto en una ventana del propio editor, sin compilar `game.exe`
   ni la imagen USB (ver fase 9).
@@ -386,6 +389,23 @@ el motor ya compila.
   PROYECTO** entre COLORES y COMPILE, sin desplegable y reservado para la
   configuración del proyecto; COMPILE e INFO se desplazan una posición y
   siguen funcionando igual.
+- **12-11-2026 (fase 14)** — **AJUSTES DEL PROYECTO** deja de estar
+  reservado: abre una ventana modal dibujada a mano con las propiedades del
+  proyecto. Nombre editable (48 caracteres, cursor y borrado), resolución
+  entre seis presets con su relación de aspecto (4:3 y 16:9), casilla
+  **Limitar cuadros** con FPS (30/60/75/120/144/240), velocidad del jugador
+  (1..10) y seis colores de fondo. La ventana se arrastra por la barra de
+  título, `Escape` cancela, `Enter` acepta y los botones RESTABLECER,
+  CANCELAR y ACEPTAR reinician, descartan o aplican. Todo se guarda como una
+  línea `PROYECTO "<nombre>" <ancho> <alto> <limitar> <fps> <velocidad>
+  <fondo>` al final del `.logic`, que los lectores antiguos ignoran; un
+  archivo sin ella usa 640x480, 60 FPS, velocidad 3 y negro. La vista previa
+  y `game.exe` aplican resolución, ritmo, velocidad y fondo; la imagen BIOS
+  mantiene 640x480 y el diálogo lo indica. Verificado por píxeles: el botón
+  de la barra abre la misma ventana que `--ajustes`, el clic en el nombre y
+  las teclas lo editan, los valores viajan al `.logic` y vuelven al cargarlo,
+  CANCELAR deja el archivo intacto y `game.exe --logica` captura 800x600 con
+  el fondo verde elegido.
 
 ## 5. Pendiente de decidir
 

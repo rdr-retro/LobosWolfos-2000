@@ -45,6 +45,27 @@ typedef struct Juego {
 
 static Juego juego;
 
+/* Ajustes del proyecto aplicados al motor (fase 14). */
+static int g_ancho = VENTANA_ANCHO;
+static int g_alto = VENTANA_ALTO;
+static int g_fps = FPS_OBJETIVO;
+static int g_limitar = 1;
+static int g_velocidad = SPRITE_VEL;
+static u32 g_fondo = 0x00000000u;
+
+static void aplicar_ajustes(void) {
+    g_ancho = activo_proyecto_ancho();
+    g_alto = activo_proyecto_alto();
+    g_fps = activo_proyecto_fps();
+    g_limitar = activo_proyecto_limitar_cuadros();
+    g_velocidad = activo_proyecto_velocidad();
+    g_fondo = (u32)activo_proyecto_fondo();
+    if (g_ancho < 320 || g_ancho > 4096) g_ancho = VENTANA_ANCHO;
+    if (g_alto < 200 || g_alto > 4096) g_alto = VENTANA_ALTO;
+    if (g_fps < 1 || g_fps > 1000) g_fps = FPS_OBJETIVO;
+    if (g_velocidad < 1 || g_velocidad > 10) g_velocidad = SPRITE_VEL;
+}
+
 /* ------------------------------------------------------------------ */
 /* Sprite del jugador: un lobito azul de 24x24 dibujado a mano         */
 /* ------------------------------------------------------------------ */
@@ -216,7 +237,7 @@ static void actualizar(void) {
         int i;
         st.x = juego.x;
         st.y = juego.y;
-        st.vel = SPRITE_VEL;
+        st.vel = g_velocidad;
         st.fotograma = juego.fotograma;
         st.entrada = juego.entrada; /* LOBO_TECLA_* == MOTOR_ENT_* */
         st.choca = lobo_choca;
@@ -234,10 +255,10 @@ static void actualizar(void) {
     /* Movimiento por defecto (sin scripts en el proyecto). */
     {
         int vx = 0, vy = 0;
-        if (e & MOTOR_ENT_IZQUIERDA) vx -= SPRITE_VEL;
-        if (e & MOTOR_ENT_DERECHA)   vx += SPRITE_VEL;
-        if (e & MOTOR_ENT_ARRIBA)    vy -= SPRITE_VEL;
-        if (e & MOTOR_ENT_ABAJO)     vy += SPRITE_VEL;
+        if (e & MOTOR_ENT_IZQUIERDA) vx -= g_velocidad;
+        if (e & MOTOR_ENT_DERECHA)   vx += g_velocidad;
+        if (e & MOTOR_ENT_ARRIBA)    vy -= g_velocidad;
+        if (e & MOTOR_ENT_ABAJO)     vy += g_velocidad;
 
         /* movimiento separado por eje para deslizar contra los tiles */
         if (vx) {
@@ -256,9 +277,9 @@ static void renderizar(void) {
     int cam_x, cam_y;
 
     /* Sin mapa el proyecto corre igual, pero no se pinta nada: la
-     * ventana queda en negro (fase 12). */
+     * ventana queda con el color de fondo del proyecto. */
     if (!juego.mapa_usado[0]) {
-        motor_limpiar(juego.fb, juego.fb_ancho, juego.fb_alto, 0x00000000u);
+        motor_limpiar(juego.fb, juego.fb_ancho, juego.fb_alto, g_fondo);
         return;
     }
 
@@ -331,9 +352,10 @@ static int correr_ventana(HINSTANCE instancia) {
     if (!RegisterClassA(&clase)) return 1;
 
     rect.left = 0; rect.top = 0;
-    rect.right = VENTANA_ANCHO; rect.bottom = VENTANA_ALTO;
+    rect.right = g_ancho; rect.bottom = g_alto;
     AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE);
-    _snprintf(titulo, sizeof(titulo), "egine - LobosWolfos 2000 - %s",
+    _snprintf(titulo, sizeof(titulo), "egine - LobosWolfos 2000 - %s - %s",
+              activo_proyecto_nombre(),
               juego.mapa_usado[0] ? juego.mapa_usado : "sin mapa");
     titulo[sizeof(titulo) - 1] = '\0';
     hwnd = CreateWindowA("EGINE_JUEGO", titulo, WS_OVERLAPPEDWINDOW,
@@ -347,8 +369,8 @@ static int correr_ventana(HINSTANCE instancia) {
     memdc = CreateCompatibleDC(pantalla);
     memset(&bmi, 0, sizeof(bmi));
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = VENTANA_ANCHO;
-    bmi.bmiHeader.biHeight = -VENTANA_ALTO;
+    bmi.bmiHeader.biWidth = g_ancho;
+    bmi.bmiHeader.biHeight = -g_alto;
     bmi.bmiHeader.biPlanes = 1;
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
@@ -358,8 +380,8 @@ static int correr_ventana(HINSTANCE instancia) {
     if (!memdc || !dib) return 1;
     dib_anterior = SelectObject(memdc, dib);
     juego.fb = (u32 *)dib_pixeles;
-    juego.fb_ancho = VENTANA_ANCHO;
-    juego.fb_alto = VENTANA_ALTO;
+    juego.fb_ancho = g_ancho;
+    juego.fb_alto = g_alto;
 
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
@@ -379,12 +401,18 @@ static int correr_ventana(HINSTANCE instancia) {
         renderizar();
         {
             HDC hdc = GetDC(hwnd);
-            BitBlt(hdc, 0, 0, VENTANA_ANCHO, VENTANA_ALTO, memdc, 0, 0,
-                   SRCCOPY);
+            BitBlt(hdc, 0, 0, g_ancho, g_alto, memdc, 0, 0, SRCCOPY);
             ReleaseDC(hwnd, hdc);
         }
-        /* fotograma sincronizado a FPS_OBJETIVO */
-        while (GetTickCount() - t0 < (DWORD)MS_POR_FOTO) Sleep(1);
+        /* Fotograma sincronizado al ritmo del proyecto (fase 14). Sin
+         * limite, solo se cede el turno para no quemar la CPU. */
+        if (g_limitar) {
+            DWORD por_foto = (DWORD)(1000 / g_fps);
+            if (por_foto < 1) por_foto = 1;
+            while (GetTickCount() - t0 < por_foto) Sleep(1);
+        } else {
+            Sleep(0);
+        }
     }
 
     SelectObject(memdc, dib_anterior);
@@ -399,10 +427,10 @@ static int correr_ventana(HINSTANCE instancia) {
 
 static int correr_captura(const char *ruta_bmp, int fotogramas) {
     int i;
-    juego.fb = (u32 *)malloc((size_t)VENTANA_ANCHO * VENTANA_ALTO * sizeof(u32));
+    juego.fb = (u32 *)malloc((size_t)g_ancho * g_alto * sizeof(u32));
     if (!juego.fb) return 1;
-    juego.fb_ancho = VENTANA_ANCHO;
-    juego.fb_alto = VENTANA_ALTO;
+    juego.fb_ancho = g_ancho;
+    juego.fb_alto = g_alto;
     for (i = 0; i < fotogramas && juego.corriendo; i++) {
         actualizar();
         traza_fotograma();
@@ -503,6 +531,10 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         /* los botones FUNCIONES con codigo: un script por elemento */
         scripts_preparar(ruta_bmp == NULL);
     }
+
+    /* Ajustes del proyecto (fase 14): resolucion, ritmo, velocidad y
+     * fondo, leidos del trailer del .logic. */
+    aplicar_ajustes();
 
     if (ruta_bmp) {
         buscar_spawn();

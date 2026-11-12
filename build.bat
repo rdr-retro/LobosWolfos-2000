@@ -59,14 +59,14 @@ echo Compilando recursos...
 if errorlevel 1 goto error_pop
 
 echo Compilando C...
-for %%F in (src\nucleo.c src\fuente.c src\documento.c src\imagen.c src\pintura.c src\texto.c src\ui.c src\tiles.c src\mapa.c src\tiles_modo.c src\pestanas.c src\app.c src\compilar.c src\juego_ventana.c motor\lobo.c motor\activo.c motor\nucleo32.s) do (
+for %%F in (src\nucleo.c src\fuente.c src\documento.c src\imagen.c src\pintura.c src\texto.c src\ui.c src\tiles.c src\mapa.c src\tiles_modo.c src\pestanas.c src\app.c src\ajustes.c src\compilar.c src\juego_ventana.c motor\lobo.c motor\activo.c motor\nucleo32.s) do (
     echo   %%~nxF
     "%GCC%" %CFLAGS% -c "%%~F" -o "obj\%%~nF.o"
     if errorlevel 1 goto error_pop
 )
 
 echo Enlazando...
-"%GCC%" -m32 -o "LobosWolfos2000.exe" obj\nucleo.o obj\fuente.o obj\documento.o obj\imagen.o obj\pintura.o obj\texto.o obj\ui.o obj\tiles.o obj\mapa.o obj\tiles_modo.o obj\pestanas.o obj\app.o obj\compilar.o obj\juego_ventana.o obj\lobo.o obj\activo.o obj\nucleo32.o obj\recurso.o %LIBS% -mwindows -static-libgcc
+"%GCC%" -m32 -o "LobosWolfos2000.exe" obj\nucleo.o obj\fuente.o obj\documento.o obj\imagen.o obj\pintura.o obj\texto.o obj\ui.o obj\tiles.o obj\mapa.o obj\tiles_modo.o obj\pestanas.o obj\app.o obj\ajustes.o obj\compilar.o obj\juego_ventana.o obj\lobo.o obj\activo.o obj\nucleo32.o obj\recurso.o %LIBS% -mwindows -static-libgcc
 if errorlevel 1 goto error_pop
 popd
 goto exito

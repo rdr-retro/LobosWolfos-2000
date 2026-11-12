@@ -245,7 +245,8 @@ static void ejecutar_menu(int menu, int opcion) {
         case 4: accion_capa(opcion); break;
         case 5: accion_colores(opcion); break;
         case 6:
-            /* AJUSTES DEL PROYECTO: boton reservado, sin desplegable. */
+            /* AJUSTES DEL PROYECTO: propiedades de la logica activa. */
+            ajustes_proyecto_abrir();
             break;
         case 7:
             /* COMPILE: Compilar para BIOS (fase 7) y para Windows (fase 4). */
@@ -767,9 +768,13 @@ static void clic_etiqueta_menu(int menu) {
         app_invalidar();
         return;
     }
-    if (menu == 4 || menu == 5 || menu == 6) {
-        /* CAPA, COLORES y AJUSTES DEL PROYECTO no tienen desplegable: solo
-         * su etiqueta. */
+    if (menu == 6) {
+        /* AJUSTES DEL PROYECTO abre sus propiedades; no tiene desplegable. */
+        ajustes_proyecto_abrir();
+        return;
+    }
+    if (menu == 4 || menu == 5) {
+        /* CAPA y COLORES no tienen desplegable: solo su etiqueta. */
         g.menu_abierto = -1;
         app_invalidar();
         return;
@@ -837,6 +842,7 @@ void logica_iniciar(void) {
     g.funcion_abierta = -1;
     g.funciones_scroll = 0;
     g.confirmar_funcion = -1;
+    ajustes_proyecto_iniciar();
 }
 
 /* ------------------------------------------------------------------ */
@@ -866,7 +872,7 @@ void logica_iniciar(void) {
 int logica_guardar_memoria(char **datos, int *largo) {
     char *buf;
     int capacidad = 64 + g.num_modulos * 160 +
-                    g.num_funciones * (64 + FUNCIONES_CODIGO_MAX);
+                    g.num_funciones * (64 + FUNCIONES_CODIGO_MAX) + 256;
     int n = 0;
     int i;
 
@@ -905,6 +911,9 @@ int logica_guardar_memoria(char **datos, int *largo) {
         n += f->largo;
         buf[n++] = '\n'; /* separador tras el codigo */
     }
+    /* Ajustes del proyecto (fase 14): linea opcional al final. Los lectores
+     * anteriores dejan de leer tras las funciones, asi que la ignoran. */
+    n += ajustes_proyecto_linea(buf + n, capacidad - n);
     *datos = buf;
     *largo = n;
     return 1;
@@ -1076,6 +1085,10 @@ int logica_cargar_archivo(const char *ruta) {
             if (fn) funciones_codigo_validar(fn);
             if (id >= g.funcion_siguiente_id) g.funcion_siguiente_id = id + 1;
         }
+    }
+    /* Ajustes del proyecto (fase 14): linea opcional al final del archivo. */
+    while (fgets(linea, sizeof(linea), f)) {
+        if (ajustes_proyecto_cargar_linea(linea)) break;
     }
     fclose(f);
     g.modulo_siguiente_id = max_id + 1;
@@ -2218,6 +2231,12 @@ void app_pulsar(int x, int y, int boton) {
     g.raton_x = x;
     g.raton_y = y;
 
+    /* La ventana de ajustes del proyecto es modal: se queda con el raton. */
+    if (g.ajustes_visible) {
+        ajustes_pulsar(x, y, boton);
+        return;
+    }
+
     /* El menu contextual de capa y las confirmaciones bloquean el resto de la
      * interfaz mientras estan abiertos. */
     if (g.confirmar_borrado || g.confirmar_tile >= 0 || g.capa_menu_abierto >= 0) {
@@ -2335,6 +2354,10 @@ void app_pulsar(int x, int y, int boton) {
 void app_soltar(int x, int y, int boton) {
     g.raton_x = x;
     g.raton_y = y;
+    if (g.ajustes_visible) {
+        ajustes_soltar(x, y);
+        return;
+    }
     g.opcion_arrastrada = -1;
     g.cubo_arrastre = -1;
     if (g.vista == VISTA_MODULOS) {
@@ -2385,6 +2408,11 @@ void app_mover(int x, int y, int botones) {
     /* Tambien se marca dentro cuando la prueba simula movimientos sin pasar
      * por WM_MOUSEMOVE; el hover y las capturas lo necesitan. */
     g.raton_dentro = 1;
+
+    if (g.ajustes_visible) {
+        ajustes_mover(x, y);
+        return;
+    }
 
     /* Hover de los botones play/pausa/stop de la barra de menus. */
     {
@@ -2559,6 +2587,7 @@ void app_mover(int x, int y, int botones) {
 void app_rueda(int x, int y, int delta, int ctrl) {
     g.raton_x = x;
     g.raton_y = y;
+    if (g.ajustes_visible) return;
     if (g.vista == VISTA_MODULOS) {
         modulos_rueda(x, y, delta, ctrl);
         return;
@@ -2583,6 +2612,7 @@ void app_rueda(int x, int y, int delta, int ctrl) {
 }
 
 void app_tecla(int vk, int ctrl, int shift) {
+    if (ajustes_tecla(vk, ctrl)) return;
     if (g.menu_abierto >= 0 && vk == VK_ESCAPE) {
         g.menu_abierto = -1;
         app_invalidar();
@@ -2625,6 +2655,7 @@ void app_tecla(int vk, int ctrl, int shift) {
 }
 
 void app_caracter(int ch) {
+    if (ajustes_caracter(ch)) return;
     /* Editor de codigo lobo abierto: los caracteres imprimibles son
      * suyos (la fuente bitmap es ASCII, 32..126). */
     if (g.vista == VISTA_MODULOS) {
@@ -2637,6 +2668,7 @@ void app_caracter(int ch) {
 }
 
 void app_doble_clic(int x, int y) {
+    if (g.ajustes_visible) return;
     if (y >= 0 && y < TAB_BARRA_ALTO) {
         if (pestana_en(x, y) < 0 &&
             !zona_contiene(pestana_nueva_zona(), x, y))
