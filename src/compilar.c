@@ -18,6 +18,8 @@
  *   - "proyecto.logic": la logica activa del gestor
  *   - "maps\<nombre>.mav": cada mapa referenciado por un elemento
  *   - "<tile>.png": cada imagen que usan esos mapas
+ * El mapa es opcional (fase 12): sin ningun elemento de mapa el blob
+ * solo lleva la logica y el juego corre con la ventana en negro.
  *
  * Al arrancar, el motor lee el pie LGB1 (activo_blob_cargar de
  * motor/activo.c) y carga el proyecto del propio ejecutable, asi el
@@ -200,8 +202,9 @@ static int resolver_tile(const char *ruta_mav, const char *tiles_dir,
 /* Reune el proyecto activo como entradas del blob (los pasos 1-3 de la
  * compilacion): "proyecto.logic", cada mapa que usan los elementos del
  * gestor y los PNG de sus tiles, resueltos con el mismo orden de busqueda
- * del motor. El separador va entre la carpeta y el nombre de los mapas:
- * '\\' para el game.exe de Windows y '/' para el kernel loboswolfos
+ * del motor. El mapa es opcional (fase 12): sin ninguno, el blob solo
+ * lleva la logica. El separador va entre la carpeta y el nombre de los
+ * mapas: '\\' para el game.exe de Windows y '/' para el kernel loboswolfos
  * (fase 7), que busca las entradas con barra normal. Los tiles van con
  * su nombre base en los dos destinos: el motor los registra asi y el
  * kernel cae al nombre base cuando no ve la ruta con la carpeta.
@@ -229,12 +232,8 @@ static int compilar_reunir(Bloque *blob, char separador) {
             num_maps++;
         }
     }
-    if (num_maps == 0) {
-        formatear(compilar_error_msj, sizeof(compilar_error_msj),
-                  "El proyecto no tiene ningun elemento de mapa.\n"
-                  "Coloca uno en el gestor de logica antes de compilar.");
-        return 0;
-    }
+    /* El mapa es opcional: sin elementos de mapa el juego arranca con la
+     * ventana en negro y corre igual sus programas (fase 12). */
 
     /* 2. La logica activa como archivo virtual "proyecto.logic". */
     if (!logica_guardar_memoria(&logic_datos, &logic_largo)) {
@@ -334,10 +333,12 @@ static int compilar_reunir(Bloque *blob, char separador) {
 
 /* Monta el proyecto activo como blob LGB1 en memoria: las mismas
  * entradas que "Compilar para Windows" (proyecto.logic, mapas y tiles),
- * sin plantilla ni pie. La vista previa del editor lo registra como
- * archivos virtuales del motor para probar el juego sin escribir ningun
- * ejecutable. Devuelve 1 y deja *datos (malloc) y *largo; el llamador
- * los libera con free. Si falla, compilar_error_msj explica el motivo. */
+ * sin plantilla ni pie. El mapa es opcional: sin elementos de mapa la
+ * vista previa abre la ventana en negro. La vista previa del editor lo
+ * registra como archivos virtuales del motor para probar el juego sin
+ * escribir ningun ejecutable. Devuelve 1 y deja *datos (malloc) y
+ * *largo; el llamador los libera con free. Si falla, compilar_error_msj
+ * explica el motivo. */
 int compilar_blob_memoria(unsigned char **datos, int *largo) {
     Bloque blob;
     if (!datos || !largo) return 0;

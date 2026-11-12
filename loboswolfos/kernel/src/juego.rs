@@ -160,6 +160,9 @@ fn choca_caja(x: i32, y: i32, celdas: &[MotorCelda], lado: i32) -> bool {
 
 struct Juego {
     mapa: MotorMapa,
+    /// Proyecto sin mapa (fase 12): no se pinta nada y la pantalla queda
+    /// en negro, pero los programas siguen corriendo.
+    sin_mapa: bool,
     /// Posicion del sprite en el mundo.
     x: i32,
     y: i32,
@@ -311,6 +314,12 @@ impl Juego {
 
     /// Camara centrada en el sprite + mapa + sprite con transparencia.
     fn renderizar(&self, fb: &mut [u32]) {
+        /* Sin mapa no se pinta nada: pantalla negra (fase 12). */
+        if self.sin_mapa {
+            motor::limpiar(fb.as_mut_ptr(), VENTANA_ANCHO, VENTANA_ALTO, 0);
+            return;
+        }
+
         let cam_x = self.x + SPRITE_LADO / 2 - VENTANA_ANCHO / 2;
         let cam_y = self.y + SPRITE_LADO / 2 - VENTANA_ALTO / 2;
 
@@ -403,6 +412,12 @@ pub fn arrancar(mi: &gfx::ModeInfo) -> ! {
         println!("egine: sin proyecto que cargar; el kernel se queda en modo texto.");
         crate::bucle_texto()
     };
+    // Un proyecto sin mapa es valido (fase 12): el juego corre con la
+    // pantalla en negro, sin mapa ni sprite.
+    let sin_mapa = mapa.num_celdas == 0;
+    if sin_mapa {
+        println!("egine: sin mapa: ventana en negro.");
+    }
     // Compila los botones FUNCIONES del proyecto (fase 8): el resto del
     // juego sigue corriendo aunque alguno no compile.
     scripts_preparar();
@@ -410,6 +425,7 @@ pub fn arrancar(mi: &gfx::ModeInfo) -> ! {
 
     let mut juego = Juego {
         mapa,
+        sin_mapa,
         x: 16,
         y: 16,
         entrada: 0,

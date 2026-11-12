@@ -561,9 +561,11 @@ int activo_cargar_mapa(const char *ruta, MotorMapa *m) {
  *   <codigo lobo de largo bytes crudos>
  *
  * El juego usa el primer elemento con mapa asociado (las pantallas del
- * juego). El inicio de programa (funcion 0, fase 11) es opcional: marca
- * donde empieza cada programa y separa sus modulos, pero los elementos
- * con codigo corren aunque no haya ninguno. El campo funcion pasa
+ * juego). El mapa tambien es opcional (fase 12): sin ningun elemento de
+ * mapa el proyecto corre con el mapa vacio y la ventana en negro. El
+ * inicio de programa (funcion 0, fase 11) es opcional: marca donde
+ * empieza cada programa y separa sus modulos, pero los elementos con
+ * codigo corren aunque no haya ninguno. El campo funcion pasa
  * de indice a referencia: -1 = item de mapa, 0 = inicio de programa y
  * >= 1 el id de un boton FUNCIONES de codigo lobo, que el motor corre
  * cada fotograma (ver lobo.h). Los proyectos LOGIC1 (sin la seccion de
@@ -682,46 +684,10 @@ static void cargar_funciones(const char *p, char *linea, int tam_linea) {
     }
 }
 
-/* Ruta por defecto del mapa cuando el proyecto no tiene ninguno. */
-static int mapa_default(char *dst, int tam) {
-    char exe[MAX_PATH], base[MAX_PATH], carpeta[MAX_PATH];
-    WIN32_FIND_DATAA fd;
-    HANDLE h;
-
-    if (archivo_existe("maps\\mapa.mav")) {
-        strncpy(dst, "maps\\mapa.mav", tam - 1);
-        dst[tam - 1] = '\0';
-        return 1;
-    }
-    ruta_exe(exe, sizeof(exe));
-    ruta_carpeta(exe, base, sizeof(base));
-    unir_ruta(carpeta, sizeof(carpeta), base, "maps");
-    if (base[0]) _snprintf(dst, tam, "%s\\mapa.mav", carpeta);
-    else _snprintf(dst, tam, "maps\\mapa.mav");
-    dst[tam - 1] = '\0';
-    if (archivo_existe(dst)) return 1;
-
-    /* el primer .mav que haya en maps */
-    h = FindFirstFileA("maps\\*.mav", &fd);
-    if (h == INVALID_HANDLE_VALUE) {
-        _snprintf(dst, tam, "%s\\*.mav", carpeta);
-        dst[tam - 1] = '\0';
-        h = FindFirstFileA(dst, &fd);
-        if (h == INVALID_HANDLE_VALUE) return 0;
-    }
-    _snprintf(dst, tam, "maps\\%s", fd.cFileName);
-    dst[tam - 1] = '\0';
-    if (!archivo_existe(dst)) {
-        _snprintf(dst, tam, "%s\\%s", carpeta, fd.cFileName);
-        dst[tam - 1] = '\0';
-    }
-    FindClose(h);
-    return archivo_existe(dst);
-}
-
 int activo_cargar_proyecto(const char *ruta_logic, MotorMapa *m,
                            char *mapa_usado, int tam_usado) {
     char ruta_mapa[MAX_PATH];
+    int mapa_pedido = 0;
 
     mapa_usado[0] = '\0';
     ruta_mapa[0] = '\0';
@@ -764,6 +730,7 @@ int activo_cargar_proyecto(const char *ruta_logic, MotorMapa *m,
                     g_usadas[g_num_usadas++] = funcion;
                 if (!ruta_mapa[0] && mapa[0]) {
                     /* el mapa del proyecto vive en maps/ */
+                    mapa_pedido = 1;
                     _snprintf(ruta_mapa, sizeof(ruta_mapa), "maps\\%s", mapa);
                     ruta_mapa[sizeof(ruta_mapa) - 1] = '\0';
                     if (!archivo_existe(ruta_mapa)) ruta_mapa[0] = '\0';
@@ -780,7 +747,13 @@ int activo_cargar_proyecto(const char *ruta_logic, MotorMapa *m,
     }
 
     if (!ruta_mapa[0]) {
-        if (!mapa_default(ruta_mapa, sizeof(ruta_mapa))) return 0;
+        /* Sin elemento de mapa el proyecto corre igual, con el mapa
+         * vacio: la ventana queda en negro (fase 12). Si el proyecto
+         * pedia un mapa y no esta, si es un error. */
+        if (mapa_pedido) return 0;
+        memset(m, 0, sizeof(*m));
+        mapa_usado[0] = '\0';
+        return 1;
     }
     if (!activo_cargar_mapa(ruta_mapa, m)) return 0;
     strncpy(mapa_usado, ruta_mapa, tam_usado - 1);

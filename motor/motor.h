@@ -102,7 +102,8 @@ int activo_cargar_mapa(const char *ruta, MotorMapa *m);
 
 /* Carga un proyecto .logic del gestor y elige el mapa del primer
  * elemento con mapa asociado (las pantallas del juego). Si no hay
- * ninguno, cae a mapa_default. Devuelve la ruta usada en mapa_usado.
+ * ninguno el mapa queda vacio y mapa_usado vacio: el juego corre con
+ * la ventana en negro (fase 12). Devuelve la ruta usada en mapa_usado.
  * Acepta LOGIC1 y LOGIC2 (ver abajo las funciones de codigo). */
 int activo_cargar_proyecto(const char *ruta_logic, MotorMapa *m,
                            char *mapa_usado, int tam_usado);

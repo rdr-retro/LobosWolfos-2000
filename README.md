@@ -292,6 +292,8 @@ El menú **COMPILE** de la barra de menús, entre **COLORES** e **INFO**, ofrece
 **Compilar para BIOS** y **Compilar para Windows**. Ambos toman el proyecto
 activo — la lógica del gestor, los mapas que usan sus elementos y los tiles
 de esos mapas — y lo incrustan entero como archivos virtuales (blob `LGB1`).
+El mapa es opcional: si el lienzo no tiene ningún elemento de mapa, el
+proyecto se compila igual y el juego arranca con la ventana en negro.
 
 **Compilar para Windows** produce un `game.exe` autónomo de 32 bits: el
 proyecto viaja incrustado dentro del propio ejecutable, así el juego
@@ -311,8 +313,9 @@ aparte sin pasar por COMPILE ni escribir ningún `.exe`, cómodo para probar
 cambios sin llenar el disco.
 
 - **play** abre la vista previa (640x480) con el mapa, los tiles y el código
-  lobo del proyecto. Si está en pausa, la reanuda; si ya está jugando,
-  reinicia el proyecto para recoger los últimos cambios.
+  lobo del proyecto. Si el proyecto no tiene mapa, la ventana se abre en
+  negro y los programas corren igual. Si está en pausa, la reanuda; si ya
+  está jugando, reinicia el proyecto para recoger los últimos cambios.
 - **pausa** alterna pausa y marcha. Hasta que se abre la vista previa, está
   opacado y no responde.
 - **stop** cierra la vista previa (también `Escape` y la X de la ventana).

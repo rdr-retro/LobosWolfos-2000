@@ -255,6 +255,13 @@ static void renderizar(void) {
     MotorMapa *m = &juego.mapa;
     int cam_x, cam_y;
 
+    /* Sin mapa el proyecto corre igual, pero no se pinta nada: la
+     * ventana queda en negro (fase 12). */
+    if (!juego.mapa_usado[0]) {
+        motor_limpiar(juego.fb, juego.fb_ancho, juego.fb_alto, 0x00000000u);
+        return;
+    }
+
     /* camara centrada en el sprite */
     cam_x = juego.x + SPRITE_LADO / 2 - juego.fb_ancho / 2;
     cam_y = juego.y + SPRITE_LADO / 2 - juego.fb_alto / 2;
@@ -327,7 +334,7 @@ static int correr_ventana(HINSTANCE instancia) {
     rect.right = VENTANA_ANCHO; rect.bottom = VENTANA_ALTO;
     AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE);
     _snprintf(titulo, sizeof(titulo), "egine - LobosWolfos 2000 - %s",
-              juego.mapa_usado);
+              juego.mapa_usado[0] ? juego.mapa_usado : "sin mapa");
     titulo[sizeof(titulo) - 1] = '\0';
     hwnd = CreateWindowA("EGINE_JUEGO", titulo, WS_OVERLAPPEDWINDOW,
                          CW_USEDEFAULT, CW_USEDEFAULT,

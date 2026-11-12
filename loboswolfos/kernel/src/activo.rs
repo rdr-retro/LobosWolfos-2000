@@ -732,10 +732,23 @@ fn extraer_dimensiones(png: &[u8]) -> Option<(u32, u32)> {
     Some((ancho, alto))
 }
 
+/// Mapa vacio para proyectos sin mapa: el juego corre en negro.
+fn mapa_vacio() -> MotorMapa {
+    MotorMapa {
+        celdas: unsafe { (*CELDAS.get()).as_mut_ptr() },
+        num_celdas: 0,
+        lado: 32,
+        imagenes: unsafe { (*IMAGENES.get()).as_mut_ptr() },
+        num_imagenes: 0,
+    }
+}
+
 /// Lee la zona de juego del disco (blob LGB1) y carga el mapa.
 ///
-/// Devuelve el mapa montado o None (con el motivo en la consola).
+/// El mapa es opcional (fase 12): si el proyecto no tiene ninguno, o no
+/// se puede montar, devuelve el mapa vacio y el juego corre en negro.
+/// Devuelve None solo si no hay bloque de juego en el disco.
 pub fn cargar_todo() -> Option<MotorMapa> {
     let blob = cargar_blob()?;
-    cargar(blob)
+    Some(cargar(blob).unwrap_or_else(mapa_vacio))
 }

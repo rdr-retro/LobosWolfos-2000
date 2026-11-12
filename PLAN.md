@@ -122,6 +122,7 @@ escritorio **no se toca**: se trabaja sobre una copia.
 | 9 | Botones **play/pausa/stop** en la barra de menús: probar el proyecto en una ventana del editor sin compilar ni escribir ningún `.exe` | **Hecho (12-11-2026)** |
 | 10 | **Orden de ejecución por posición**: los rectángulos apilados en el lienzo corren de arriba a abajo, como las líneas de un programa | **Hecho (12-11-2026)** |
 | 11 | **Programas en el lienzo**: el inicio de programa es opcional y cada inicio abre un programa nuevo cuyos módulos son los rectángulos de debajo | **Hecho (12-11-2026)** |
+| 12 | **Mapa opcional**: el juego arranca sin ningún elemento de mapa; la ventana queda en negro y los programas corren igual (Windows, vista previa y BIOS) | **Hecho (12-11-2026)** |
 
 Orden de trabajo por defecto: 1 → 2 → 3 → 4 (primero Windows, que es
 inmediato), y en paralelo cuando toque 5 → 6 → 7. La fase 8 llega cuando
@@ -356,6 +357,18 @@ el motor ya compila.
   en el LOGIC2 como función 0 y el motor los ignora al preparar los
   scripts, así que no cambian ni el parser ni el kernel. Sin ningún
   inicio se conserva la numeración suelta `#n`.
+- **12-11-2026 (fase 12)** — El mapa deja de ser obligatorio para
+  ejecutar: sin ningún elemento de mapa el proyecto se compila y arranca
+  con la ventana en **negro**, sin mapa ni sprite, y los programas lobo
+  corren igual. El editor ya no avisa al pulsar play y `compilar_reunir`
+  solo incrusta `proyecto.logic` cuando no hay mapas. El motor carga un
+  mapa vacío (`activo_cargar_proyecto`) y pinta negro en `juego.c` y en
+  la vista previa; el kernel hace lo mismo con `mapa_vacio` y su campo
+  `sin_mapa`, así que la imagen USB también arranca sin mapa. Verificado
+  en Windows (vista previa y `game.exe` en negro puro, con el script
+  moviendo `y`) y en QEMU (imagen BIOS sin mapa: pantalla negra,
+  `egine: sin mapa: ventana en negro`, `1 scripts` y el rastro del
+  sprite avanzando).
 
 ## 5. Pendiente de decidir
 

@@ -242,6 +242,13 @@ static void jv_renderizar(void) {
 
     if (!g_fb) return;
 
+    /* Sin mapa el proyecto corre igual, pero no se pinta nada: la
+     * ventana queda en negro (fase 12). */
+    if (!g_mapa_usado[0]) {
+        motor_limpiar(g_fb, JV_ANCHO, JV_ALTO, 0x00000000u);
+        return;
+    }
+
     /* camara centrada en el sprite */
     cam_x = g_x + JV_SPRITE_LADO / 2 - JV_ANCHO / 2;
     cam_y = g_y + JV_SPRITE_LADO / 2 - JV_ALTO / 2;
@@ -343,7 +350,7 @@ static int jv_cargar_proyecto(int avisar) {
         if (avisar)
             MessageBoxA(g.hwnd,
                         "No se pudo cargar el mapa del proyecto.\n"
-                        "Coloca un elemento de mapa en el gestor de logica.",
+                        "Revisa el elemento de mapa y la carpeta maps.",
                         "Vista previa", MB_ICONERROR);
         motor_mapa_liberar(&g_mapa);
         activo_virtuales_limpiar();
@@ -423,7 +430,8 @@ static int jv_crear_ventana(void) {
     rect.left = 0; rect.top = 0;
     rect.right = JV_ANCHO; rect.bottom = JV_ALTO;
     AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE);
-    _snprintf(titulo, sizeof(titulo), "Vista previa - %s", g_mapa_usado);
+    _snprintf(titulo, sizeof(titulo), "Vista previa - %s",
+              g_mapa_usado[0] ? g_mapa_usado : "sin mapa");
     titulo[sizeof(titulo) - 1] = '\0';
     hwnd = CreateWindowA(JV_CLASE, titulo, WS_OVERLAPPEDWINDOW,
                          CW_USEDEFAULT, CW_USEDEFAULT,
@@ -485,7 +493,8 @@ int juego_ventana_abrir(void) {
     SetForegroundWindow(g_hwnd);
     SetFocus(g_hwnd);
     SetTimer(g_hwnd, 1, JV_MS_POR_FOTO, NULL);
-    app_estado("Vista previa: %s", g_mapa_usado);
+    app_estado("Vista previa: %s",
+               g_mapa_usado[0] ? g_mapa_usado : "sin mapa (ventana en negro)");
     app_invalidar();
     return 1;
 }
