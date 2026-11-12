@@ -838,8 +838,8 @@ void logica_iniciar(void) {
  *   <pan_x> <pan_y>
  *   <num_elementos>
  *   <x> <y> <ancho> <alto> <id> <plegado> "<mapa>" <funcion>
- *     (una linea por elemento; funcion es -1 = item de mapa, 0 = egine
- *      y >= 1 el id de un boton FUNCIONES de codigo)
+ *     (una linea por elemento; funcion es -1 = item de mapa, 0 = inicio
+ *      de programa y >= 1 el id de un boton FUNCIONES de codigo)
  *   <num_funciones>
  *   <id> "<nombre>" <largo>
  *   <codigo lobo crudo de largo bytes, con sus saltos de linea>
@@ -848,7 +848,9 @@ void logica_iniciar(void) {
  * Fase 10: los elementos con funcion se escriben de arriba a abajo (y,
  * luego x e id), que es el orden en que los corre el motor. Los items
  * de mapa van antes y conservan su orden de insercion para que el
- * primer mapa del proyecto siga siendo el mismo que antes. */
+ * primer mapa del proyecto siga siendo el mismo que antes. Los inicios
+ * de programa (fase 11) van en esa misma lista, asi que el .logic
+ * conserva los grupos de cada programa. */
 /* Serializa la logica activa en un buffer de memoria con el mismo
  * formato que el archivo .logic. El llamador libera el buffer con
  * free. Devuelve 0 sin memoria. */
@@ -1259,8 +1261,9 @@ static int elemento_antes_en_programa(const ModuloElemento *a,
     return a->id < b->id;
 }
 
-/* Rellena `orden` con los elementos que llevan funcion (egine o codigo
- * lobo) ordenados de arriba a abajo. Devuelve cuantos hay. */
+/* Rellena `orden` con los elementos que llevan funcion (inicio de
+ * programa o codigo lobo) ordenados de arriba a abajo. Devuelve cuantos
+ * hay. */
 int modulos_orden_ejecucion(int *orden) {
     int n = 0, i, j;
     if (!orden) return 0;
@@ -1285,6 +1288,42 @@ int modulos_orden_de(int idx, const int *orden, int n) {
     for (i = 0; i < n; i++)
         if (orden[i] == idx) return i + 1;
     return 0;
+}
+
+/* Reparte el orden de ejecucion en programas (fase 11): cada elemento
+ * con funcion 0 (inicio de programa) abre uno nuevo y los elementos que
+ * van debajo, hasta el siguiente inicio, son sus modulos. Los que estan
+ * antes del primer inicio quedan en el programa 0 y tambien corren: el
+ * inicio no es obligatorio. */
+void modulos_programas_repartir(int *programa, int *puesto) {
+    int orden[MODULOS_MAX];
+    int n = modulos_orden_ejecucion(orden);
+    int i, prog = 0, k = 0;
+
+    for (i = 0; i < MODULOS_MAX; i++) {
+        if (programa) programa[i] = 0;
+        if (puesto) puesto[i] = 0;
+    }
+    for (i = 0; i < n; i++) {
+        int e = orden[i];
+        if (g.modulos[e].funcion == 0) {
+            prog++;
+            k = 0;
+            if (programa) programa[e] = prog;
+            continue;
+        }
+        k++;
+        if (programa) programa[e] = prog;
+        if (puesto) puesto[e] = k;
+    }
+}
+
+/* Numero de inicios de programa colocados en el lienzo. */
+int modulos_programas_num(void) {
+    int i, n = 0;
+    for (i = 0; i < g.num_modulos; i++)
+        if (g.modulos[i].funcion == 0) n++;
+    return n;
 }
 
 /* Ordena la lista de elementos por grupos unidos. Dentro de cada grupo manda
@@ -1496,7 +1535,7 @@ int modulos_funciones_total(void) {
 }
 
 const char *modulos_funcion_nombre(int indice) {
-    if (indice == 0) return "egine";
+    if (indice == 0) return "inicio de programa";
     if (indice >= 1 && indice <= g.num_funciones)
         return g.funciones[indice - 1].nombre;
     if (indice == modulos_funciones_num()) return "+ NUEVA FUNCION";
@@ -1983,7 +2022,8 @@ static void modulos_soltar(int x, int y) {
             if (f == modulos_funciones_num()) {
                 funciones_codigo_nueva();
             } else if (f == 0) {
-                app_estado("egine: arrastra al lienzo para usarlo");
+                app_estado("inicio de programa: arrastra al lienzo; "
+                           "cada inicio abre un programa");
             } else if (g.funcion_abierta == f - 1) {
                 /* El boton abierto: la cabecera pliega el editor y el
                  * area de codigo coloca el cursor. */

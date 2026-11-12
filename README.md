@@ -229,10 +229,13 @@ el arrastre inserta un elemento vacío. Si hay más mapas que filas, la rueda
 desplaza la lista y `Escape` la cierra.
 
 Debajo del botón del item está la sección **FUNCIONES**, con rectángulos
-arrastrables para las funciones lógicas del juego. El primero es **egine**,
-el motor del juego: se arrastra al lienzo para colocarlo como elemento (con
-su banda MOTOR y el nombre en azul); un clic sin arrastrar recuerda cómo se
-usa. Los demás son botones de **código lobo**: el botón **+ NUEVA FUNCION**
+arrastrables para las funciones lógicas del juego. El primero es **inicio
+de programa**: se arrastra al lienzo para colocar el arranque de un
+programa (con su banda INICIO, su número y la palabra PROGRAMA); un clic
+sin arrastrar recuerda cómo se usa. Puedes colocar varios inicios: cada
+uno abre un programa nuevo y los rectángulos que quedan debajo, hasta el
+siguiente inicio, son sus módulos. Los demás son botones de **código
+lobo**: el botón **+ NUEVA FUNCION**
 del final crea uno (con nombre automático) y abre su editor, donde se
 escribe el código del juego (ver la sección «El código lobo» más arriba). Cada botón muestra
 su nombre, un cuadro de estado (rojo = error, verde = listo, gris = vacío)
@@ -251,6 +254,16 @@ proyecto. Cada tarjeta muestra su puesto con un badge `1..N`, la lista de
 ELEMENTOS lo antepone como `#n` y la cabecera de FUNCIONES recuerda
 `ORDEN: 1 ARRIBA`. Al guardar el `.logic`, ese orden queda escrito en el
 archivo, así que `game.exe` y el kernel lo respetan sin cambios.
+
+El **inicio de programa no es obligatorio**: los rectángulos de código
+corren aunque no haya ninguno. Cada inicio colocado abre un programa
+nuevo en el mismo lienzo y los rectángulos de debajo (hasta el siguiente
+inicio) son sus módulos, que se ejecutan en orden de arriba a abajo. Con
+varios inicios se construyen varios programas independientes en el mismo
+lienzo: la tarjeta del inicio muestra su número, los módulos llevan el
+badge `Pn.k` (programa y puesto) y la lista de ELEMENTOS los antepone
+como `Pn.k`. Si no hay ningún inicio, los módulos sueltos conservan la
+numeración de siempre (`#n`).
 
 Los elementos ya colocados también se pueden arrastrar, y un clic derecho
 sobre uno de ellos lo elimina. Sus lados tienen

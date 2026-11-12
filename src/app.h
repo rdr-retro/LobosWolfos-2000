@@ -639,15 +639,15 @@ typedef struct TileDoc {
 
 /* Elemento insertado en el lienzo del gestor de logica. La posicion se guarda
  * en coordenadas del mundo y se dibuja con el desplazamiento de la vista.
- * Cada elemento puede ser un item (un mapa `.mav` de `maps`), el modulo
- * egine (el motor) o un boton FUNCIONES de codigo lobo. */
+ * Cada elemento puede ser un item (un mapa `.mav` de `maps`), un inicio
+ * de programa (fase 11) o un boton FUNCIONES de codigo lobo. */
 typedef struct ModuloElemento {
     int x, y;
     int ancho, alto;
     int id; /* orden de creacion, estable al moverlo en el lienzo */
     int plegado; /* solo en la raiz del grupo: lista de hijos oculta */
     char mapa[MAPS_NOMBRE_MAX]; /* nombre del .mav, vacio = elemento vacio */
-    int funcion; /* -1 = item de mapa, 0 = egine, >= 1 = id de funcion lobo */
+    int funcion; /* -1 = item de mapa, 0 = inicio de programa, >= 1 = id */
 } ModuloElemento;
 
 /* Un boton FUNCIONES con codigo lobo (fase 8): el texto viaja en el
@@ -797,10 +797,10 @@ typedef struct App {
     int modulo_funcion_x, modulo_funcion_y;
     int modulo_funcion_movido;
 
-    /* Botones FUNCIONES con codigo lobo (fase 8): egine es fija (indice 0
-     * de la seccion) y el resto son funciones de codigo que viajan al
-     * .logic y corren en el motor. Los indices de aqui abajo son del
-     * array funciones, no del walk de la seccion. */
+    /* Botones FUNCIONES con codigo lobo (fase 8): el inicio de programa es
+     * fijo (indice 0 de la seccion) y el resto son funciones de codigo que
+     * viajan al .logic y corren en el motor. Los indices de aqui abajo son
+     * del array funciones, no del walk de la seccion. */
     FuncionCodigo funciones[FUNCIONES_MAX];
     int num_funciones;
     int funcion_siguiente_id;  /* id del proximo boton creado */
@@ -1218,11 +1218,19 @@ int  modulos_funcion_indice_de(int id);
  * lienzo guardan ids, no indices. */
 const char *modulos_funcion_nombre_id(int id);
 /* Orden de ejecucion (fase 10): rellena `orden` con los elementos que
- * llevan funcion (egine o codigo lobo) de arriba a abajo, desempatando
- * por x y por id. Devuelve cuantos hay. */
+ * llevan funcion (inicio de programa o codigo lobo) de arriba a abajo,
+ * desempatando por x y por id. Devuelve cuantos hay. */
 int  modulos_orden_ejecucion(int *orden);
 /* Puesto 1..N del elemento `idx` dentro de ese orden (0 si no ejecuta). */
 int  modulos_orden_de(int idx, const int *orden, int n);
+/* Programas del lienzo (fase 11): cada elemento con funcion 0 (inicio
+ * de programa) abre un programa nuevo y los elementos de debajo son sus
+ * modulos. `programa[i]` = numero 1..N del inicio que lo abre (0 si va
+ * antes del primer inicio) y `puesto[i]` = puesto dentro de ese programa
+ * (0 para el propio inicio). Rellena arrays de MODULOS_MAX. */
+void modulos_programas_repartir(int *programa, int *puesto);
+/* Numero de inicios de programa colocados en el lienzo. */
+int  modulos_programas_num(void);
 /* Cabecera del boton expandido (el clic aqui lo pliega) y su area de
  * codigo blanca; `indice` es del walk de la seccion. */
 Zona modulos_funcion_cabecera_zona(int indice);

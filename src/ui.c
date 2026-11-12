@@ -134,10 +134,10 @@ static Zona modulos_funciones_titulo_zona(void) {
 }
 
 /* Rectangulo de la funcion logica `indice` de la seccion del panel
- * derecho (walk: 0 = egine, 1..N botones de codigo, N+1 el boton "+");
- * los rectangulos se apilan hacia abajo con un hueco entre ellos. El
- * boton abierto crece con su editor de codigo. Los botones por encima
- * del scroll actual quedan fuera de pantalla. */
+ * derecho (walk: 0 = inicio de programa, 1..N botones de codigo, N+1 el
+ * boton "+"); los rectangulos se apilan hacia abajo con un hueco entre
+ * ellos. El boton abierto crece con su editor de codigo. Los botones por
+ * encima del scroll actual quedan fuera de pantalla. */
 Zona modulos_funcion_zona(int indice) {
     Zona t = modulos_funciones_titulo_zona();
     Zona b = modulos_boton_zona();
@@ -3563,24 +3563,25 @@ static void dibujar_elemento_codigo(int vx0, int vy0, int ancho, int alto,
     }
 }
 
-/* Numero de orden de un rectangulo que ejecuta codigo (arriba = 1). Se
- * pinta en la esquina superior derecha de la tarjeta. */
-static void dibujar_badge_orden(int vx0, int vy0, int vx1, int puesto) {
-    char num[16];
+/* Etiqueta de orden de un rectangulo que ejecuta codigo (arriba = 1). Se
+ * pinta en la esquina superior derecha de la tarjeta; con varios
+ * programas lleva el prefijo P<programa>. */
+static void dibujar_badge_orden(int vx0, int vy0, int vx1,
+                                const char *texto) {
     int ancho, x;
-    formatear(num, sizeof(num), "%d", puesto);
-    ancho = fuente_texto_ancho(num) + 6;
+    ancho = fuente_texto_ancho(texto) + 6;
     x = vx1 - ancho - 3;
     if (x < vx0 + 3) x = vx0 + 3;
     dibujar_rect(x, vy0 + 3, x + ancho, vy0 + 14, MODULOS_FUNCION_TEXTO);
-    fuente_dibujar(x + 3, vy0 + 5, num, 0x00FFFFFFu);
+    fuente_dibujar(x + 3, vy0 + 5, texto, 0x00FFFFFFu);
 }
 
 static void modulos_dibujar_lienzo(void) {
     Zona lienzo = modulos_lienzo_zona();
-    int orden[MODULOS_MAX];
-    int n_orden = modulos_orden_ejecucion(orden);
+    int programa[MODULOS_MAX];
+    int puesto[MODULOS_MAX];
     int i;
+    modulos_programas_repartir(programa, puesto);
 
     modulos_dibujar_rejilla(lienzo);
 
@@ -3603,12 +3604,18 @@ static void modulos_dibujar_lienzo(void) {
                    vx1 <= zona_derecha(lienzo) && vy1 <= zona_abajo(lienzo);
         if (!completo) continue;
         if (e->funcion == 0) {
-            /* Elemento del motor (egine). */
-            fuente_dibujar(vx0 + 4, vy0 + 5, "MOTOR", SEPARADOR);
+            /* Inicio de programa (fase 11): abre un programa nuevo; los
+             * elementos de debajo son sus modulos. */
+            char num[16];
+            formatear(num, sizeof(num), "%d", programa[i]);
+            fuente_dibujar(vx0 + 4, vy0 + 5, "INICIO", SEPARADOR);
             fuente_dibujar_escala(
-                vx0 + (e->ancho - fuente_texto_ancho_escala("egine", 3)) / 2,
-                vy0 + 27, "egine",
-                activo ? 0x00FFFFFFu : MODULOS_FUNCION_TEXTO, 3);
+                vx0 + (e->ancho - fuente_texto_ancho_escala(num, 2)) / 2,
+                vy0 + 18, num,
+                activo ? 0x00FFFFFFu : MODULOS_FUNCION_TEXTO, 2);
+            fuente_dibujar(
+                vx0 + (e->ancho - fuente_texto_ancho("PROGRAMA")) / 2,
+                vy0 + 46, "PROGRAMA", SEPARADOR);
         } else if (e->funcion >= 1) {
             /* Elemento de funcion de codigo lobo: se dibuja con su
              * nombre y una vista previa del codigo. */
@@ -3636,11 +3643,18 @@ static void modulos_dibujar_lienzo(void) {
             fuente_dibujar(vx0 + (e->ancho - fuente_texto_ancho(etiqueta)) / 2,
                            vy0 + (e->alto - 7) / 2, etiqueta, TEXTO_UI);
         }
-        /* Puesto de ejecucion 1..N: el rectangulo de mas arriba corre
-         * primero, como las lineas de un programa (fase 10). */
-        if (e->funcion >= 0) {
-            int puesto = modulos_orden_de(i, orden, n_orden);
-            if (puesto > 0) dibujar_badge_orden(vx0, vy0, vx1, puesto);
+        /* Puesto dentro de su programa: el rectangulo de mas arriba corre
+         * primero, como las lineas de un programa (fases 10 y 11). */
+        if (e->funcion >= 1 && puesto[i] > 0) {
+            if (programa[i] > 0) {
+                char num[16];
+                formatear(num, sizeof(num), "P%d.%d", programa[i], puesto[i]);
+                dibujar_badge_orden(vx0, vy0, vx1, num);
+            } else {
+                char num[16];
+                formatear(num, sizeof(num), "%d", puesto[i]);
+                dibujar_badge_orden(vx0, vy0, vx1, num);
+            }
         }
     }
 
@@ -3699,11 +3713,17 @@ static void modulos_dibujar_lienzo(void) {
             dibujar_rect(x0, y0, x1, y1, 0x004A5A6Au);
             dibujar_marco(x0, y0, x1, y1, BOTON_SELECCION);
             if (g.modulo_funcion_pulsada == 0) {
-                fuente_dibujar(x0 + 4, y0 + 5, "MOTOR", 0x0090A8BCu);
+                char num[16];
+                formatear(num, sizeof(num), "%d", modulos_programas_num() + 1);
+                fuente_dibujar(x0 + 4, y0 + 5, "INICIO", 0x0090A8BCu);
                 fuente_dibujar_escala(
                     x0 + (MODULOS_ELEMENTO_ANCHO -
-                          fuente_texto_ancho_escala("egine", 3)) / 2,
-                    y0 + 27, "egine", 0x00FFFFFFu, 3);
+                          fuente_texto_ancho_escala(num, 2)) / 2,
+                    y0 + 18, num, 0x00FFFFFFu, 2);
+                fuente_dibujar(
+                    x0 + (MODULOS_ELEMENTO_ANCHO -
+                          fuente_texto_ancho("PROGRAMA")) / 2,
+                    y0 + 46, "PROGRAMA", 0x0090A8BCu);
             } else {
                 /* funcion de codigo: nombre y vista previa en claro
                  * sobre el fondo oscuro de la previsualizacion */
@@ -3809,9 +3829,10 @@ void ui_dibujar_funciones_modulos(void) {
                      zona_abajo(z), SEPARADOR);
 
         if (indice == 0) {
-            /* egine: el motor del juego, siempre centrado. */
-            fuente_dibujar(z.x + (z.ancho - fuente_texto_ancho("egine")) / 2,
-                           z.y + (MODULOS_FUNCION_ALTO - 7) / 2, "egine",
+            /* Inicio de programa: abre un programa nuevo en el lienzo. */
+            const char *nombre = modulos_funcion_nombre(0);
+            fuente_dibujar(z.x + (z.ancho - fuente_texto_ancho(nombre)) / 2,
+                           z.y + (MODULOS_FUNCION_ALTO - 7) / 2, nombre,
                            TEXTO_UI);
         } else if (indice == modulos_funciones_num()) {
             /* Boton + : crea una funcion de codigo nueva. */
@@ -3948,10 +3969,11 @@ static void elementos_dibujar_panel(void) {
     int total = g.num_modulos;
     int visibles, filas;
     int orden[MODULOS_MAX], hijos[MODULOS_MAX];
-    int ejec[MODULOS_MAX];
-    int n_ejec = modulos_orden_ejecucion(ejec);
+    int programa[MODULOS_MAX], puesto[MODULOS_MAX];
     char titulo[32];
     int i;
+
+    modulos_programas_repartir(programa, puesto);
 
     visibles = elementos_ordenar_lista(orden, hijos);
     filas = visibles;
@@ -3970,7 +3992,8 @@ static void elementos_dibujar_panel(void) {
         z = elemento_fila_zona(i);
         activo = (g.modulo_arrastrando == 3 && idx == g.modulo_drag_i);
         if (g.modulos[idx].funcion == 0)
-            recortar_texto(etiqueta, "egine", sizeof(etiqueta));
+            formatear(etiqueta, sizeof(etiqueta), "inicio programa %d",
+                      programa[idx]);
         else if (g.modulos[idx].funcion >= 1) {
             const char *nombre =
                 modulos_funcion_nombre_id(g.modulos[idx].funcion);
@@ -3984,14 +4007,16 @@ static void elementos_dibujar_panel(void) {
         else
             formatear(etiqueta, sizeof(etiqueta), "Elemento %d",
                       g.modulos[idx].id);
-        /* Puesto de ejecucion del elemento (fase 10), si corre codigo. */
-        if (g.modulos[idx].funcion >= 0) {
-            int puesto = modulos_orden_de(idx, ejec, n_ejec);
-            if (puesto > 0) {
-                char con[48];
-                formatear(con, sizeof(con), "#%d %s", puesto, etiqueta);
-                recortar_texto(etiqueta, con, sizeof(etiqueta));
-            }
+        /* Puesto dentro de su programa (fases 10 y 11): P<programa>.<puesto>
+         * si hay inicio por encima; si no, el orden suelto de siempre. */
+        if (g.modulos[idx].funcion >= 1 && puesto[idx] > 0) {
+            char con[48];
+            if (programa[idx] > 0)
+                formatear(con, sizeof(con), "P%d.%d %s", programa[idx],
+                          puesto[idx], etiqueta);
+            else
+                formatear(con, sizeof(con), "#%d %s", puesto[idx], etiqueta);
+            recortar_texto(etiqueta, con, sizeof(etiqueta));
         }
         dibujar_rect_z(z, activo ? BOTON_SELECCION : BARRA);
         dibujar_marco_z(z, activo ? BOTON_SELECCION : BARRA_BORDE);

@@ -121,6 +121,7 @@ escritorio **no se toca**: se trabaja sobre una copia.
 | 8 | Más botones FUNCIONES arrastrables con **código editable dentro del botón**: al escribir el código, el botón cambia su aspecto; el código pasa a formar parte del juego compilado | **Hecho (11-11-2026)** |
 | 9 | Botones **play/pausa/stop** en la barra de menús: probar el proyecto en una ventana del editor sin compilar ni escribir ningún `.exe` | **Hecho (12-11-2026)** |
 | 10 | **Orden de ejecución por posición**: los rectángulos apilados en el lienzo corren de arriba a abajo, como las líneas de un programa | **Hecho (12-11-2026)** |
+| 11 | **Programas en el lienzo**: el inicio de programa es opcional y cada inicio abre un programa nuevo cuyos módulos son los rectángulos de debajo | **Hecho (12-11-2026)** |
 
 Orden de trabajo por defecto: 1 → 2 → 3 → 4 (primero Windows, que es
 inmediato), y en paralelo cuando toque 5 → 6 → 7. La fase 8 llega cuando
@@ -344,6 +345,17 @@ el motor ya compila.
   sin tocar el parser del motor ni el kernel. El lienzo pinta el puesto
   como badge `1..N` en cada tarjeta y la lista de ELEMENTOS lo antepone
   como `#n`; la cabecera de FUNCIONES recuerda `ORDEN: 1 ARRIBA`.
+- **12-11-2026 (fase 11)** — El botón **egine** pasa a ser **inicio de
+  programa** y deja de ser obligatorio: los rectángulos de código corren
+  aunque no haya ninguno. Se pueden colocar varios inicios; cada uno
+  abre un programa en el mismo lienzo y los rectángulos de debajo, hasta
+  el siguiente inicio, son sus módulos. El reparto se calcula con el
+  mismo orden vertical de la fase 10 (`modulos_programas_repartir`): el
+  inicio muestra su número en la tarjeta, los módulos llevan el badge
+  `Pn.k` y la lista de ELEMENTOS el prefijo `Pn.k`. Los inicios viajan
+  en el LOGIC2 como función 0 y el motor los ignora al preparar los
+  scripts, así que no cambian ni el parser ni el kernel. Sin ningún
+  inicio se conserva la numeración suelta `#n`.
 
 ## 5. Pendiente de decidir
 

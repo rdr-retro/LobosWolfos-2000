@@ -561,11 +561,13 @@ int activo_cargar_mapa(const char *ruta, MotorMapa *m) {
  *   <codigo lobo de largo bytes crudos>
  *
  * El juego usa el primer elemento con mapa asociado (las pantallas del
- * juego) y comprueba que exista el modulo egine. El campo funcion pasa
- * de indice a referencia: -1 = item de mapa, 0 = egine y >= 1 el id de
- * un boton FUNCIONES de codigo lobo, que el motor corre cada fotograma
- * (ver lobo.h). Los proyectos LOGIC1 (sin la seccion de funciones)
- * siguen cargando igual. */
+ * juego). El inicio de programa (funcion 0, fase 11) es opcional: marca
+ * donde empieza cada programa y separa sus modulos, pero los elementos
+ * con codigo corren aunque no haya ninguno. El campo funcion pasa
+ * de indice a referencia: -1 = item de mapa, 0 = inicio de programa y
+ * >= 1 el id de un boton FUNCIONES de codigo lobo, que el motor corre
+ * cada fotograma (ver lobo.h). Los proyectos LOGIC1 (sin la seccion de
+ * funciones) siguen cargando igual. */
 
 /* Busca en la linea el nombre entre comillas y el entero que va despues.
  * Devuelve 1 si la linea tiene la forma completa. */
