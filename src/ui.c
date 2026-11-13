@@ -782,14 +782,14 @@ static const char *COMPILE_TEXTO[2] = {
 };
 
 #define MENU_ARCHIVO_ANCHO  210
-#define MENU_ARCHIVO_ALTO   230
-#define MENU_ARCHIVO_MAPA   294
+#define MENU_ARCHIVO_ALTO   262
+#define MENU_ARCHIVO_MAPA   326
 #define MENU_FILA_ALTO      30
 #define MENU_ARCHIVO_PASO   32
 
 int menu_num_filas(int menu) {
     switch (menu) {
-        case 0: return g.vista == VISTA_MAPA ? 9 : 7;
+        case 0: return g.vista == VISTA_MAPA ? 10 : 8;
         case 1: return 6;
         case 2: return 5;
         case 3: return 3;
@@ -1500,6 +1500,7 @@ void ui_dibujar_menu_desplegable(void) {
                         case 5: texto = "Exportar a BMP"; break;
                         case 6: texto = "Abrir lógica .logic"; break;
                         case 7: texto = "Guardar logica .logic"; break;
+                        case 8: texto = "Abrir proyecto .wolfo"; break;
                         default: texto = "Guardar proyecto .wolfo"; break;
                     }
                 } else {
@@ -1510,6 +1511,7 @@ void ui_dibujar_menu_desplegable(void) {
                         case 3: texto = "Exportar a BMP"; break;
                         case 4: texto = "Abrir lógica .logic"; break;
                         case 5: texto = "Guardar logica .logic"; break;
+                        case 6: texto = "Abrir proyecto .wolfo"; break;
                         default: texto = "Guardar proyecto .wolfo"; break;
                     }
                 }

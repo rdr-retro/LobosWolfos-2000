@@ -1468,22 +1468,33 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
      * como BMP. Sirve para comparar la interfaz sin depender de PrintWindow
      * ni de la pantalla. */
     captura = arg_valor(cmd, "--captura");
-    /* En modo normal tambien se puede abrir una logica al arrancar (util
-     * para probar la vista previa sin pasar por el dialogo). En modo
-     * captura lo hace el bloque de abajo, con su orden de siempre. */
+    /* En modo normal tambien se puede abrir una logica o un proyecto .wolfo
+     * al arrancar (util para probar la vista previa sin pasar por el dialogo).
+     * En modo captura lo hace el bloque de abajo, con su orden de siempre. */
     if (!captura) {
-        char *cargar_arg = arg_valor(cmd, "--abrir-logica");
-        if (cargar_arg) {
-            char logic_ruta[MAX_PATH];
-            int n = 0;
-            while (cargar_arg[n] && cargar_arg[n] != ' ' &&
-                   cargar_arg[n] != '\t' && n < MAX_PATH - 1) {
-                logic_ruta[n] = cargar_arg[n];
-                n++;
-            }
-            logic_ruta[n] = 0;
-            if (logic_ruta[0] && logica_cargar_archivo(logic_ruta))
+        char *wolfo_arg = arg_valor(cmd, "--abrir-wolfo");
+        if (wolfo_arg && wolfo_arg[0]) {
+            char wolfo_ruta[MAX_PATH];
+            strncpy(wolfo_ruta, wolfo_arg, MAX_PATH - 1);
+            wolfo_ruta[MAX_PATH - 1] = 0;
+            if (compilar_cargar_wolfo(wolfo_ruta)) {
                 g.vista = VISTA_MODULOS;
+                app_actualizar_titulo();
+            }
+        } else {
+            char *cargar_arg = arg_valor(cmd, "--abrir-logica");
+            if (cargar_arg) {
+                char logic_ruta[MAX_PATH];
+                int n = 0;
+                while (cargar_arg[n] && cargar_arg[n] != ' ' &&
+                       cargar_arg[n] != '\t' && n < MAX_PATH - 1) {
+                    logic_ruta[n] = cargar_arg[n];
+                    n++;
+                }
+                logic_ruta[n] = 0;
+                if (logic_ruta[0] && logica_cargar_archivo(logic_ruta))
+                    g.vista = VISTA_MODULOS;
+            }
         }
     }
     if (captura) {
@@ -1505,6 +1516,18 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
         if (strstr(cmd, "--maximizar") != NULL)
             ShowWindow(hwnd, SW_MAXIMIZE);
         lienzo_actualizar();
+        /* Proyecto .wolfo para pruebas: restaura logica, mapas y tiles antes
+         * de simular clics, como el dialogo ARCHIVO > Abrir proyecto. */
+        {
+            char *wolfo_arg = arg_valor(cmd, "--abrir-wolfo");
+            if (wolfo_arg && wolfo_arg[0]) {
+                char wolfo_ruta[MAX_PATH];
+                strncpy(wolfo_ruta, wolfo_arg, MAX_PATH - 1);
+                wolfo_ruta[MAX_PATH - 1] = 0;
+                if (compilar_cargar_wolfo(wolfo_ruta))
+                    g.vista = VISTA_MODULOS;
+            }
+        }
         if (menu_arg) g.menu_abierto = atoi(menu_arg);
         if (vista_arg && strncmp(vista_arg, "mapa", 4) == 0) g.vista = VISTA_MAPA;
         /* Ruta de mapa para pruebas: carga el .mav antes de simular clics. */
@@ -1985,7 +2008,8 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                             "ancho=%d alto=%d vista=%d doc=%dx%d "
                             "menus=%dx%d listo=%d ajustes=%dx%d "
                             "lienzo=%d,%d,%d,%d zoom=%d trab=%d,%d,%d,%d "
-                            "menu=%d zona_menus=%d,%d,%d,%d args=%s|%s\n",
+                            "menu=%d zona_menus=%d,%d,%d,%d modulos=%d "
+                            "mapa=%s args=%s|%s\n",
                             g.ancho, g.alto, (int)g.vista,
                             g.doc.ancho, g.doc.alto,
                             g.doc_menus.ancho, g.doc_menus.alto,
@@ -1997,6 +2021,8 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                             modulos_lienzo_zona().x, modulos_lienzo_zona().y,
                             modulos_lienzo_zona().ancho,
                             modulos_lienzo_zona().alto,
+                            g.num_modulos,
+                            g.mapa_ruta[0] ? g.mapa_ruta : "-",
                             menu_arg ? menu_arg : "-",
                             clics_arg ? clics_arg : "-");
                     fclose(vf);

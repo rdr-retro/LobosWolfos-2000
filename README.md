@@ -27,7 +27,8 @@ para cargar y guardar PNG.
   como archivo `.logic`.
 - Apertura y exportación de PNG/BMP y mapas `.mav`.
 - Guardado del proyecto entero en un paquete `.wolfo` (lógica, mapas y tiles)
-  o solo de la lógica en un `.logic`.
+  y apertura del mismo paquete para restaurarlo, o solo de la lógica en un
+  `.logic`.
 - **Ajustes del proyecto** (menú de la barra): nombre, resolución y relación de
   aspecto, límite de cuadros, velocidad del jugador y color de fondo; viajan
   con el `.logic` y los aplican la vista previa y `game.exe`.
@@ -273,6 +274,12 @@ compilado y termina con el pie `LGB1` y su longitud, así que un lector puede
 localizar el blob desde el final y reconstruir el proyecto en otra carpeta.
 El nombre propuesto es el del proyecto.
 
+La opción **Abrir proyecto .wolfo**, justo encima, hace el recorrido inverso:
+lee el pie, recorre las entradas del paquete y restaura la lógica (con sus
+ajustes), escribe los mapas en la carpeta `maps` y los tiles en `tiles`, y
+abre el primer mapa que usa la lógica. Si el paquete no lleva el pie o una
+entrada está dañada muestra un aviso y no toca el proyecto activo.
+
 Dentro del gestor, el panel derecho contiene el botón del **item**. Un clic
 (sin arrastrar) abre el selector de items: la lista de mapas `.mav` de la
 carpeta `maps` junto al ejecutable, cada uno con su miniatura y su nombre.
@@ -413,14 +420,17 @@ El editor acepta además flags de línea de comandos para pruebas
 automáticas sin tocar la ventana: `--captura ruta` (dibuja un fotograma
 y guarda el BMP), `--gestor` (abre el gestor de lógica), `--abrir-logica
 ruta` y `--guardar-logica ruta` (abrir y guardar el `.logic` sin
-diálogo), `--clics "x,y;x,y"` y `--arrastre "x0,y0;x1,y1"`
+diálogo), `--abrir-wolfo ruta` y `--guardar-wolfo ruta` (restaurar el
+paquete `.wolfo` con lógica, mapas y tiles, o generarlo, sin diálogo),
+`--clics "x,y;x,y"` y `--arrastre "x0,y0;x1,y1"`
 (gestos simulados; `--arrastre` admite varios gestos separados por `|` y un
 prefijo de herramienta, como `"12:100,200;300,400|15:150,250;150,350"`),
 `--copiar`, `--cortar` y `--pegar` (portapapeles tras el arrastre),
 `--vista menus` (abre directamente el editor de
 menús, después de cargar la lógica si se indica) y `--volcar ruta`
 (escribe una línea con la vista, los documentos, los ajustes del proyecto,
-la geometría del lienzo y el estado de los menús para comparar pruebas),
+la geometría del lienzo, los módulos del gestor, el mapa abierto y el
+estado de los menús para comparar pruebas),
 y, para la sección FUNCIONES (fase 8),
 `--funcion-abrir <id>` (abre el editor de código de esa función),
 `--codigo-teclas "texto"` (escribe en el editor abierto, con `\n`, `\t`,

@@ -74,7 +74,8 @@ static void accion_archivo(int opcion) {
     int fila = opcion;
     if (!modo_mapa) {
         /* Sin editor de mapas las filas son: Abrir, Borrar, PNG, BMP,
-         * Abrir logica, Guardar logica y Guardar proyecto .wolfo. */
+         * Abrir logica, Guardar logica, Abrir proyecto .wolfo y Guardar
+         * proyecto .wolfo. */
         switch (fila) {
             case 0: dialogo_abrir_imagen(); return;
             case 1: fila = 3; break;
@@ -83,6 +84,7 @@ static void accion_archivo(int opcion) {
             case 4: fila = 6; break;
             case 5: fila = 7; break;
             case 6: fila = 8; break;
+            case 7: fila = 9; break;
             default: return;
         }
     }
@@ -104,7 +106,8 @@ static void accion_archivo(int opcion) {
         case 5: dialogo_exportar_bmp(); break;
         case 6: dialogo_abrir_logica(); break;
         case 7: dialogo_guardar_logica(); break;
-        case 8: dialogo_guardar_wolfo(); break;
+        case 8: dialogo_abrir_wolfo(); break;
+        case 9: dialogo_guardar_wolfo(); break;
         default: break;
     }
 }
@@ -1204,6 +1207,34 @@ void dialogo_abrir_logica(void) {
         app_estado("Logica cargada: %s", ruta);
     } else {
         dialogo_error("No se pudo abrir la logica.");
+    }
+    app_invalidar();
+}
+
+/* Dialogo para abrir un proyecto .wolfo: restaura la logica, los mapas y
+ * los tiles del paquete y entra al gestor para verlo cargado. */
+void dialogo_abrir_wolfo(void) {
+    char ruta[MAX_PATH];
+    OPENFILENAMEA ofn;
+
+    strcpy(ruta, "proyecto.wolfo");
+    memset(&ofn, 0, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = g.hwnd;
+    ofn.lpstrFilter =
+        "Proyecto (*.wolfo)\0*.wolfo\0Todos los archivos\0*.*\0\0";
+    ofn.lpstrFile = ruta;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrDefExt = "wolfo";
+    ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST |
+                OFN_HIDEREADONLY;
+    if (!GetOpenFileNameA(&ofn)) return;
+    if (compilar_cargar_wolfo(ruta)) {
+        if (g.vista != VISTA_MODULOS) app_alternar_gestor_modulos();
+        app_estado("Proyecto cargado: %s", ruta);
+        app_actualizar_titulo();
+    } else {
+        dialogo_error(compilar_ultimo_error());
     }
     app_invalidar();
 }

@@ -390,6 +390,247 @@ int compilar_guardar_wolfo(const char *ruta) {
     return 1;
 }
 
+/* ------------------------------------------------------------------ */
+/* Lectura del paquete .wolfo                                          */
+/* ------------------------------------------------------------------ */
+
+/* Lee una entrada del blob y avanza el cursor. Devuelve 1 si hay entrada,
+ * 0 al llegar al final y -1 si el paquete esta danado. El nombre se copia
+ * a `nombre` (con terminador) y los datos quedan apuntando al buffer. */
+static int blob_leer_entrada(const unsigned char **cursor,
+                             const unsigned char *fin, char *nombre,
+                             int tam_nombre, const unsigned char **datos,
+                             u32 *largo) {
+    CabeceraBlob cab;
+    size_t resto;
+
+    if (*cursor >= fin) return 0;
+    resto = (size_t)(fin - *cursor);
+    if (resto < sizeof(cab)) return -1;
+    memcpy(&cab, *cursor, sizeof(cab));
+    *cursor += sizeof(cab);
+    if (cab.largo_nombre == 0 || cab.largo_nombre >= (u32)tam_nombre)
+        return -1;
+    resto = (size_t)(fin - *cursor);
+    if ((size_t)cab.largo_nombre > resto) return -1;
+    memcpy(nombre, *cursor, (size_t)cab.largo_nombre);
+    nombre[cab.largo_nombre] = '\0';
+    *cursor += cab.largo_nombre;
+    resto = (size_t)(fin - *cursor);
+    if ((size_t)cab.largo_datos > resto) return -1;
+    *datos = *cursor;
+    *largo = cab.largo_datos;
+    *cursor += cab.largo_datos;
+    return 1;
+}
+
+/* Nombre de archivo de una entrada del paquete, sin su carpeta. */
+static const char *blob_nombre_archivo(const char *nombre) {
+    const char *p = nombre;
+    const char *base = nombre;
+    while (*p) {
+        if (*p == '\\' || *p == '/') base = p + 1;
+        p++;
+    }
+    return base;
+}
+
+/* Un nombre de archivo simple, sin rutas ni caracteres reservados. */
+static int blob_nombre_valido(const char *nombre) {
+    const char *p;
+    if (!nombre || !nombre[0] || strcmp(nombre, ".") == 0 ||
+        strcmp(nombre, "..") == 0)
+        return 0;
+    for (p = nombre; *p; p++) {
+        if (*p == '\\' || *p == '/' || *p == ':' || *p == '*' ||
+            *p == '?' || *p == '"' || *p == '<' || *p == '>' || *p == '|')
+            return 0;
+    }
+    return 1;
+}
+
+/* Escribe una entrada en una carpeta del proyecto. */
+static int blob_extraer(const char *carpeta, const char *nombre,
+                        const unsigned char *datos, u32 largo) {
+    char ruta[MAX_PATH];
+    crear_carpeta(carpeta);
+    unir_ruta(ruta, sizeof(ruta), carpeta, nombre);
+    return escribir_archivo(ruta, (const char *)datos, (int)largo);
+}
+
+/* Carga un proyecto completo desde un paquete .wolfo (fase 15): localiza
+ * el pie "LGB1" + largo al final, recorre las entradas del blob y restaura
+ * la logica, los mapas y los tiles. Los mapas y tiles se escriben en las
+ * carpetas del proyecto (maps/ y tiles/) y la logica se carga con el mismo
+ * lector de los .logic; al terminar se recargan los tiles y se abre el
+ * primer mapa que usa la logica. Devuelve 1 si se cargo; si no,
+ * compilar_error_msj explica el fallo. */
+int compilar_cargar_wolfo(const char *ruta) {
+    char *archivo = NULL;
+    int tam = 0;
+    const unsigned char *base;
+    const unsigned char *fin;
+    const unsigned char *cursor;
+    const unsigned char *datos;
+    const unsigned char *logic_datos = NULL;
+    u32 largo;
+    u32 logic_largo = 0;
+    u32 blob_largo;
+    char nombre[512];
+    char carpeta[MAX_PATH];
+    char temp_dir[MAX_PATH];
+    char temp_ruta[MAX_PATH];
+    int leido;
+    int num_mapas = 0, num_tiles = 0;
+    int ok = 0;
+
+    compilar_error_msj[0] = '\0';
+    if (!ruta || !ruta[0]) return 0;
+    if (!leer_archivo(ruta, &archivo, &tam) || !archivo) {
+        formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                  "No se pudo leer el archivo %s.", ruta);
+        return 0;
+    }
+    if (tam < (int)(sizeof(CabeceraBlob) + 8) ||
+        memcmp(archivo + tam - 8, BLOB_MAGICO, 4) != 0) {
+        formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                  "%s no es un proyecto .wolfo valido.", ruta);
+        free(archivo);
+        return 0;
+    }
+    memcpy(&blob_largo, archivo + tam - 4, sizeof(blob_largo));
+    if ((u32)(tam - 8) < blob_largo) {
+        formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                  "El paquete %s esta incompleto o danado.", ruta);
+        free(archivo);
+        return 0;
+    }
+    base = (const unsigned char *)archivo + (tam - 8 - (int)blob_largo);
+    fin = (const unsigned char *)archivo + (tam - 8);
+
+    /* 1. Localizar y validar la logica antes de tocar el proyecto. */
+    cursor = base;
+    while ((leido = blob_leer_entrada(&cursor, fin, nombre, sizeof(nombre),
+                                      &datos, &largo)) == 1) {
+        if (strcmp(nombre, "proyecto.logic") == 0) {
+            logic_datos = datos;
+            logic_largo = largo;
+        }
+    }
+    if (leido < 0) {
+        formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                  "El paquete %s tiene entradas danadas.", ruta);
+        free(archivo);
+        return 0;
+    }
+    if (!logic_datos || logic_largo < 6 ||
+        (memcmp(logic_datos, "LOGIC2", 6) != 0 &&
+         memcmp(logic_datos, "LOGIC1", 6) != 0)) {
+        formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                  "El proyecto %s no lleva una logica valida.", ruta);
+        free(archivo);
+        return 0;
+    }
+
+    /* 2. Extraer los mapas y los tiles a sus carpetas. El paquete puede
+     * venir con barra normal (imagen de BIOS) o invertida (game.exe). */
+    cursor = base;
+    while ((leido = blob_leer_entrada(&cursor, fin, nombre, sizeof(nombre),
+                                      &datos, &largo)) == 1) {
+        const char *archivo_nombre;
+        int es_mapa;
+        int es_png;
+        if (strcmp(nombre, "proyecto.logic") == 0) continue;
+        es_mapa = (_strnicmp(nombre, CARPETA_MAPS_TEXTO "\\",
+                             (int)strlen(CARPETA_MAPS_TEXTO) + 1) == 0 ||
+                   _strnicmp(nombre, CARPETA_MAPS_TEXTO "/",
+                             (int)strlen(CARPETA_MAPS_TEXTO) + 1) == 0);
+        archivo_nombre = blob_nombre_archivo(nombre);
+        es_png = (strlen(archivo_nombre) > 4 &&
+                  _stricmp(archivo_nombre + strlen(archivo_nombre) - 4,
+                           ".png") == 0);
+        if (!blob_nombre_valido(archivo_nombre)) continue;
+        if (es_mapa) {
+            carpeta_maps(carpeta, sizeof(carpeta));
+            if (!blob_extraer(carpeta, archivo_nombre, datos, largo)) {
+                formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                          "No se pudo escribir el mapa %s.",
+                          archivo_nombre);
+                free(archivo);
+                return 0;
+            }
+            num_mapas++;
+        } else if (es_png) {
+            obtener_ruta_exe(carpeta, sizeof(carpeta));
+            unir_ruta(carpeta, sizeof(carpeta), carpeta,
+                      CARPETA_TILES_TEXTO);
+            if (!blob_extraer(carpeta, archivo_nombre, datos, largo)) {
+                formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                          "No se pudo escribir el tile %s.",
+                          archivo_nombre);
+                free(archivo);
+                return 0;
+            }
+            num_tiles++;
+        }
+    }
+    if (leido < 0) {
+        formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                  "El paquete %s tiene entradas danadas.", ruta);
+        free(archivo);
+        return 0;
+    }
+
+    /* 3. Cargar la logica con el lector de los .logic, desde un archivo
+     * temporal en la carpeta de temporales de Windows. */
+    if (GetTempPathA(sizeof(temp_dir), temp_dir) == 0 ||
+        GetTempFileNameA(temp_dir, "lwf", 0, temp_ruta) == 0) {
+        formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                  "No se pudo crear un archivo temporal.");
+        free(archivo);
+        return 0;
+    }
+    if (!escribir_archivo(temp_ruta, (const char *)logic_datos,
+                          (int)logic_largo)) {
+        DeleteFileA(temp_ruta);
+        formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                  "No se pudo preparar la logica del proyecto.");
+        free(archivo);
+        return 0;
+    }
+    ok = logica_cargar_archivo(temp_ruta);
+    DeleteFileA(temp_ruta);
+    if (!ok) {
+        formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                  "No se pudo cargar la logica del proyecto %s.", ruta);
+        free(archivo);
+        return 0;
+    }
+    free(archivo);
+
+    /* 4. Refrescar los tiles y abrir el primer mapa que usa la logica. */
+    if (num_tiles > 0) tiles_cargar();
+    {
+        int i;
+        for (i = 0; i < g.num_modulos; i++) {
+            char mapa_ruta[MAX_PATH];
+            if (!g.modulos[i].mapa[0]) continue;
+            carpeta_maps(carpeta, sizeof(carpeta));
+            unir_ruta(mapa_ruta, sizeof(mapa_ruta), carpeta,
+                      g.modulos[i].mapa);
+            if (GetFileAttributesA(mapa_ruta) == INVALID_FILE_ATTRIBUTES)
+                continue;
+            strncpy(g.mapa_ruta, mapa_ruta, MAX_PATH - 1);
+            g.mapa_ruta[MAX_PATH - 1] = 0;
+            mapa_reiniciar();
+            mapa_cargar(g.mapa_ruta);
+            break;
+        }
+    }
+    (void)num_mapas;
+    return 1;
+}
+
 /* Texto del ultimo fallo de compilacion o de reunion del proyecto. */
 const char *compilar_ultimo_error(void) {
     return compilar_error_msj;

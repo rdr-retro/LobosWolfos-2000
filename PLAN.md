@@ -575,6 +575,25 @@ el motor ya compila.
   ajusta para que quepa. Verificado con `--volcar`: `zoom=10` y
   `lienzo=356,199,756,599`; la captura muestra el lienzo centrado.
 
+- **13-11-2026 (fase 19, abrir proyecto .wolfo)** - **ARCHIVO > Abrir
+  proyecto .wolfo** hace el recorrido inverso al guardado: `compilar_cargar_wolfo`
+  lee el archivo, comprueba el pie `LGB1` con su longitud desde el final y
+  valida que la entrada `proyecto.logic` exista y empiece por `LOGIC2` (o
+  `LOGIC1`) **antes** de tocar nada, así que un paquete inválido deja el
+  proyecto activo intacto. Después escribe los mapas en `maps/` y los PNG en
+  `tiles/` (acepta barra normal o invertida, descarta nombres con ruta o
+  caracteres reservados), carga la lógica con el mismo lector de los `.logic`
+  desde un temporal en `%TEMP%` y abre el primer mapa que usa esa lógica. La
+  fila nueva va justo encima de **Guardar proyecto .wolfo**, en las dos vistas;
+  el menú ARCHIVO pasa a 8 filas (10 en el editor de mapas) y `--abrir-wolfo
+  ruta` hace lo mismo sin diálogo. `--volcar` añade `modulos=N` y
+  `mapa=<ruta>`. Verificado con un paquete de prueba de 1 módulo (320x240):
+  `vista=2`, `modulos=1`, `ajustes=320x240`, `mapa=...\maps\proyecto_prueba.mav`
+  y los archivos extraídos con el tile `tile_1.png`; un paquete corrupto y una
+  ruta inexistente no cambian el estado (`vista=0`, `modulos=0`, 640x480). Por
+  píxeles, el panel del menú llega hasta y≈331 en vista normal y y≈395 en el
+  editor de mapas.
+
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,
