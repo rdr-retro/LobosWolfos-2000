@@ -205,8 +205,14 @@ corre con el movimiento por teclado de siempre.
 
 ## Uso
 
-Ejecuta `LobosWolfos2000.exe`. Los tiles que guardes se almacenan en la carpeta
-`tiles` junto al ejecutable. En **modo tiles** los lienzos quedan totalmente
+Ejecuta `LobosWolfos2000.exe`. Al arrancar crea junto al ejecutable las
+carpetas del proyecto: `tiles` (mosaicos e imágenes), `maps` (mapas `.mav`),
+`logic` (archivos `.logic`) y `titles` (pantallas de título del editor de
+menús). Los diálogos de abrir y guardar proponen esas carpetas: los tiles y
+las imágenes van a `tiles`, los mapas a `maps`, las lógicas a `logic` y los
+PNG/BMP exportados desde el editor de menús a `titles`. Los tiles que guardes
+se almacenan en la carpeta `tiles` junto al ejecutable. En **modo tiles** los
+lienzos quedan totalmente
 pegados: las imagenes se tocan y no hay ninguna separacion entre ellas. Solo se
 dibuja el contorno exterior de la cuadricula (el tile activo en azul), asi que
 la union entre dos tiles es invisible. Si el zoom agranda un tile mas alla del
@@ -276,9 +282,10 @@ El nombre propuesto es el del proyecto.
 
 La opción **Abrir proyecto .wolfo**, justo encima, hace el recorrido inverso:
 lee el pie, recorre las entradas del paquete y restaura la lógica (con sus
-ajustes), escribe los mapas en la carpeta `maps` y los tiles en `tiles`, y
-abre el primer mapa que usa la lógica. Si el paquete no lleva el pie o una
-entrada está dañada muestra un aviso y no toca el proyecto activo.
+ajustes), escribe los mapas en la carpeta `maps`, los tiles en `tiles` y los
+títulos en `titles`, y abre el primer mapa que usa la lógica. Si el paquete no
+lleva el pie o una entrada está dañada muestra un aviso y no toca el proyecto
+activo.
 
 Dentro del gestor, el panel derecho contiene el botón del **item**. Un clic
 (sin arrastrar) abre el selector de items: la lista de mapas `.mav` de la
@@ -478,8 +485,10 @@ procesado en `src\nucleo.c`.
 - `flashear.bat` / `flashear-usb.ps1` — flashear la imagen compilada a un
   pendrive (porteo del `rocky-usb.ps1` de rocky).
 - `recursos/` — iconos e imágenes de las herramientas.
-- `tiles/` — carpeta donde se guardan los mosaicos.
+- `tiles/` — carpeta donde se guardan los mosaicos e imágenes.
 - `maps/` — mapas `.mav` (pantallas del juego).
+- `logic/` — archivos `.logic` de la lógica del proyecto.
+- `titles/` — pantallas de título exportadas desde el editor de menús.
 - `build.bat` / `build.ps1` — scripts de compilación. El del editor compila
   primero el motor y el kernel, porque sus plantillas viajan incrustadas
   como recursos.

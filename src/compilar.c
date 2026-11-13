@@ -481,7 +481,7 @@ int compilar_cargar_wolfo(const char *ruta) {
     char temp_dir[MAX_PATH];
     char temp_ruta[MAX_PATH];
     int leido;
-    int num_mapas = 0, num_tiles = 0;
+    int num_mapas = 0, num_tiles = 0, num_titulos = 0;
     int ok = 0;
 
     compilar_error_msj[0] = '\0';
@@ -532,19 +532,25 @@ int compilar_cargar_wolfo(const char *ruta) {
         return 0;
     }
 
-    /* 2. Extraer los mapas y los tiles a sus carpetas. El paquete puede
-     * venir con barra normal (imagen de BIOS) o invertida (game.exe). */
+    /* 2. Extraer los mapas, los tiles y los titulos a sus carpetas. El
+     * paquete puede venir con barra normal (imagen de BIOS) o invertida
+     * (game.exe). */
     cursor = base;
     while ((leido = blob_leer_entrada(&cursor, fin, nombre, sizeof(nombre),
                                       &datos, &largo)) == 1) {
         const char *archivo_nombre;
         int es_mapa;
+        int es_titulo;
         int es_png;
         if (strcmp(nombre, "proyecto.logic") == 0) continue;
         es_mapa = (_strnicmp(nombre, CARPETA_MAPS_TEXTO "\\",
                              (int)strlen(CARPETA_MAPS_TEXTO) + 1) == 0 ||
                    _strnicmp(nombre, CARPETA_MAPS_TEXTO "/",
                              (int)strlen(CARPETA_MAPS_TEXTO) + 1) == 0);
+        es_titulo = (_strnicmp(nombre, CARPETA_TITLES_TEXTO "\\",
+                               (int)strlen(CARPETA_TITLES_TEXTO) + 1) == 0 ||
+                     _strnicmp(nombre, CARPETA_TITLES_TEXTO "/",
+                               (int)strlen(CARPETA_TITLES_TEXTO) + 1) == 0);
         archivo_nombre = blob_nombre_archivo(nombre);
         es_png = (strlen(archivo_nombre) > 4 &&
                   _stricmp(archivo_nombre + strlen(archivo_nombre) - 4,
@@ -560,6 +566,18 @@ int compilar_cargar_wolfo(const char *ruta) {
                 return 0;
             }
             num_mapas++;
+        } else if (es_titulo && es_png) {
+            obtener_ruta_exe(carpeta, sizeof(carpeta));
+            unir_ruta(carpeta, sizeof(carpeta), carpeta,
+                      CARPETA_TITLES_TEXTO);
+            if (!blob_extraer(carpeta, archivo_nombre, datos, largo)) {
+                formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                          "No se pudo escribir el titulo %s.",
+                          archivo_nombre);
+                free(archivo);
+                return 0;
+            }
+            num_titulos++;
         } else if (es_png) {
             obtener_ruta_exe(carpeta, sizeof(carpeta));
             unir_ruta(carpeta, sizeof(carpeta), carpeta,
@@ -628,6 +646,7 @@ int compilar_cargar_wolfo(const char *ruta) {
         }
     }
     (void)num_mapas;
+    (void)num_titulos;
     return 1;
 }
 

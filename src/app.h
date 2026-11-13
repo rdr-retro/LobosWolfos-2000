@@ -164,6 +164,8 @@ typedef unsigned char  u8;
 #define TILE_MINI_LADO    32
 #define TILE_MINI_HUECO   4
 #define CARPETA_TILES_TEXTO "tiles"
+#define CARPETA_LOGIC_TEXTO "logic"
+#define CARPETA_TITLES_TEXTO "titles"
 #define TILES_SELECTOR_COLUMNAS 4
 #define TILES_SELECTOR_FILAS    4
 #define TILES_SELECTOR_VISIBLES 16

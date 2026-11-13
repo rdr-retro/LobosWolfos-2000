@@ -580,8 +580,9 @@ el motor ya compila.
   lee el archivo, comprueba el pie `LGB1` con su longitud desde el final y
   valida que la entrada `proyecto.logic` exista y empiece por `LOGIC2` (o
   `LOGIC1`) **antes** de tocar nada, así que un paquete inválido deja el
-  proyecto activo intacto. Después escribe los mapas en `maps/` y los PNG en
-  `tiles/` (acepta barra normal o invertida, descarta nombres con ruta o
+  proyecto activo intacto. Después escribe los mapas en `maps/`, los PNG de
+  tiles en `tiles/` y los de `titles/` en `titles/` (acepta barra normal o
+  invertida, descarta nombres con ruta o
   caracteres reservados), carga la lógica con el mismo lector de los `.logic`
   desde un temporal en `%TEMP%` y abre el primer mapa que usa esa lógica. La
   fila nueva va justo encima de **Guardar proyecto .wolfo**, en las dos vistas;
@@ -593,6 +594,19 @@ el motor ya compila.
   ruta inexistente no cambian el estado (`vista=0`, `modulos=0`, 640x480). Por
   píxeles, el panel del menú llega hasta y≈331 en vista normal y y≈395 en el
   editor de mapas.
+
+- **13-11-2026 (fase 20, carpetas del proyecto)** - Al arrancar, el programa
+  crea junto al ejecutable las cuatro carpetas del proyecto: `tiles`, `maps`,
+  `logic` y `titles` (`CARPETA_TILES_TEXTO`, `CARPETA_MAPS_TEXTO`,
+  `CARPETA_LOGIC_TEXTO` y `CARPETA_TITLES_TEXTO`). Los diálogos asumen esas
+  carpetas: **Abrir/Guardar lógica .logic** abren directamente en `logic`, los
+  mapas siguen en `maps`, y **Abrir imagen**, **Exportar a PNG** y **Exportar
+  a BMP** usan `tiles` en pintar/tiles y `titles` en el editor de menús (las
+  pantallas de título). Al abrir un `.wolfo`, las entradas `titles\*.png` se
+  extraen a `titles` en vez de mezclarse con los tiles. Verificado: tras
+  arrancar con `--captura` existen las cuatro carpetas; un paquete de prueba
+  con `maps\carpetas_prueba.mav`, `tile_1.png` y `titles\portada.png` deja cada
+  archivo en su carpeta (`vista=2`, `modulos=1`, `ajustes=320x240`).
 
 ## 5. Pendiente de decidir
 

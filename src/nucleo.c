@@ -700,13 +700,21 @@ int app_iniciar(void) {
     cargar_iconos();
     tiles_cargar();
 
+    /* Carpetas del proyecto junto al ejecutable: los tiles, los mapas, las
+     * logicas y los titulos se guardan siempre en su carpeta. */
     obtener_ruta_exe(carpeta, sizeof(carpeta));
-    unir_ruta(carpeta, sizeof(carpeta), carpeta, "tiles");
-    crear_carpeta(carpeta);
-
-    /* Los items del gestor son mapas .mav de la carpeta `maps`. */
-    carpeta_maps(carpeta, sizeof(carpeta));
-    crear_carpeta(carpeta);
+    {
+        static const char *carpetas[] = {
+            CARPETA_TILES_TEXTO, CARPETA_MAPS_TEXTO,
+            CARPETA_LOGIC_TEXTO, CARPETA_TITLES_TEXTO
+        };
+        int i;
+        for (i = 0; i < (int)(sizeof(carpetas) / sizeof(carpetas[0])); i++) {
+            char ruta_carpeta[MAX_PATH];
+            unir_ruta(ruta_carpeta, sizeof(ruta_carpeta), carpeta, carpetas[i]);
+            crear_carpeta(ruta_carpeta);
+        }
+    }
 
     /* El lienzo inicial de 80x80 arranca al 500% (zoom 10), centrado en el
      * area de trabajo y recortado si no cabe. El ajuste exacto se hace al
@@ -1058,6 +1066,17 @@ static OPENFILENAMEA preparar_dialogo(char *ruta, const char *filtro, const char
     return ofn;
 }
 
+/* Los PNG/BMP de pintar y tiles viven en `tiles`; los del editor de menus
+ * son titulos y viven en `titles`. */
+static void carpeta_imagenes(char *dst, int tam) {
+    char exe[MAX_PATH];
+    obtener_ruta_exe(exe, sizeof(exe));
+    unir_ruta(dst, tam, exe,
+              g.vista == VISTA_MENUS ? CARPETA_TITLES_TEXTO
+                                     : CARPETA_TILES_TEXTO);
+    crear_carpeta(dst);
+}
+
 void dialogo_nuevo(void) {
     if (g.doc.modificado) {
         if (!dialogo_confirmar("Nuevo lienzo",
@@ -1070,11 +1089,14 @@ void dialogo_nuevo(void) {
 
 void dialogo_abrir_imagen(void) {
     char ruta[MAX_PATH];
+    char carpeta[MAX_PATH];
     OPENFILENAMEA ofn;
     ruta[0] = '\0';
     ofn = preparar_dialogo(ruta,
         "Imagenes\0*.png;*.bmp;*.jpg;*.jpeg;*.gif;*.tif;*.tiff\0Todos los archivos\0*.*\0\0",
         "");
+    carpeta_imagenes(carpeta, sizeof(carpeta));
+    ofn.lpstrInitialDir = carpeta;
     ofn.Flags |= OFN_FILEMUSTEXIST;
     if (!GetOpenFileNameA(&ofn)) return;
     if (g.doc.modificado) {
@@ -1088,11 +1110,14 @@ void dialogo_abrir_imagen(void) {
 
 void dialogo_guardar_png(void) {
     char ruta[MAX_PATH];
+    char carpeta[MAX_PATH];
     OPENFILENAMEA ofn;
     const char *actual = pestanas_ruta(g.pestana_activa);
     ruta[0] = '\0';
     if (actual && actual[0]) ruta_nombre(ruta, sizeof(ruta), actual);
     ofn = preparar_dialogo(ruta, "Imagen PNG\0*.png\0Todos los archivos\0*.*\0\0", "textura.png");
+    carpeta_imagenes(carpeta, sizeof(carpeta));
+    ofn.lpstrInitialDir = carpeta;
     ofn.lpstrDefExt = "png";
     ofn.Flags |= OFN_OVERWRITEPROMPT;
     if (GetSaveFileNameA(&ofn)) app_guardar_imagen(ruta, 1);
@@ -1100,9 +1125,12 @@ void dialogo_guardar_png(void) {
 
 void dialogo_exportar_bmp(void) {
     char ruta[MAX_PATH];
+    char carpeta[MAX_PATH];
     OPENFILENAMEA ofn;
     ruta[0] = '\0';
     ofn = preparar_dialogo(ruta, "Imagen BMP\0*.bmp\0Todos los archivos\0*.*\0\0", "textura.bmp");
+    carpeta_imagenes(carpeta, sizeof(carpeta));
+    ofn.lpstrInitialDir = carpeta;
     ofn.lpstrDefExt = "bmp";
     ofn.Flags |= OFN_OVERWRITEPROMPT;
     if (GetSaveFileNameA(&ofn)) app_guardar_imagen(ruta, 0);

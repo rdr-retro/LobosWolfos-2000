@@ -14,6 +14,13 @@ static int ruta_existe(const char *ruta) {
     return ruta && ruta[0] && GetFileAttributesA(ruta) != INVALID_FILE_ATTRIBUTES;
 }
 
+/* Carpeta `logic` junto al ejecutable: ahi viven los archivos .logic. */
+static void carpeta_logic(char *dst, int tam) {
+    char exe[MAX_PATH];
+    obtener_ruta_exe(exe, sizeof(exe));
+    unir_ruta(dst, tam, exe, CARPETA_LOGIC_TEXTO);
+}
+
 /* Los mapas se guardan siempre en la carpeta `maps` junto al ejecutable. */
 static int pedir_ruta_mapa(char *ruta) {
     OPENFILENAMEA ofn;
@@ -1122,8 +1129,11 @@ int logica_cargar_archivo(const char *ruta) {
 /* Dialogo para guardar la logica activa como .logic. */
 void dialogo_guardar_logica(void) {
     char ruta[MAX_PATH];
+    char carpeta[MAX_PATH];
     OPENFILENAMEA ofn;
 
+    carpeta_logic(carpeta, sizeof(carpeta));
+    crear_carpeta(carpeta);
     strcpy(ruta, "logica.logic");
     memset(&ofn, 0, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
@@ -1131,6 +1141,7 @@ void dialogo_guardar_logica(void) {
     ofn.lpstrFilter = "Logica (*.logic)\0*.logic\0Todos los archivos\0*.*\0\0";
     ofn.lpstrFile = ruta;
     ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrInitialDir = carpeta;
     ofn.lpstrDefExt = "logic";
     ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY |
                 OFN_OVERWRITEPROMPT;
@@ -1189,8 +1200,11 @@ void dialogo_guardar_wolfo(void) {
  * entra al gestor para verla cargada. */
 void dialogo_abrir_logica(void) {
     char ruta[MAX_PATH];
+    char carpeta[MAX_PATH];
     OPENFILENAMEA ofn;
 
+    carpeta_logic(carpeta, sizeof(carpeta));
+    crear_carpeta(carpeta);
     strcpy(ruta, "logica.logic");
     memset(&ofn, 0, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
@@ -1198,6 +1212,7 @@ void dialogo_abrir_logica(void) {
     ofn.lpstrFilter = "Logica (*.logic)\0*.logic\0Todos los archivos\0*.*\0\0";
     ofn.lpstrFile = ruta;
     ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrInitialDir = carpeta;
     ofn.lpstrDefExt = "logic";
     ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST |
                 OFN_HIDEREADONLY;
