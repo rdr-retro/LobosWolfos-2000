@@ -25,7 +25,8 @@ para cargar y guardar PNG.
   pueden mover y se acoplan entre sí por sus lados con efecto imán. El panel
   izquierdo lista los elementos del lienzo; hay una sola lógica y se guarda
   como archivo `.logic`.
-- Apertura y exportación de PNG/BMP y mapas `.mav`.
+- Apertura y exportación de PNG/BMP y mapas `.mav`, con un menú **EXPORTAR**
+  propio para las dos exportaciones de imagen.
 - Guardado del proyecto entero en un paquete `.wolfo` (lógica, mapas y tiles)
   y apertura del mismo paquete para restaurarlo, o solo de la lógica en un
   `.logic`.
@@ -258,6 +259,11 @@ El panel izquierdo muestra la lista de elementos del lienzo (`Elemento 1`,
 efecto imán aparecen indentados bajo el elemento del grupo al que pertenecen;
 la flecha del grupo permite plegar o desplegar sus hijos en la lista. Si hay
 más elementos que filas visibles, la rueda sobre la lista los desplaza.
+
+El menú **EXPORTAR**, entre **ARCHIVO** y **MODO**, reúne las dos salidas de
+imagen del documento activo: **Exportar a PNG** y **Exportar a BMP**. Guardan
+en la carpeta `tiles` junto al ejecutable (o en `titles` si se lanzan desde el
+editor de menús), igual que **Abrir imagen**.
 
 La opción **Guardar logica .logic** del menú **ARCHIVO** exporta la lógica a
 un archivo de texto con su desplazamiento y cada elemento (posición, tamaño,

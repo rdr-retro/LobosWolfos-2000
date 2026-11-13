@@ -4,9 +4,9 @@
  * ========================================================================== */
 #include "app.h"
 
-#define MENU_TOTAL 9
+#define MENU_TOTAL 10
 static const char *MENU_ETIQUETAS[MENU_TOTAL] = {
-    "ARCHIVO", "MODO", "EDITAR",
+    "ARCHIVO", "EXPORTAR", "MODO", "EDITAR",
     "SELECCIONAR", "CAPA", "COLORES", "AJUSTES DEL PROYECTO",
     "COMPILE", "INFO"
 };
@@ -782,18 +782,19 @@ static const char *COMPILE_TEXTO[2] = {
 };
 
 #define MENU_ARCHIVO_ANCHO  210
-#define MENU_ARCHIVO_ALTO   262
-#define MENU_ARCHIVO_MAPA   326
+#define MENU_ARCHIVO_ALTO   198
+#define MENU_ARCHIVO_MAPA   262
 #define MENU_FILA_ALTO      30
 #define MENU_ARCHIVO_PASO   32
 
 int menu_num_filas(int menu) {
     switch (menu) {
-        case 0: return g.vista == VISTA_MAPA ? 10 : 8;
-        case 1: return 6;
-        case 2: return 5;
-        case 3: return 3;
-        case 7: return 2;
+        case 0: return g.vista == VISTA_MAPA ? 8 : 6;
+        case 1: return 2;
+        case 2: return 6;
+        case 3: return 5;
+        case 4: return 3;
+        case 8: return 2;
         default: return 0;
     }
 }
@@ -808,13 +809,23 @@ Zona menu_panel_zona(int menu) {
             return zona_hacer(etiqueta.x, zona_abajo(etiqueta), MENU_ARCHIVO_ANCHO,
                               g.vista == VISTA_MAPA ? MENU_ARCHIVO_MAPA : MENU_ARCHIVO_ALTO);
         case 1:
+            interior = texto_menu_ancho("Exportar a PNG");
+            if (texto_menu_ancho("Exportar a BMP") > interior)
+                interior = texto_menu_ancho("Exportar a BMP");
+            ancho = interior + 8 + 8;
+            interior = g.ancho - etiqueta.x - 2;
+            if (interior < 80) interior = 80;
+            if (ancho > interior) ancho = interior;
+            return zona_hacer(etiqueta.x, zona_abajo(etiqueta), ancho,
+                              3 + MENU_FILA_ALTO * 2 + 3);
+        case 2:
             ancho = texto_menu_ancho("Visualizar patron de textura") + 16;
             interior = g.ancho - etiqueta.x - 2;
             if (interior < 40) interior = 40;
             if (ancho > interior) ancho = interior;
             return zona_hacer(etiqueta.x, zona_abajo(etiqueta), ancho,
                               3 + MENU_FILA_ALTO * 6 + 3);
-        case 2:
+        case 3:
             interior = 0;
             for (i = 0; i < 5; i++) {
                 int w = texto_menu_ancho(EDITAR_TEXTO[i]) + texto_menu_ancho(EDITAR_ATAJO[i]);
@@ -826,7 +837,7 @@ Zona menu_panel_zona(int menu) {
             if (ancho > interior) ancho = interior;
             return zona_hacer(etiqueta.x, zona_abajo(etiqueta), ancho,
                               3 + MENU_FILA_ALTO * 5 + 3);
-        case 3:
+        case 4:
             interior = 0;
             for (i = 0; i < 3; i++) {
                 int w = texto_menu_ancho(SELECCIONAR_TEXTO[i]) +
@@ -839,7 +850,7 @@ Zona menu_panel_zona(int menu) {
             if (ancho > interior) ancho = interior;
             return zona_hacer(etiqueta.x, zona_abajo(etiqueta), ancho,
                               3 + MENU_FILA_ALTO * 3 + 3);
-        case 7:
+        case 8:
             interior = texto_menu_ancho(COMPILE_TEXTO[0]);
             if (texto_menu_ancho(COMPILE_TEXTO[1]) > interior)
                 interior = texto_menu_ancho(COMPILE_TEXTO[1]);
@@ -884,16 +895,18 @@ int menu_fila_activa(int menu, int fila) {
         case 1:
             return 1;
         case 2:
+            return 1;
+        case 3:
             if (fila == 0) return g.deshacer.num > 0;
             if (fila == 1) return g.rehacer.num > 0;
             if (fila == 2 || fila == 3) return g.sel.activa;
             if (fila == 4) return g.portapapeles != NULL;
             return 0;
-        case 3:
+        case 4:
             if (fila == 0) return 1;
             if (fila == 1 || fila == 2) return g.sel.activa;
             return 0;
-        case 7:
+        case 8:
             return 1;
         default:
             return 0;
@@ -1496,28 +1509,29 @@ void ui_dibujar_menu_desplegable(void) {
                             break;
                         case 2: texto = "Abrir"; break;
                         case 3: texto = "Borrar todo"; break;
-                        case 4: texto = "Exportar a PNG"; break;
-                        case 5: texto = "Exportar a BMP"; break;
-                        case 6: texto = "Abrir lógica .logic"; break;
-                        case 7: texto = "Guardar logica .logic"; break;
-                        case 8: texto = "Abrir proyecto .wolfo"; break;
+                        case 4: texto = "Abrir lógica .logic"; break;
+                        case 5: texto = "Guardar logica .logic"; break;
+                        case 6: texto = "Abrir proyecto .wolfo"; break;
                         default: texto = "Guardar proyecto .wolfo"; break;
                     }
                 } else {
                     switch (i) {
                         case 0: texto = "Abrir"; break;
                         case 1: texto = "Borrar todo"; break;
-                        case 2: texto = "Exportar a PNG"; break;
-                        case 3: texto = "Exportar a BMP"; break;
-                        case 4: texto = "Abrir lógica .logic"; break;
-                        case 5: texto = "Guardar logica .logic"; break;
-                        case 6: texto = "Abrir proyecto .wolfo"; break;
+                        case 2: texto = "Abrir lógica .logic"; break;
+                        case 3: texto = "Guardar logica .logic"; break;
+                        case 4: texto = "Abrir proyecto .wolfo"; break;
                         default: texto = "Guardar proyecto .wolfo"; break;
                     }
                 }
                 dibujar_fila_menu(z, texto, NULL, hover, activo, 0x00A0A0A0u);
                 break;
             case 1:
+                if (i == 0) texto = "Exportar a PNG";
+                else texto = "Exportar a BMP";
+                dibujar_fila_menu(z, texto, NULL, hover, activo, 0x00909090u);
+                break;
+            case 2:
                 if (i == 0) texto = "Modo pintar";
                 else if (i == 1) texto = "Visualizar patron de textura";
                 else if (i == 2) texto = "Modo tiles";
@@ -1535,15 +1549,15 @@ void ui_dibujar_menu_desplegable(void) {
                 dibujar_texto_menu(z.x + 8, z.y + (z.alto - texto_menu_alto()) / 2,
                                    texto, hover ? 0x00FFFFFFu : MENU_TEXTO);
                 break;
-            case 2:
+            case 3:
                 dibujar_fila_menu(z, EDITAR_TEXTO[i], EDITAR_ATAJO[i], hover, activo,
                                   0x00909090u);
                 break;
-            case 3:
+            case 4:
                 dibujar_fila_menu(z, SELECCIONAR_TEXTO[i], SELECCIONAR_ATAJO[i], hover,
                                   activo, 0x00909090u);
                 break;
-            case 7:
+            case 8:
                 dibujar_fila_menu(z, COMPILE_TEXTO[i], NULL, hover, activo,
                                   0x00909090u);
                 break;

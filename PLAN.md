@@ -608,6 +608,22 @@ el motor ya compila.
   con `maps\carpetas_prueba.mav`, `tile_1.png` y `titles\portada.png` deja cada
   archivo en su carpeta (`vista=2`, `modulos=1`, `ajustes=320x240`).
 
+- **13-11-2026 (fase 21, menu EXPORTAR)** - La barra de menús pasa a 10
+  etiquetas: **EXPORTAR** se coloca entre **ARCHIVO** y **MODO**
+  (`MENU_ETIQUETAS`), y **Exportar a PNG** y **Exportar a BMP** salen de
+  **ARCHIVO** para vivir en su propio desplegable de 2 filas. **ARCHIVO**
+  queda en 6 filas en la vista normal (Abrir, Borrar todo, Abrir lógica,
+  Guardar logica, Abrir proyecto `.wolfo`, Guardar proyecto `.wolfo`) y 8 en
+  el editor de mapas (con Guardar mapa y Sobrescribir delante); su panel baja
+  a 198 px (262 en mapas). Los índices de MODO, EDITAR, SELECCIONAR, CAPA,
+  COLORES, AJUSTES DEL PROYECTO, COMPILE e INFO se desplazan uno y se
+  actualizan `ejecutar_menu`, `clic_etiqueta_menu`, `menu_num_filas`,
+  `menu_panel_zona`, `menu_fila_activa` y el dibujo del desplegable.
+  Verificado por píxeles y clics simulados: el panel de EXPORTAR mide 118x66
+  con 2 filas de texto; ARCHIVO 210x198 con 6 filas; en el editor de mapas
+  210x262 con 8; al pulsar (130,45) se abre `menu=1` y (210,45) abre
+  `menu=2`; **INFO** sigue abriendo su ventana.
+
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,

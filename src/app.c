@@ -80,18 +80,16 @@ static void accion_archivo(int opcion) {
     int modo_mapa = (g.vista == VISTA_MAPA);
     int fila = opcion;
     if (!modo_mapa) {
-        /* Sin editor de mapas las filas son: Abrir, Borrar, PNG, BMP,
-         * Abrir logica, Guardar logica, Abrir proyecto .wolfo y Guardar
-         * proyecto .wolfo. */
+        /* Sin editor de mapas las filas son: Abrir, Borrar todo, Abrir
+         * logica, Guardar logica, Abrir proyecto .wolfo y Guardar
+         * proyecto .wolfo. Exportar PNG/BMP vive en su propio menu. */
         switch (fila) {
             case 0: dialogo_abrir_imagen(); return;
             case 1: fila = 3; break;
-            case 2: fila = 4; break;
-            case 3: fila = 5; break;
-            case 4: fila = 6; break;
-            case 5: fila = 7; break;
-            case 6: fila = 8; break;
-            case 7: fila = 9; break;
+            case 2: fila = 6; break;
+            case 3: fila = 7; break;
+            case 4: fila = 8; break;
+            case 5: fila = 9; break;
             default: return;
         }
     }
@@ -109,12 +107,18 @@ static void accion_archivo(int opcion) {
             doc_componer_todo(&g.doc);
             app_invalidar();
             break;
-        case 4: dialogo_guardar_png(); break;
-        case 5: dialogo_exportar_bmp(); break;
         case 6: dialogo_abrir_logica(); break;
         case 7: dialogo_guardar_logica(); break;
         case 8: dialogo_abrir_wolfo(); break;
         case 9: dialogo_guardar_wolfo(); break;
+        default: break;
+    }
+}
+
+static void accion_exportar(int opcion) {
+    switch (opcion) {
+        case 0: dialogo_guardar_png(); break;
+        case 1: dialogo_exportar_bmp(); break;
         default: break;
     }
 }
@@ -251,21 +255,22 @@ static void accion_seleccionar(int opcion) {
 static void ejecutar_menu(int menu, int opcion) {
     switch (menu) {
         case 0: accion_archivo(opcion); break;
-        case 1: accion_modo(opcion); break;
-        case 2: accion_editar(opcion); break;
-        case 3: accion_seleccionar(opcion); break;
-        case 4: accion_capa(opcion); break;
-        case 5: accion_colores(opcion); break;
-        case 6:
+        case 1: accion_exportar(opcion); break;
+        case 2: accion_modo(opcion); break;
+        case 3: accion_editar(opcion); break;
+        case 4: accion_seleccionar(opcion); break;
+        case 5: accion_capa(opcion); break;
+        case 6: accion_colores(opcion); break;
+        case 7:
             /* AJUSTES DEL PROYECTO: propiedades de la logica activa. */
             ajustes_proyecto_abrir();
             break;
-        case 7:
+        case 8:
             /* COMPILE: Compilar para BIOS (fase 7) y para Windows (fase 4). */
             if (opcion == 0) dialogo_compilar_bios();
             else if (opcion == 1) dialogo_compilar_windows();
             break;
-        case 8:
+        case 9:
             g.info_visible = 1;
             app_invalidar();
             break;
@@ -773,19 +778,19 @@ int clic_lienzo(int x, int y) {
 /* Entrada principal                                                   */
 /* ------------------------------------------------------------------ */
 static void clic_etiqueta_menu(int menu) {
-    if (menu == 8) {
+    if (menu == 9) {
         g.menu_abierto = -1;
         g.textura_menu_abierto = 0;
         g.info_visible = 1;
         app_invalidar();
         return;
     }
-    if (menu == 6) {
+    if (menu == 7) {
         /* AJUSTES DEL PROYECTO abre sus propiedades; no tiene desplegable. */
         ajustes_proyecto_abrir();
         return;
     }
-    if (menu == 4 || menu == 5) {
+    if (menu == 5 || menu == 6) {
         /* CAPA y COLORES no tienen desplegable: solo su etiqueta. */
         g.menu_abierto = -1;
         app_invalidar();
