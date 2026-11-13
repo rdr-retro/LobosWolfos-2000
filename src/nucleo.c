@@ -596,7 +596,7 @@ static void cargar_preferencias(void) {
     g.frente = 0x00000000u;
     g.fondo = 0x00FFFFFFu;
     g.casilla_elegida = 0;
-    g.zoom_idx = 13;
+    g.zoom_idx = 10;   /* 500 % al arrancar */
     g.menu_abierto = -1;
     g.hover_menu = -1;
     g.hover_media = -1;
@@ -708,10 +708,10 @@ int app_iniciar(void) {
     carpeta_maps(carpeta, sizeof(carpeta));
     crear_carpeta(carpeta);
 
-    /* El lienzo inicial de 80x80 arranca al 1000% (zoom 13), centrado en el
+    /* El lienzo inicial de 80x80 arranca al 500% (zoom 10), centrado en el
      * area de trabajo y recortado si no cabe. El ajuste exacto se hace al
      * conocer el tamano (app_redimensionar). */
-    g.zoom_idx = 13;
+    g.zoom_idx = 10;
     return 1;
 }
 

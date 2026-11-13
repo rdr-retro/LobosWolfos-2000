@@ -568,6 +568,13 @@ el motor ya compila.
   crea una pestaña y la `x` la cierra; al reducir la ventana el título se
   recorta y las pestañas siguen sin taparlo.
 
+- **13-11-2026 (zoom inicial al 500 %)** - El programa arranca con el lienzo al
+  500 % (índice 10 de `ZOOM_NIVELES`) en lugar del 1000 %. El documento inicial
+  de 80x80 ocupa 400x400 px y queda entero dentro del área de trabajo, sin
+  recortes. El zoom se sigue guardando por pestaña y al abrir otro documento se
+  ajusta para que quepa. Verificado con `--volcar`: `zoom=10` y
+  `lienzo=356,199,756,599`; la captura muestra el lienzo centrado.
+
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,

@@ -6,7 +6,8 @@ para cargar y guardar PNG.
 
 ## Características
 
-- Lienzo con zoom (hasta 1000 %), capas y deshacer/rehacer.
+- Lienzo con zoom (del 10 % al 4000 %; arranca al 500 %), capas y
+  deshacer/rehacer.
 - Pincel, lápiz, aerógrafo, cubo de relleno y selector de color.
 - Figuras: línea, rectángulo, rectángulo redondeado, elipse, polígono y curva
   de Bézier.
