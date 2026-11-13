@@ -15,7 +15,8 @@ para cargar y guardar PNG.
 - Patrón de textura repetido, visor de mosaico y guardado de tiles en PNG.
 - Pestañas de modo: Pintar, Tiles, Mapa y patrón comparten el mismo documento;
   cada pestaña conserva su vista, zoom y desplazamiento. Las pestañas viven en
-  la barra de título, junto a los controles de ventana (fase 18).
+  la barra de título, entre el título de la ventana y los controles de
+  minimizar/maximizar/cerrar, como en Windows 2000 (fase 18).
 - Gestor de lógica: paneles izquierdo, derecho e inferior (los laterales del
   mismo ancho), un botón de item arrastrable y un lienzo desplazable con
   rejilla. Los items son mapas `.mav` de la carpeta `maps` junto al ejecutable:

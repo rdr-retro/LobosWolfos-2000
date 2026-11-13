@@ -546,21 +546,27 @@ el motor ya compila.
   a cualquier ventana con marco que no sea popup) y después se activan
   `WS_SYSMENU`, `WS_MINIMIZEBOX` y `WS_MAXIMIZEBOX`; el área cliente se corrige
   a 1200x700 tras crear la ventana. En la franja de 34 px (`TAB_BARRA_ALTO`) se
-  dibuja el caption clásico (degradado azul o gris sin foco, icono y título a la
-  derecha), los controles minimizar/maximizar/cerrar a la izquierda y las
-  pestañas a continuación, empezando en `TITULO_TABS_X` (116 px); el botón `+`
-  sigue a la última pestaña. Las pestañas se reparten el ancho disponible y solo
+  dibuja el caption clásico (degradado azul o gris sin foco), con el icono y el
+  título junto a él, a la izquierda; a continuación vienen las pestañas y su
+  botón `+`, y los controles minimizar/maximizar/cerrar quedan pegados al borde
+  derecho, como en Windows 2000. El título se dibuja a partir de
+  `TITULO_TEXTO_X` (28 px), se recorta con puntos suspensivos si no cabe y
+  desaparece en ventanas de menos de 480 px de ancho. Las pestañas empiezan a la
+  derecha del título (x=220 en 1200 px) y se reparten el ancho disponible; solo
   se encogen por debajo del mínimo (92 px) cuando hay muchas, con suelo de 44 px
   (24 px si la ventana es muy estrecha). `WM_NCHITTEST` devuelve `HTCAPTION` en
   los huecos de la franja y `HTCLIENT` sobre controles, pestañas y `+`:
   arrastrar, doble clic para maximizar/restaurar y el menú del sistema siguen
   funcionando, y los botones actúan al soltar (se descartan en
   `WM_CAPTURECHANGED`). Verificado por píxeles y capturas: en 1200x700 el
-  degradado va de (11,38,108) a (55,106,161), el icono ocupa 6..21 x 9..24, los
-  botones 30..105, la pestaña activa empieza en 116 y el `+` en 217..241; con
-  `--maximizar` el buffer es 1920x1080 y la franja se mantiene; sin foco la
-  franja es gris (154,154,154). Clics simulados sobre los controles maximizan,
-  restauran, minimizan y cierran; `+` crea una pestaña y la `x` la cierra.
+  degradado va de (11,38,108) a (55,106,161), el icono ocupa 6..21 x 9..24, el
+  título 31..203, la pestaña activa empieza en 220, el `+` en 323..341 y los
+  controles en 1119..1192 (glifos 1126..1134, 1151..1161 y 1178..1186); con
+  `--maximizar` el buffer es 1920x1080, el título sigue a la izquierda y los
+  controles pasan a 1839..1912; sin foco la franja es gris (154,154,154). Clics
+  simulados sobre los controles maximizan, restauran, minimizan y cierran; `+`
+  crea una pestaña y la `x` la cierra; al reducir la ventana el título se
+  recorta y las pestañas siguen sin taparlo.
 
 ## 5. Pendiente de decidir
 

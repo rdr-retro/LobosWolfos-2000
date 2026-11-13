@@ -138,8 +138,11 @@ typedef unsigned char  u8;
 #define TITULO_MARGEN        6
 #define TITULO_ICONO_LADO    16
 #define TITULO_ICONO_X       TITULO_MARGEN
-#define TITULO_BOTONES_X     (TITULO_ICONO_X + TITULO_ICONO_LADO + 8)
-#define TITULO_TABS_X        (TITULO_BOTONES_X + TITULO_BOTONES_ANCHO + 10)
+/* Titulo de la ventana junto al icono, a la izquierda. */
+#define TITULO_TEXTO_X       (TITULO_ICONO_X + TITULO_ICONO_LADO + 8)
+/* Los controles de ventana van pegados al borde derecho, como en Windows
+ * clasico; las pestanas ocupan el espacio que queda en medio. */
+#define TITULO_BOTONES_HUECO 10
 #define BARRA_ALTO        60
 #define BARRA_ABAJO_ALTO  32
 
