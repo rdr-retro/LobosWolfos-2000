@@ -158,6 +158,7 @@ void ajustes_proyecto_cerrar(int aplicar) {
     if (aplicar) {
         ajustes_normalizar(&g.ajustes_ed);
         g.ajustes = g.ajustes_ed;
+        app_menus_resolucion();
         app_estado("Ajustes del proyecto aplicados.");
     }
     g.ajustes_visible = 0;

@@ -145,6 +145,14 @@ int zoom_para_caber(int ancho, int alto) {
 
 void lienzo_actualizar(void) {
     int indice = g.zoom_idx;
+    /* En modo tiles el lienzo es la celda activa y su tamano depende del
+     * layout de toda la cuadricula. Recalcularlo aqui evita que el zoom, el
+     * redimensionado o un cambio de documento dejen `g.lienzo` con la
+     * geometria del modo pintar. */
+    if (g.modo_tiles) {
+        tiles_modo_layout();
+        return;
+    }
     /* En el editor de menus el lienzo se ajusta al hueco entre los paneles
      * sin modificar el zoom guardado del modo pintar. */
     if (g.vista == VISTA_MENUS)
@@ -1695,7 +1703,7 @@ static void dibujar_hormigas(int x0, int y0, int x1, int y1, int fase) {
 /* Dibuja un documento dentro de un lienzo de pantalla. La escala usa division
  * entera: cada pixel visible toma la columna `(x - x0) * ancho / cw`. Se usa en
  * el modo tiles y en su visor. */
-void pintura_dibujar_documento(Documento *d, Lienzo l) {
+void pintura_dibujar_documento(Documento *d, Lienzo l, Zona clip) {
     int cw = l.x1 - l.x0;
     int ch = l.y1 - l.y0;
     int x, y, x0, y0, x1, y1;
@@ -1704,12 +1712,15 @@ void pintura_dibujar_documento(Documento *d, Lienzo l) {
     if (!d->compuesto || d->compuesto_sucio) doc_componer_todo(d);
     if (!d->compuesto) return;
 
-    dibujar_rect(l.x0, l.y0, l.x1, l.y1, LIENZO);
-
-    x0 = l.x0 < 0 ? 0 : l.x0;
-    y0 = l.y0 < 0 ? 0 : l.y0;
-    x1 = l.x1 > g.ancho ? g.ancho : l.x1;
-    y1 = l.y1 > g.alto ? g.alto : l.y1;
+    x0 = l.x0 < clip.x ? clip.x : l.x0;
+    y0 = l.y0 < clip.y ? clip.y : l.y0;
+    x1 = l.x1 > zona_derecha(clip) ? zona_derecha(clip) : l.x1;
+    y1 = l.y1 > zona_abajo(clip) ? zona_abajo(clip) : l.y1;
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > g.ancho) x1 = g.ancho;
+    if (y1 > g.alto) y1 = g.alto;
+    dibujar_rect(x0, y0, x1, y1, LIENZO);
     if (x0 >= x1 || y0 >= y1) return;
 
     for (y = y0; y < y1; y++) {
@@ -1815,9 +1826,11 @@ void pintura_dibujar_solo_overlays(void) {
         texto_dibujar_caja();
     }
 
-    /* Tiradores del lienzo (canvas handles). */
-    dibujar_mangos(g.lienzo.x0, g.lienzo.y0, g.lienzo.x1, g.lienzo.y1,
-                   g.lienzo_tirador >= 0 ? g.lienzo_tirador : g.lienzo_hover);
+    /* Tiradores del lienzo (canvas handles). En modo tiles el tamano es comun
+     * a todos los tiles y no se redimensiona, asi que no se dibujan. */
+    if (!g.modo_tiles)
+        dibujar_mangos(g.lienzo.x0, g.lienzo.y0, g.lienzo.x1, g.lienzo.y1,
+                       g.lienzo_tirador >= 0 ? g.lienzo_tirador : g.lienzo_hover);
 
     /* Tiradores de la seleccion. */
     if (g.sel.activa) {

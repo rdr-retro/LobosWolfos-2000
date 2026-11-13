@@ -137,6 +137,18 @@ Zona modulos_boton_zona(void) {
                       ancho, MODULOS_BOTON_ALTO);
 }
 
+/* Boton de la herramienta Texto en el panel izquierdo del editor de menus:
+ * la misma esquina que la primera herramienta del modo pintar. */
+Zona menus_boton_texto_zona(void) {
+    int panel = modulos_panel_ancho();
+    int x = SIDEBAR_MARGEN;
+    int y = AREA_SUP_ALTO + SIDEBAR_MARGEN;
+    int lado = BOTON_LADO;
+    if (x + lado > panel - SIDEBAR_MARGEN) lado = panel - SIDEBAR_MARGEN - x;
+    if (lado < 8) lado = 8;
+    return zona_hacer(x, y, lado, lado);
+}
+
 /* Titulo de la seccion de funciones logicas, bajo el boton del item. */
 static Zona modulos_funciones_titulo_zona(void) {
     Zona b = modulos_boton_zona();
@@ -4095,9 +4107,31 @@ static void ui_dibujar_paneles_modulos(void) {
     ui_dibujar_funciones_modulos();
 }
 
-/* Editor de menus: los mismos paneles, completamente vacios. */
+/* Boton de texto del editor de menus, con el mismo aspecto que las
+ * herramientas del modo pintar. */
+static void ui_dibujar_boton_texto_menus(void) {
+    Zona z = menus_boton_texto_zona();
+    const char *etiqueta = "TEXTO";
+    char resolucion[24];
+    int tx = z.x + (z.ancho - texto_ancho(etiqueta)) / 2;
+    int ry;
+
+    if ((int)g.herramienta == H_TEXTO) dibujar_rect_z(z, BOTON_SELECCION);
+    dibujar_icono_herramienta(H_TEXTO, z);
+    dibujar_texto(tx, zona_abajo(z) + 6, etiqueta, TEXTO_UI);
+
+    /* La resolucion del lienzo la dictan las propiedades del proyecto. */
+    formatear(resolucion, sizeof(resolucion), "%dx%d",
+              g.ajustes.ancho, g.ajustes.alto);
+    ry = zona_abajo(z) + 6 + texto_alto() + 2;
+    tx = z.x + (z.ancho - fuente_texto_ancho(resolucion)) / 2;
+    fuente_dibujar(tx, ry, resolucion, 0x00909090u);
+}
+
+/* Editor de menus: los mismos paneles y el boton para insertar texto. */
 static void ui_dibujar_paneles_menus(void) {
     ui_dibujar_marcos_paneles();
+    ui_dibujar_boton_texto_menus();
 }
 
 /* Mensaje de estado flotante, centrado sobre la barra inferior. En el gestor
@@ -4139,8 +4173,8 @@ void ui_dibujar(void) {
         return;
     }
 
-    /* Editor de menus: los mismos paneles pero vacios y el lienzo del modo
-     * pintar en el centro. */
+    /* Editor de menus: paneles, boton de texto y el lienzo del modo pintar
+     * en el centro. */
     if (g.vista == VISTA_MENUS) {
         dibujar_rect(0, 0, g.ancho, g.alto, FONDO);
         ui_dibujar_paneles_menus();
@@ -4148,6 +4182,7 @@ void ui_dibujar(void) {
         ui_dibujar_pestanas();
         ui_dibujar_barra_menus();
         ui_dibujar_menu_desplegable();
+        texto_dibujar_barra();
         ui_dibujar_estado();
         ui_dibujar_confirmaciones();
         ui_dibujar_ajustes();

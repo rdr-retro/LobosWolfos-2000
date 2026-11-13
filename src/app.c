@@ -1094,6 +1094,7 @@ int logica_cargar_archivo(const char *ruta) {
     }
     fclose(f);
     g.modulo_siguiente_id = max_id + 1;
+    app_menus_resolucion();
     return 1;
 }
 
@@ -2361,8 +2362,19 @@ void app_pulsar(int x, int y, int boton) {
         return;
     }
 
-    /* El editor de menus solo muestra el lienzo: paneles y barras vacios. */
-    if (g.vista == VISTA_MENUS) return;
+    /* Editor de menus: boton de texto en el panel izquierdo y lienzo. */
+    if (g.vista == VISTA_MENUS) {
+        if (texto_pulsar(x, y, boton)) return;
+        if (zona_contiene(menus_boton_texto_zona(), x, y)) {
+            app_poner_herramienta(H_TEXTO);
+            return;
+        }
+        if (g.herramienta == H_TEXTO && lienzo_contiene(x, y)) {
+            pintura_pulsar(x, y, boton);
+            return;
+        }
+        return;
+    }
 
     if (g.vista == VISTA_PINTAR && texto_pulsar(x, y, boton)) return;
 
@@ -2409,7 +2421,10 @@ void app_soltar(int x, int y, int boton) {
         modulos_soltar(x, y);
         return;
     }
-    if (g.vista == VISTA_MENUS) return;
+    if (g.vista == VISTA_MENUS) {
+        texto_soltar(x, y, boton);
+        return;
+    }
     if (g.arrastre_tiles) {
         tiles_modo_soltar();
         app_invalidar();
@@ -2475,9 +2490,13 @@ void app_mover(int x, int y, int botones) {
         return;
     }
 
-    /* El editor de menus no tiene widgets propios: solo las pestanas y los
-     * menus de arriba necesitan repintarse al pasar el raton. */
+    /* Editor de menus: el texto necesita el raton al arrastrar la caja y al
+     * pasar por sus controles; las pestanas y menus se repintan como siempre. */
     if (g.vista == VISTA_MENUS) {
+        if (g.texto_activo) {
+            texto_mover(x, y, botones);
+            app_invalidar();
+        }
         if (y < AREA_SUP_ALTO) app_invalidar();
         return;
     }
@@ -2694,7 +2713,10 @@ void app_tecla(int vk, int ctrl, int shift) {
         if (g.funcion_abierta >= 0) funciones_codigo_tecla(vk, ctrl);
         return;
     }
-    if (g.vista == VISTA_MENUS) return;
+    if (g.vista == VISTA_MENUS) {
+        if (texto_tecla(vk, ctrl, shift)) return;
+        return;
+    }
     if (g.vista == VISTA_PINTAR && texto_tecla(vk, ctrl, shift)) return;
     pintura_tecla(vk, ctrl, shift);
 }
@@ -2707,7 +2729,10 @@ void app_caracter(int ch) {
         if (g.funcion_abierta >= 0) funciones_codigo_caracter(ch);
         return;
     }
-    if (g.vista == VISTA_MENUS) return;
+    if (g.vista == VISTA_MENUS) {
+        if (g.texto_activo) texto_caracter(ch);
+        return;
+    }
     if (g.vista == VISTA_PINTAR && texto_caracter(ch)) return;
     pintura_caracter(ch);
 }

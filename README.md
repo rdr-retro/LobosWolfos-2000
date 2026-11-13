@@ -202,7 +202,25 @@ corre con el movimiento por teclado de siempre.
 ## Uso
 
 Ejecuta `LobosWolfos2000.exe`. Los tiles que guardes se almacenan en la carpeta
-`tiles` junto al ejecutable.
+`tiles` junto al ejecutable. En **modo tiles** los lienzos quedan totalmente
+pegados: las imagenes se tocan y no hay ninguna separacion entre ellas. Solo se
+dibuja el contorno exterior de la cuadricula (el tile activo en azul), asi que
+la union entre dos tiles es invisible. Si el zoom agranda un tile mas alla del
+area de trabajo, el marco de ese tile no se pinta: asi no aparecen lineas
+azules cruzando el lienzo. Los botones `+` siguen en la celda
+vecina libre de cada cara. No hay tiradores para redimensionar: el tamano del
+tile es el de **Ajustes del proyecto** y se cambia desde ahi. Se puede pintar
+arrastrando de un tile a otro: el trazo cruza el borde y continua en el tile
+de destino sin cortarse. La herramienta de texto tambien cruza: la caja de
+seleccion puede extenderse al tile vecino y el texto se estampa en cada tile
+ocupado que cubre, con el desplazamiento de su celda; las celdas libres no
+crean tiles nuevos. Al confirmar se guarda una sola instantanea, asi que
+`Ctrl+Z` deshace el texto de todos los tiles en un paso. El zoom usa los mismos niveles que el modo pintar
+(hasta 4000 %): al cambiarlo con `Ctrl+rueda` o con los botones de la barra
+inferior se recalcula toda la cuadricula y el lienzo de la celda activa, de
+modo que los tiles siguen pegados y se puede pintar en ellos sin saltos. Si la
+cuadricula no cabe en el area de trabajo, se recorta y se mantiene centrada la
+celda activa; las barras y los paneles laterales no se pintan encima.
 
 Las pestañas representan modos de trabajo sobre el mismo documento. El botón
 `+` (o `Ctrl+T`) duplica el modo actual en otra pestaña; después puedes cambiar
@@ -215,9 +233,15 @@ lógica**, que abre un espacio de trabajo con los paneles izquierdo, derecho e
 inferior (el derecho un poco más ancho), manteniendo las pestañas y la
 barra de menús. Al elegir **Gestor de lógica** de nuevo se vuelve a Pintar.
 También incluye **Editor de menus**: abre esos mismos paneles pero vacíos, con
-el lienzo del modo pintar en el hueco central, ajustado para que el documento
-se vea completo y sin cambiar el zoom guardado. Al elegirlo de nuevo se vuelve
-a Pintar; la pestaña de esta vista se llama `Menus`.
+un lienzo propio en el hueco central cuya resolución la dictan las propiedades
+del proyecto (**AJUSTES DEL PROYECTO**), sin cambiar el zoom guardado del modo
+pintar. El lienzo del editor de menús se guarda aparte del documento de pintar
+(con su propio historial de deshacer/rehacer), de modo que entrar y salir no
+altera el dibujo. Si cambias la resolución del proyecto o abres otro `.logic`
+estando dentro, el lienzo se redimensiona al momento y se limpia su historial.
+El botón **TEXTO** del panel izquierdo activa la misma herramienta de texto que
+el modo pintar (arrastra una caja y escribe). Al elegir **Editor de menus** de
+nuevo se vuelve a Pintar; la pestaña de esta vista se llama `Menus`.
 
 El panel izquierdo muestra la lista de elementos del lienzo (`Elemento 1`,
 `Elemento 2`…) y ocupa todo el panel. Los elementos unidos entre sí por el
@@ -387,10 +411,19 @@ automáticas sin tocar la ventana: `--captura ruta` (dibuja un fotograma
 y guarda el BMP), `--gestor` (abre el gestor de lógica), `--abrir-logica
 ruta` y `--guardar-logica ruta` (abrir y guardar el `.logic` sin
 diálogo), `--clics "x,y;x,y"` y `--arrastre "x0,y0;x1,y1"` (clics y
-arrastres simulados) y, para la sección FUNCIONES (fase 8),
+arrastres simulados), `--vista menus` (abre directamente el editor de
+menús, después de cargar la lógica si se indica) y `--volcar ruta`
+(escribe una línea con la vista, los documentos, los ajustes del proyecto,
+la geometría del lienzo y el estado de los menús para comparar pruebas),
+y, para la sección FUNCIONES (fase 8),
 `--funcion-abrir <id>` (abre el editor de código de esa función),
 `--codigo-teclas "texto"` (escribe en el editor abierto, con `\n`, `\t`,
-`\b` y `\\` como escapes), `--funcion-borrar x,y` (clic derecho simulado
+`\b` y `\\` como escapes), `--texto-teclas "texto"` (escribe en la caja de
+la herramienta de texto después de `--arrastre`, también con escapes),
+`--clic-final x,y` (confirma el texto con un clic y descarta la caja vacía
+que abre el clic), `--deshacer` (pulsa `Ctrl+Z` al final), `--sin-ventanas`
+(oculta opciones, patrón, información y visor de tiles en las capturas),
+`--funcion-borrar x,y` (clic derecho simulado
 que pide confirmación de borrado) y `--modulos-rueda x,y,delta[,ctrl]`
 (la rueda del gestor, que desplaza la sección FUNCIONES). Para la vista
 previa (fase 9), `--captura-juego ruta` con `--fotogramas N` guarda un BMP

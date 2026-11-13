@@ -108,7 +108,8 @@ static int construir_coords(TileCoord *coords) {
 
 static void layout_calcular(Zona zona, const TileCoord *coords, int ncoords,
                             TileCoord activo, int nominal_w, int nominal_h,
-                            int hueco, int ajustar, TilesLayout *out) {
+                            int hueco, int exterior, int ajustar, int desbordar,
+                            TilesLayout *out) {
     int min_cx = activo.cx, max_cx = activo.cx;
     int min_cy = activo.cy, max_cy = activo.cy;
     int cols, rows, ancho_huecos, alto_huecos, disponible_w, disponible_h;
@@ -126,12 +127,13 @@ static void layout_calcular(Zona zona, const TileCoord *coords, int ncoords,
     if (cols < 1) cols = 1;
     if (rows < 1) rows = 1;
     if (hueco < 0) hueco = 0;
+    if (exterior < 0) exterior = 0;
     if (nominal_w < 1) nominal_w = 1;
     if (nominal_h < 1) nominal_h = 1;
 
-    /* Los huecos exteriores tambien cuentan: en ellos viven los botones "+". */
-    ancho_huecos = (cols + 1) * hueco;
-    alto_huecos = (rows + 1) * hueco;
+    /* El margen exterior aloja los botones "+" de las caras libres. */
+    ancho_huecos = (cols - 1) * hueco + exterior * 2;
+    alto_huecos = (rows - 1) * hueco + exterior * 2;
     disponible_w = zona.ancho - ancho_huecos;
     disponible_h = zona.alto - alto_huecos;
     if (disponible_w < 1) disponible_w = 1;
@@ -139,7 +141,11 @@ static void layout_calcular(Zona zona, const TileCoord *coords, int ncoords,
     escala_w = (float)disponible_w / (float)(nominal_w * cols);
     escala_h = (float)disponible_h / (float)(nominal_h * rows);
     escala = escala_w < escala_h ? escala_w : escala_h;
-    if (!ajustar && escala > 1.0f) escala = 1.0f;
+    /* En la cuadricula el zoom manda: no se reduce para encajar. Si la
+     * cuadricula es mayor que el area de trabajo se recorta y se mantiene
+     * centrada la celda activa, igual que el lienzo del modo pintar. */
+    if (desbordar) escala = 1.0f;
+    else if (!ajustar && escala > 1.0f) escala = 1.0f;
 
     out->min_cx = min_cx;
     out->min_cy = min_cy;
@@ -151,9 +157,29 @@ static void layout_calcular(Zona zona, const TileCoord *coords, int ncoords,
     out->paso_x = out->tile_w + hueco;
     out->paso_y = out->tile_h + hueco;
     out->origen_x = zona.x +
-        (zona.ancho - (cols * out->tile_w + ancho_huecos)) / 2 + hueco;
+        (zona.ancho - (cols * out->tile_w + ancho_huecos)) / 2 + exterior;
     out->origen_y = zona.y +
-        (zona.alto - (rows * out->tile_h + alto_huecos)) / 2 + hueco;
+        (zona.alto - (rows * out->tile_h + alto_huecos)) / 2 + exterior;
+
+    /* Si el zoom hace que la cuadricula no quepa, se centra la celda activa
+     * en lugar de la cuadricula entera. Asi el tile que se esta pintando
+     * siempre queda a la vista aunque el resto se salga del area. */
+    if (desbordar) {
+        int total_w = cols * out->tile_w + ancho_huecos;
+        int total_h = rows * out->tile_h + alto_huecos;
+        if (total_w > zona.ancho) {
+            int centro_zona = zona.x + zona.ancho / 2;
+            int centro_activo = out->origen_x +
+                (activo.cx - min_cx) * out->paso_x + out->tile_w / 2;
+            out->origen_x += centro_zona - centro_activo;
+        }
+        if (total_h > zona.alto) {
+            int centro_zona = zona.y + zona.alto / 2;
+            int centro_activo = out->origen_y +
+                (activo.cy - min_cy) * out->paso_y + out->tile_h / 2;
+            out->origen_y += centro_zona - centro_activo;
+        }
+    }
 }
 
 Zona tiles_modo_zona_celda(TileCoord c) {
@@ -164,7 +190,6 @@ Zona tiles_modo_zona_celda(TileCoord c) {
 }
 
 Zona tiles_modo_boton_zona(TileCoord c, int dir, int *existe) {
-    TilesLayout *l = &g.tiles_layout;
     TileCoord vecina = c;
     Zona t;
     int lado, x, y;
@@ -179,23 +204,27 @@ Zona tiles_modo_boton_zona(TileCoord c, int dir, int *existe) {
         return zona_vacia();
     }
     t = tiles_modo_zona_celda(c);
-    lado = TILES_BOTON < l->hueco ? TILES_BOTON : l->hueco;
+    /* El boton vive fuera del tile, en la celda vecina libre, con el mismo
+     * tamano que antes. */
+    lado = TILES_BOTON;
+    if (lado > t.ancho) lado = t.ancho;
+    if (lado > t.alto) lado = t.alto;
     if (lado < 4) lado = 4;
     switch (dir) {
         case TILES_DIR_ARRIBA:
             x = t.x + (t.ancho - lado) / 2;
-            y = t.y - l->hueco + (l->hueco - lado) / 2;
+            y = t.y - lado;
             break;
         case TILES_DIR_DERECHA:
-            x = zona_derecha(t) + (l->hueco - lado) / 2;
+            x = zona_derecha(t);
             y = t.y + (t.alto - lado) / 2;
             break;
         case TILES_DIR_ABAJO:
             x = t.x + (t.ancho - lado) / 2;
-            y = zona_abajo(t) + (l->hueco - lado) / 2;
+            y = zona_abajo(t);
             break;
         default:
-            x = t.x - l->hueco + (l->hueco - lado) / 2;
+            x = t.x - lado;
             y = t.y + (t.alto - lado) / 2;
             break;
     }
@@ -216,7 +245,7 @@ void tiles_modo_layout(void) {
     if (nominal_h < 1) nominal_h = 1;
     n = construir_coords(coords);
     layout_calcular(zona, coords, n, activo, nominal_w, nominal_h,
-                    TILES_HUECO, 0, &g.tiles_layout);
+                    TILES_HUECO, TILES_EXTERIOR, 0, 1, &g.tiles_layout);
     g.tiles_layout_valido = 1;
     g.num_tiles_visibles = n;
     memcpy(g.tiles_visibles, coords, (size_t)n * sizeof(TileCoord));
@@ -319,8 +348,9 @@ void tiles_modo_liberar(void) {
 
 void tiles_modo_entrar(void) {
     int i;
-    /* Al entrar en tiles se sale del editor de mapas o del gestor. */
-    if (g.vista != VISTA_PINTAR) g.vista = VISTA_PINTAR;
+    /* Al entrar en tiles se sale del editor de mapas, del gestor o del
+     * editor de menus (y se recupera su documento). */
+    if (g.vista != VISTA_PINTAR) app_cambiar_vista(VISTA_PINTAR);
 
     if (g.sel.activa) pintura_confirmar_seleccion();
     seleccion_limpiar(&g.sel);
@@ -407,6 +437,7 @@ int tiles_modo_agregar(TileCoord desde, int dir) {
 }
 
 int tiles_modo_intercambiar(TileCoord destino) {
+    TileCoord anterior = tiles_modo_activo();
     int indice = indice_documento(destino);
     if (indice < 0) return 0;
 
@@ -418,6 +449,11 @@ int tiles_modo_intercambiar(TileCoord destino) {
     g.texto_activo = 0;
 
     doc_intercambiar(&g.doc, &g.tiles_modo[indice].doc);
+    /* El documento que se guarda ocupa la celda que deja libre el activo; si
+     * el slot conservase su coordenada anterior, ambos quedarian en la misma
+     * celda y la otra desapareceria de la cuadricula. */
+    g.tiles_modo[indice].cx = anterior.cx;
+    g.tiles_modo[indice].cy = anterior.cy;
     g.tile_cx = destino.cx;
     g.tile_cy = destino.cy;
     tiles_modo_layout();
@@ -509,19 +545,54 @@ Zona tiles_visor_plegado_zona(void) {
 /* ------------------------------------------------------------------ */
 /* Dibujo                                                              */
 /* ------------------------------------------------------------------ */
-static void dibujar_boton_mas(Zona z, int hover) {
+static int zona_interseca(Zona a, Zona b) {
+    return a.x < zona_derecha(b) && zona_derecha(a) > b.x &&
+           a.y < zona_abajo(b) && zona_abajo(a) > b.y;
+}
+
+/* Rectangulo recortado al area de trabajo: con zoom alto la cuadricula
+ * desborda y no debe pintar encima de las barras ni de los paneles. */
+static void rect_recortado(int x0, int y0, int x1, int y1, Zona clip,
+                           u32 color) {
+    if (x0 < clip.x) x0 = clip.x;
+    if (y0 < clip.y) y0 = clip.y;
+    if (x1 > zona_derecha(clip)) x1 = zona_derecha(clip);
+    if (y1 > zona_abajo(clip)) y1 = zona_abajo(clip);
+    dibujar_rect(x0, y0, x1, y1, color);
+}
+
+/* Un rectangulo esta completamente dentro del recorte. Con zoom alto las
+ * caras del tile pueden cruzar todo el area de trabajo; recortarlas dejaria
+ * una linea de color pegada al borde de la vista, asi que solo se dibujan
+ * las caras que se ven enteras. */
+static int rect_dentro(int x0, int y0, int x1, int y1, Zona clip) {
+    return x0 >= clip.x && y0 >= clip.y &&
+           x1 <= zona_derecha(clip) && y1 <= zona_abajo(clip);
+}
+
+static void marco_recortado(Zona z, Zona clip, u32 color) {
+    rect_recortado(z.x, z.y, zona_derecha(z), z.y + 1, clip, color);
+    rect_recortado(z.x, zona_abajo(z) - 1, zona_derecha(z), zona_abajo(z),
+                   clip, color);
+    rect_recortado(z.x, z.y, z.x + 1, zona_abajo(z), clip, color);
+    rect_recortado(zona_derecha(z) - 1, z.y, zona_derecha(z), zona_abajo(z),
+                   clip, color);
+}
+
+static void dibujar_boton_mas(Zona z, int hover, Zona clip) {
     int cx, cy, mitad;
     u32 color;
-    if (z.ancho <= 0 || z.alto <= 0) return;
-    dibujar_rect_z(z, hover ? TILES_RESALTE : TILES_PANEL_FONDO);
-    dibujar_marco_z(z, TILES_PANEL_BORDE);
+    if (z.ancho <= 0 || z.alto <= 0 || !zona_interseca(z, clip)) return;
+    rect_recortado(z.x, z.y, zona_derecha(z), zona_abajo(z), clip,
+                   hover ? TILES_RESALTE : TILES_PANEL_FONDO);
+    marco_recortado(z, clip, TILES_PANEL_BORDE);
     cx = z.x + z.ancho / 2;
     cy = z.y + z.alto / 2;
     mitad = (z.ancho - 8) > 4 ? (z.ancho - 8) / 2 : 2;
     if (mitad < 2) mitad = 2;
     color = TILES_TEXTO;
-    dibujar_rect(cx - mitad, cy - 1, cx + mitad + 1, cy + 1, color);
-    dibujar_rect(cx - 1, cy - mitad, cx + 1, cy + mitad + 1, color);
+    rect_recortado(cx - mitad, cy - 1, cx + mitad + 1, cy + 1, clip, color);
+    rect_recortado(cx - 1, cy - mitad, cx + 1, cy + mitad + 1, clip, color);
 }
 
 static void dibujar_boton_minimizar(Zona z, int hover) {
@@ -534,10 +605,39 @@ static void dibujar_boton_minimizar(Zona z, int hover) {
     dibujar_rect(cx, cy, cx + z.ancho - 4, cy + 1, TILES_TEXTO);
 }
 
+/* Lado del marco exterior de un tile. Solo se dibujan las caras que dan a
+ * una celda libre: con los tiles pegados, un marco en la cara compartida
+ * taparia el documento vecino. */
+static void dibujar_borde_lado(Zona z, int dir, u32 color, Zona clip) {
+    int x0, y0, x1, y1;
+    switch (dir) {
+        case TILES_DIR_ARRIBA:
+            x0 = z.x - 1; y0 = z.y - 1;
+            x1 = zona_derecha(z) + 1; y1 = z.y;
+            break;
+        case TILES_DIR_DERECHA:
+            x0 = zona_derecha(z); y0 = z.y - 1;
+            x1 = zona_derecha(z) + 1; y1 = zona_abajo(z) + 1;
+            break;
+        case TILES_DIR_ABAJO:
+            x0 = z.x - 1; y0 = zona_abajo(z);
+            x1 = zona_derecha(z) + 1; y1 = zona_abajo(z) + 1;
+            break;
+        default:
+            x0 = z.x - 1; y0 = z.y - 1;
+            x1 = z.x; y1 = zona_abajo(z) + 1;
+            break;
+    }
+    /* Si la cara no cabe entera en la vista (tile enorme por el zoom) no se
+     * dibuja: antes quedaba una linea azul cruzando todo el lienzo. */
+    if (!rect_dentro(x0, y0, x1, y1, clip)) return;
+    dibujar_rect(x0, y0, x1, y1, color);
+}
+
 /* Dibuja una cuadricula de tiles dentro de una zona ya calculada. */
 static void dibujar_cuadricula(TilesLayout *layout, const TileCoord *coords,
                                int ncoords, TileCoord activo, Documento *activo_doc,
-                               int botones) {
+                               int botones, Zona clip) {
     int i, d;
 
     for (i = 0; i < ncoords; i++) {
@@ -546,11 +646,26 @@ static void dibujar_cuadricula(TilesLayout *layout, const TileCoord *coords,
                             layout->origen_y + (c.cy - layout->min_cy) * layout->paso_y,
                             layout->tile_w, layout->tile_h);
         Documento *d_doc;
-        if (zona_derecha(z) < 0 || zona_abajo(z) < 0 ||
-            z.x >= g.ancho || z.y >= g.alto)
-            continue;
-        dibujar_rect(z.x - 1, z.y - 1, zona_derecha(z) + 1, zona_abajo(z) + 1,
-                     coord_igual(c, activo) ? TILES_BORDE_ACTIVO : TILES_BORDE);
+        u32 color = coord_igual(c, activo) ? TILES_BORDE_ACTIVO : TILES_BORDE;
+        if (!zona_interseca(z, clip)) continue;
+        if (layout->hueco > 0) {
+            /* Con separacion sobra sitio: el marco va fuera del documento. */
+            rect_recortado(z.x - 1, z.y - 1,
+                           zona_derecha(z) + 1, zona_abajo(z) + 1, clip, color);
+        } else {
+            /* Pegados: solo se marca el contorno de la cuadricula. Las caras
+             * compartidas se quedan sin linea para que las imagenes se toquen
+             * y no haya ninguna separacion entre tiles. */
+            for (d = 0; d < 4; d++) {
+                TileCoord vecina = c;
+                if (d == TILES_DIR_ARRIBA) vecina.cy -= 1;
+                else if (d == TILES_DIR_DERECHA) vecina.cx += 1;
+                else if (d == TILES_DIR_ABAJO) vecina.cy += 1;
+                else vecina.cx -= 1;
+                if (!tiles_modo_celda_ocupada(vecina, NULL))
+                    dibujar_borde_lado(z, d, color, clip);
+            }
+        }
 
         d_doc = coord_igual(c, activo) ? activo_doc : documento_de_celda(c);
         if (d_doc) {
@@ -560,12 +675,17 @@ static void dibujar_cuadricula(TilesLayout *layout, const TileCoord *coords,
                 Lienzo l;
                 l.x0 = z.x; l.y0 = z.y;
                 l.x1 = zona_derecha(z); l.y1 = zona_abajo(z);
-                pintura_dibujar_documento(d_doc, l);
+                pintura_dibujar_documento(d_doc, l, clip);
             }
         } else {
-            dibujar_rect_z(z, LIENZO);
+            rect_recortado(z.x, z.y, zona_derecha(z), zona_abajo(z), clip,
+                           LIENZO);
         }
     }
+
+    /* Texto: el tile activo ya se dibuja con su previsualizacion; las celdas
+     * vecinas cubiertas por la caja se completan aqui. */
+    texto_dibujar_preview_tiles(layout, coords, ncoords, clip);
 
     if (!botones) return;
     for (i = 0; i < ncoords; i++) {
@@ -573,7 +693,8 @@ static void dibujar_cuadricula(TilesLayout *layout, const TileCoord *coords,
             int existe = 0;
             Zona b = tiles_modo_boton_zona(coords[i], d, &existe);
             int hover = g.raton_dentro && zona_contiene(b, g.raton_x, g.raton_y);
-            if (existe) dibujar_boton_mas(b, hover);
+            if (existe && zona_interseca(b, clip))
+                dibujar_boton_mas(b, hover, clip);
         }
     }
 }
@@ -588,15 +709,19 @@ static void preparar_layout_visor(Zona interior) {
     int nominal_w = activo_doc->ancho > 0 ? activo_doc->ancho : 1;
     int nominal_h = activo_doc->alto > 0 ? activo_doc->alto : 1;
     num_coords_visor = construir_coords(coords_visor);
+    /* En el visor las miniaturas tambien van pegadas; el margen exterior
+     * conserva el sitio del marco y de los bordes del panel. */
     layout_calcular(interior, coords_visor, num_coords_visor, activo,
-                    nominal_w, nominal_h, TILES_HUECO_VISTA, 1, &layout_visor);
+                    nominal_w, nominal_h, TILES_HUECO,
+                    TILES_HUECO_VISTA, 1, 0, &layout_visor);
 }
 
 void ui_dibujar_tiles(void) {
     if (!g.modo_tiles) return;
     if (!g.tiles_layout_valido) tiles_modo_layout();
     dibujar_cuadricula(&g.tiles_layout, g.tiles_visibles,
-                       g.num_tiles_visibles, tiles_modo_activo(), texto_documento_visible(), 1);
+                       g.num_tiles_visibles, tiles_modo_activo(),
+                       texto_documento_visible(), 1, zona_trabajo());
 }
 
 void ui_dibujar_tiles_visor(void) {
@@ -648,7 +773,8 @@ void ui_dibujar_tiles_visor(void) {
     if (interior.alto < 0) interior.alto = 0;
     preparar_layout_visor(interior);
     dibujar_cuadricula(&layout_visor, coords_visor, num_coords_visor,
-                       tiles_modo_activo(), texto_documento_visible(), 0);
+                       tiles_modo_activo(), texto_documento_visible(), 0,
+                       interior);
 }
 
 void ui_dibujar_tiles_minimizado(void) {
@@ -782,9 +908,15 @@ int tiles_modo_cruzar_trazo(int x, int y) {
 
     if (!tiles_modo_intercambiar(destino)) return 1;
 
-    /* Entrada en el tile nuevo: se continua desde el punto equivalente. */
+    /* `tiles_modo_intercambiar` termina cualquier trazo para los cambios de
+     * tile hechos con un clic suelto, pero aqui venimos arrastrando: el trazo
+     * debe seguir vivo en el tile nuevo sin cortarse. */
+    g.pintando = 1;
+
+    /* Entrada en el tile nuevo: se continua desde el punto equivalente. Se
+     * sella ese punto porque `trazo_hasta` empieza un paso despues del origen y
+     * el primer pixel del tile quedaria en blanco, cortando el trazo. */
     tiles_punto_local(destino, anterior_gx, anterior_gy, &bx, &by);
-    g.ult_x = bx;
-    g.ult_y = by;
+    pintura_trazo_punto(bx, by, g.boton_pintura, 1);
     return 0;
 }

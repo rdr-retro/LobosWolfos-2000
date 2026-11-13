@@ -395,14 +395,58 @@ static void texto_caja_logica(int *x0, int *y0, int *x1, int *y1) {
     *x0 = t->x0; *y0 = t->y0; *x1 = t->x1; *y1 = t->y0 + alto - 1;
 }
 
-static int texto_habria_escritura(void) {
+/* Limites de la caja en coordenadas del tile activo. En modo tiles la caja
+ * puede salir del documento activo para ocupar los tiles vecinos. */
+static void texto_limites_globales(int *x0, int *y0, int *x1, int *y1) {
+    TileCoord activo = tiles_modo_activo();
+    int w = g.doc.ancho > 0 ? g.doc.ancho : 1;
+    int h = g.doc.alto > 0 ? g.doc.alto : 1;
+    int i;
+    *x0 = 0; *y0 = 0; *x1 = w - 1; *y1 = h - 1;
+    if (!g.modo_tiles) return;
+    for (i = 0; i < g.num_tiles_modo; i++) {
+        TileDoc *td = &g.tiles_modo[i];
+        int lx, ly;
+        if (!td->ocupado) continue;
+        lx = (td->cx - activo.cx) * w;
+        ly = (td->cy - activo.cy) * h;
+        if (lx < *x0) *x0 = lx;
+        if (ly < *y0) *y0 = ly;
+        if (lx + w - 1 > *x1) *x1 = lx + w - 1;
+        if (ly + h - 1 > *y1) *y1 = ly + h - 1;
+    }
+}
+
+/* Pixel local del tile activo bajo una posicion de pantalla. En modo tiles no
+ * se recorta al documento: la caja puede continuar en el tile vecino y las
+ * coordenadas siguen la misma extension lineal que la previsualizacion. */
+static int texto_pixel_local(int x, int y, int *px, int *py) {
+    int gx, gy;
+    TileCoord activo;
+    int w, h;
+    if (!g.modo_tiles)
+        return pintura_pixel_extendido(x, y, px, py);
+    if (!g.tiles_layout_valido) tiles_modo_layout();
+    if (!g.tiles_layout_valido) return 0;
+    tiles_punto_global(x, y, &gx, &gy);
+    activo = tiles_modo_activo();
+    w = g.doc.ancho > 0 ? g.doc.ancho : 1;
+    h = g.doc.alto > 0 ? g.doc.alto : 1;
+    *px = gx - activo.cx * w;
+    *py = gy - activo.cy * h;
+    return 1;
+}
+
+/* Comprueba si el texto escribiria algun pixel en `doc`. `origen_x`/`origen_y`
+ * es la posicion del documento dentro de las coordenadas del tile activo. */
+static int texto_hay_escritura_en(Documento *doc, int origen_x, int origen_y) {
     Texto *t = &g.texto;
     texto_cache_actualizar();
     if (!t->cache_valida) return 0;
     TextoRaster *c = &t->cache;
-    int ox = t->x0 + TEXTO_MARGEN;
-    int oy = t->y0 + TEXTO_MARGEN;
-    int w = g.doc.ancho, h = g.doc.alto;
+    int ox = t->x0 + TEXTO_MARGEN - origen_x;
+    int oy = t->y0 + TEXTO_MARGEN - origen_y;
+    int w = doc->ancho, h = doc->alto;
     int y, x;
     for (y = 0; y < c->alto; y++) {
         for (x = 0; x < c->ancho; x++) {
@@ -416,13 +460,13 @@ static int texto_habria_escritura(void) {
     return 0;
 }
 
-static void texto_estampar_en(Documento *doc) {
+static void texto_estampar_en(Documento *doc, int origen_x, int origen_y) {
     Texto *t = &g.texto;
     texto_cache_actualizar();
     if (!t->cache_valida) return;
     TextoRaster *c = &t->cache;
-    int ox = t->x0 + TEXTO_MARGEN;
-    int oy = t->y0 + TEXTO_MARGEN;
+    int ox = t->x0 + TEXTO_MARGEN - origen_x;
+    int oy = t->y0 + TEXTO_MARGEN - origen_y;
     int w = doc->ancho, h = doc->alto;
     Capa *capa = &doc->capas[doc->activa];
     int y, x;
@@ -621,17 +665,49 @@ void texto_empezar(int x, int y) {
 }
 
 void texto_confirmar(void) {
+    int writes, i;
     if (!g.texto_activo) return;
     if (g.texto.inicio_activo) {
         texto_limpiar();
         return;
     }
-    int writes = texto_habria_escritura();
+    if (g.modo_tiles) {
+        /* La caja puede cubrir varios tiles: se comprueba la escritura en
+         * todos antes de guardar una unica instantanea y se estampa en cada
+         * uno con el desplazamiento de su celda. */
+        TileCoord activo = tiles_modo_activo();
+        int w = g.doc.ancho > 0 ? g.doc.ancho : 1;
+        int h = g.doc.alto > 0 ? g.doc.alto : 1;
+        writes = texto_hay_escritura_en(&g.doc, 0, 0);
+        for (i = 0; i < g.num_tiles_modo && !writes; i++) {
+            TileDoc *td = &g.tiles_modo[i];
+            if (!td->ocupado) continue;
+            if (texto_hay_escritura_en(&td->doc,
+                                       (td->cx - activo.cx) * w,
+                                       (td->cy - activo.cy) * h))
+                writes = 1;
+        }
+        if (writes) {
+            pila_guardar(&g.deshacer, &g.doc);
+            pila_limpiar(&g.rehacer);
+        }
+        texto_estampar_en(&g.doc, 0, 0);
+        for (i = 0; i < g.num_tiles_modo; i++) {
+            TileDoc *td = &g.tiles_modo[i];
+            if (!td->ocupado) continue;
+            texto_estampar_en(&td->doc,
+                              (td->cx - activo.cx) * w,
+                              (td->cy - activo.cy) * h);
+        }
+        texto_limpiar();
+        return;
+    }
+    writes = texto_hay_escritura_en(&g.doc, 0, 0);
     if (writes) {
         pila_guardar(&g.deshacer, &g.doc);
         pila_limpiar(&g.rehacer);
     }
-    texto_estampar_en(&g.doc);
+    texto_estampar_en(&g.doc, 0, 0);
     texto_limpiar();
 }
 
@@ -651,11 +727,13 @@ void texto_invalidar(void) {
 
 void texto_arrastrar(int x, int y) {
     Texto *t = &g.texto;
+    int min_x, min_y, max_x, max_y;
     if (!t->inicio_activo) return;
-    if (x < 0) x = 0;
-    if (x >= g.doc.ancho) x = g.doc.ancho - 1;
-    if (y < 0) y = 0;
-    if (y >= g.doc.alto) y = g.doc.alto - 1;
+    texto_limites_globales(&min_x, &min_y, &max_x, &max_y);
+    if (x < min_x) x = min_x;
+    if (x > max_x) x = max_x;
+    if (y < min_y) y = min_y;
+    if (y > max_y) y = max_y;
     int x0 = t->inicio_x, y0 = t->inicio_y;
     t->x0 = x0 < x ? x0 : x;
     t->y0 = y0 < y ? y0 : y;
@@ -667,11 +745,14 @@ void texto_soltar(int x, int y, int boton) {
     Texto *t = &g.texto;
     if (!g.texto_activo) return;
     if (t->inicio_activo) {
-        int ix = x, iy = y;
-        if (ix < 0) ix = 0;
-        if (ix >= g.doc.ancho) ix = g.doc.ancho - 1;
-        if (iy < 0) iy = 0;
-        if (iy >= g.doc.alto) iy = g.doc.alto - 1;
+        int ix = t->inicio_x, iy = t->inicio_y;
+        int min_x, min_y, max_x, max_y;
+        texto_pixel_local(x, y, &ix, &iy);
+        texto_limites_globales(&min_x, &min_y, &max_x, &max_y);
+        if (ix < min_x) ix = min_x;
+        if (ix > max_x) ix = max_x;
+        if (iy < min_y) iy = min_y;
+        if (iy > max_y) iy = max_y;
         /* normalize using last pointer */
         int x0 = t->inicio_x, y0 = t->inicio_y;
         int x1 = ix, y1 = iy;
@@ -761,7 +842,7 @@ void texto_mover(int x, int y, int botones) {
     if (t->inicio_activo) {
         if (botones & 1) {
             int ix, iy;
-            if (pintura_pixel_ajustado(x, y, &ix, &iy)) texto_arrastrar(ix, iy);
+            if (texto_pixel_local(x, y, &ix, &iy)) texto_arrastrar(ix, iy);
         }
         app_invalidar();
         return;
@@ -769,12 +850,15 @@ void texto_mover(int x, int y, int botones) {
     if (t->redimensionando) {
         if (botones & 1) {
             int ix, iy;
-            if (pintura_pixel_extendido(x, y, &ix, &iy)) {
+            if (texto_pixel_local(x, y, &ix, &iy)) {
                 /* redimensionar */
                 RedimensionTexto *r = &t->redimension;
                 int izq, der, arr, aba;
+                int min_x, min_y, max_x, max_y;
                 mango_mueve_local(r->mango, &izq, &der, &arr, &aba);
-                int ancho = g.doc.ancho, alto = g.doc.alto;
+                texto_limites_globales(&min_x, &min_y, &max_x, &max_y);
+                int ancho = max_x - min_x + 1;
+                int alto = max_y - min_y + 1;
                 int xx = ix - r->desfase_x;
                 int yy = iy - r->desfase_y;
                 int bx0 = r->x0, by0 = r->y0, bx1 = r->x1, by1 = r->y1;
@@ -785,35 +869,35 @@ void texto_mover(int x, int y, int botones) {
                 int nx0 = bx0, ny0 = by0, nx1 = bx1, ny1 = by1;
                 if (izq) {
                     int limite = bx1 - ancho_min + 1;
-                    if (limite < 0) limite = 0;
-                    if (limite > ancho - 1) limite = ancho - 1;
+                    if (limite < min_x) limite = min_x;
+                    if (limite > max_x) limite = max_x;
                     nx0 = xx;
-                    if (nx0 < 0) nx0 = 0;
+                    if (nx0 < min_x) nx0 = min_x;
                     if (nx0 > limite) nx0 = limite;
                 }
                 if (der) {
                     int minimo = bx0 + ancho_min - 1;
-                    if (minimo < 0) minimo = 0;
-                    if (minimo > ancho - 1) minimo = ancho - 1;
+                    if (minimo < min_x) minimo = min_x;
+                    if (minimo > max_x) minimo = max_x;
                     nx1 = xx;
                     if (nx1 < minimo) nx1 = minimo;
-                    if (nx1 > ancho - 1) nx1 = ancho - 1;
+                    if (nx1 > max_x) nx1 = max_x;
                 }
                 if (arr) {
                     int limite = by1 - alto_min + 1;
-                    if (limite < 0) limite = 0;
-                    if (limite > alto - 1) limite = alto - 1;
+                    if (limite < min_y) limite = min_y;
+                    if (limite > max_y) limite = max_y;
                     ny0 = yy;
-                    if (ny0 < 0) ny0 = 0;
+                    if (ny0 < min_y) ny0 = min_y;
                     if (ny0 > limite) ny0 = limite;
                 }
                 if (aba) {
                     int minimo = by0 + alto_min - 1;
-                    if (minimo < 0) minimo = 0;
-                    if (minimo > alto - 1) minimo = alto - 1;
+                    if (minimo < min_y) minimo = min_y;
+                    if (minimo > max_y) minimo = max_y;
                     ny1 = yy;
                     if (ny1 < minimo) ny1 = minimo;
-                    if (ny1 > alto - 1) ny1 = alto - 1;
+                    if (ny1 > max_y) ny1 = max_y;
                 }
                 t->x0 = nx0; t->y0 = ny0; t->x1 = nx1; t->y1 = ny1;
                 t->cache_clave_valida = 0;
@@ -876,7 +960,7 @@ int texto_pulsar(int x, int y, int boton) {
         consumed = 1;
     } else if (mango >= 0) {
         int ix, iy;
-        if (pintura_pixel_extendido(x, y, &ix, &iy)) {
+        if (texto_pixel_local(x, y, &ix, &iy)) {
             /* empezar redimension */
             Texto *t = &g.texto;
             int x0, y0, x1, y1;
@@ -898,7 +982,7 @@ int texto_pulsar(int x, int y, int boton) {
         }
     } else {
         int ix, iy;
-        if (pintura_pixel_extendido(x, y, &ix, &iy)) {
+        if (texto_pixel_local(x, y, &ix, &iy)) {
             int x0, y0, x1, y1;
             texto_caja_logica(&x0, &y0, &x1, &y1);
             if (ix >= x0 && ix <= x1 && iy >= y0 && iy <= y1) {
@@ -1033,6 +1117,79 @@ void texto_dibujar_caja(void) {
     }
 }
 
+/* Completa la previsualizacion del texto en los tiles vecinos. El tile activo
+ * ya la recibe estampada en `texto_documento_visible`; aqui se pintan las
+ * celdas cubiertas por la caja, cada pixel recortado al area de su tile. */
+void texto_dibujar_preview_tiles(TilesLayout *layout, const TileCoord *coords,
+                                 int ncoords, Zona clip) {
+    Texto *t = &g.texto;
+    TextoRaster *r;
+    TileCoord activo;
+    int ox, oy, doc_w, doc_h, i;
+    if (!g.modo_tiles || !g.texto_activo || t->inicio_activo || t->largo == 0)
+        return;
+    if (!layout || layout->tile_w <= 0 || layout->tile_h <= 0) return;
+    texto_cache_actualizar();
+    if (!t->cache_valida) return;
+    r = &t->cache;
+    ox = t->x0 + TEXTO_MARGEN;
+    oy = t->y0 + TEXTO_MARGEN;
+    activo = tiles_modo_activo();
+    doc_w = g.doc.ancho > 0 ? g.doc.ancho : 1;
+    doc_h = g.doc.alto > 0 ? g.doc.alto : 1;
+
+    for (i = 0; i < ncoords; i++) {
+        TileCoord c = coords[i];
+        Zona z;
+        int local_x, local_y;
+        int sx0, sy0, sx1, sy1, x, y;
+        if (c.cx == activo.cx && c.cy == activo.cy) continue;
+        local_x = ox - (c.cx - activo.cx) * doc_w;
+        local_y = oy - (c.cy - activo.cy) * doc_h;
+        if (local_x >= doc_w || local_y >= doc_h) continue;
+        if (local_x + r->ancho <= 0 || local_y + r->alto <= 0) continue;
+
+        z = zona_hacer(layout->origen_x + (c.cx - layout->min_cx) * layout->paso_x,
+                       layout->origen_y + (c.cy - layout->min_cy) * layout->paso_y,
+                       layout->tile_w, layout->tile_h);
+        sx0 = z.x > clip.x ? z.x : clip.x;
+        sy0 = z.y > clip.y ? z.y : clip.y;
+        sx1 = zona_derecha(z) < zona_derecha(clip) ? zona_derecha(z) : zona_derecha(clip);
+        sy1 = zona_abajo(z) < zona_abajo(clip) ? zona_abajo(z) : zona_abajo(clip);
+        if (sx0 >= sx1 || sy0 >= sy1) continue;
+
+        /* Solo se recorre la parte de la caja que cae en este tile. */
+        {
+            int bx0 = z.x + (int)(((long long)local_x * z.ancho) / doc_w) - 2;
+            int by0 = z.y + (int)(((long long)local_y * z.alto) / doc_h) - 2;
+            int bx1 = z.x + (int)(((long long)(local_x + r->ancho) * z.ancho) / doc_w) + 2;
+            int by1 = z.y + (int)(((long long)(local_y + r->alto) * z.alto) / doc_h) + 2;
+            if (bx0 > sx0) sx0 = bx0;
+            if (by0 > sy0) sy0 = by0;
+            if (bx1 < sx1) sx1 = bx1;
+            if (by1 < sy1) sy1 = by1;
+            if (sx0 >= sx1 || sy0 >= sy1) continue;
+        }
+
+        for (y = sy0; y < sy1; y++) {
+            int ly = (int)(((long long)(y - z.y) * doc_h) / z.alto);
+            int ry = ly - local_y;
+            if (ry < 0 || ry >= r->alto) continue;
+            for (x = sx0; x < sx1; x++) {
+                int lx = (int)(((long long)(x - z.x) * doc_w) / z.ancho);
+                int rx = lx - local_x;
+                u8 a;
+                u32 src;
+                if (rx < 0 || rx >= r->ancho) continue;
+                a = r->cobertura[ry * r->ancho + rx];
+                if (a == 0) continue;
+                src = (t->color & 0x00FFFFFFu) | ((u32)a << 24);
+                dibujar_pixel(x, y, color_mezclar(dibujar_leer(x, y), src, 255));
+            }
+        }
+    }
+}
+
 Documento *texto_documento_visible(void) {
     if (!g.texto_activo || g.texto.inicio_activo || g.texto.largo == 0) {
         if (texto_preview_valida) {
@@ -1047,7 +1204,7 @@ Documento *texto_documento_visible(void) {
     }
     doc_copiar_en(&texto_preview, &g.doc);
     texto_cache_actualizar();
-    texto_estampar_en(&texto_preview);
+    texto_estampar_en(&texto_preview, 0, 0);
     texto_preview_valida = 1;
     return &texto_preview;
 }
@@ -1068,7 +1225,7 @@ int texto_en_caja(int x, int y) {
         texto_caja_logica(&x0, &y0, &x1, &y1);
     }
     int ix, iy;
-    if (!pintura_pixel_extendido(x, y, &ix, &iy)) return 0;
+    if (!texto_pixel_local(x, y, &ix, &iy)) return 0;
     return (ix >= x0 && ix <= x1 && iy >= y0 && iy <= y1);
 }
 

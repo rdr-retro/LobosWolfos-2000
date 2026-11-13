@@ -23,8 +23,10 @@ static void guardar_estado_activo(void) {
 }
 
 static void aplicar_estado(const Pestana *p) {
+    Vista anterior = g.vista;
     g.zoom_idx = p->zoom_idx;
     g.vista = p->vista;
+    app_vista_documento(anterior, g.vista);
     g.patron_visible = p->patron_visible;
     g.modo_tiles = p->modo_tiles;
     g.pan_x = p->pan_x;
@@ -188,10 +190,12 @@ int pestanas_cerrar(int indice) {
         if (g.num_pestanas <= 1) {
             /* Ultima pestana: no se destruye el documento, solo se vuelve al
              * modo Pintar. */
+            Vista anterior = g.vista;
             pestana_pintar(&g.pestanas[0], g.zoom_idx);
             g.pestana_activa = 0;
             g.num_pestanas = 1;
             g.vista = VISTA_PINTAR;
+            app_vista_documento(anterior, g.vista);
             g.patron_visible = 0;
             g.modo_tiles = 0;
             g.tiles_visible = 0;

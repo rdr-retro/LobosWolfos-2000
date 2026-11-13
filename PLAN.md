@@ -421,6 +421,108 @@ el motor ya compila.
   `game.exe --logica` arranca a 800x600 con el mapa y el fondo del
   proyecto.
 
+- **12-11-2026 (fase 14, lienzo de menus)** - El **Editor de menus** deja
+  de reutilizar el documento de pintar: tiene un lienzo propio (fondo blanco)
+  a la resolución del proyecto, creado al entrar y guardado entre visitas
+  junto con su historial de deshacer/rehacer. Entrar y salir no toca el
+  dibujo de pintar ni su zoom. Si se aplican **AJUSTES DEL PROYECTO** o se
+  carga un `.logic` estando dentro, el lienzo se redimensiona al momento y se
+  limpia el historial de menus. El botón **TEXTO** del panel izquierdo usa la
+  misma herramienta de texto del modo pintar. Verificado con capturas y
+  `--volcar`: `--vista menus` muestra un lienzo blanco de 640x480 centrado
+  (220,129-860,609) con la etiqueta `640x480`, el clic en MODO > Editor de
+  menus entra y el clic en MODO > Modo pintar vuelve con el documento de
+  pintar intacto (80x80) y el de menus guardado (640x480), y aplicar 800x600
+  en las propiedades estando dentro redimensiona el lienzo a 800x600 sin
+  cambiar `zoom_idx`.
+
+- **12-11-2026 (fase 15, separacion de tiles)** - En el **modo tiles** los
+  lienzos quedan pegados: entre dos tiles solo hay el pixel del borde (1 px),
+  en vez de los 18 px que reservaban el boton "+". El margen exterior de la
+  cuadricula se mantiene para que los botones "+" sigan visibles y pulsables
+  fuera de cada tile, en la celda vecina libre. Verificado por pixeles con
+  `--tiles --clics`: en horizontal el documento izquierdo termina en x=555,
+  el borde activo ocupa x=556 y el derecho empieza en x=557; en vertical el
+  borde ocupa una sola fila entre ambos documentos.
+
+- **12-11-2026 (fase 15, tiradores y trazo continuo)** - En modo tiles ya no
+  se dibujan los tiradores de redimensionado del lienzo: el tamano es comun a
+  todos los tiles y solo se cambia en **Ajustes del proyecto**. Tambien se
+  puede pintar arrastrando de un tile a otro sin que el trazo se corte: al
+  cruzar el borde se guarda una instantanea en el tile activo, se cambia al
+  destino y se sella el punto de entrada, porque `trazo_hasta` empieza un paso
+  despues del origen y el primer pixel del tile nuevo quedaba en blanco. De
+  paso se corrigio que la celda que dejaba libre el tile activo conservaba su
+  coordenada antigua: al cambiar de tile ambos documentos caian en la misma
+  celda y la cuadricula se quedaba con uno solo. Verificado por pixeles con
+  `--tiles --clics "294,399" --arrastre "150,600;950,600"`: negro continuo de
+  x=146 a x=950 con solo el borde de 1 px en x=556, en ambos sentidos, y cero
+  pixeles del color de los mangos (`64,144,240`) en la captura.
+
+- **12-11-2026 (fase 15, tiles sin separacion)** - `TILES_HUECO` pasa de 1 a 0:
+  las imagenes de dos tiles pegados se tocan y no queda ninguna linea ni hueco
+  entre ellas. Solo se dibujan las caras del marco que dan a una celda libre
+  (el contorno de la cuadricula); las caras compartidas no llevan marco, y el
+  tile activo se resalta en azul por fuera, en el margen de los botones `+`.
+  El visor **VISTA DE TILES** usa el mismo criterio: sus miniaturas tambien se
+  tocan y solo conservan el marco exterior.
+  Verificado por pixeles con `--tiles --clics "294,399"`: dos tiles
+  horizontales dan blanco continuo de x=93 a x=1018 (el derecho empieza en
+  x=556, justo donde acaba el izquierdo) y el trazo `--arrastre "150,600;950,600"`
+  queda negro continuo de x=146 a x=955, tambien en vertical.
+
+- **12-11-2026 (fase 15, zoom en modo tiles)** - El zoom ya no deja el lienzo
+  descolocado: `zoom_aplicar` llamaba a `lienzo_actualizar`, que calculaba la
+  geometria del modo pintar, mientras el layout de la cuadricula seguia con el
+  zoom anterior. Ahora `lienzo_actualizar` delega en `tiles_modo_layout` cuando
+  `modo_tiles` esta activo, asi que al cambiar el zoom (o al redimensionar la
+  ventana) se recalcula la cuadricula completa y `g.lienzo` vuelve a ser la
+  celda activa. Verificado por pixeles anadiendo un tile debajo y bajando cinco
+  niveles de zoom: `lienzo=436,399,676,639 zoom=8`, el borde compartido sigue
+  blanco (sin linea) y el trazo `--arrastre "500,520;500,620"` queda negro
+  continuo dentro del tile activo.
+
+- **12-11-2026 (fase 15, zoom alto en modo tiles)** - Antes el zoom de la
+  cuadricula se anulaba al ampliar: `layout_calcular` reducia siempre los tiles
+  para que la cuadricula entera encajase en el area de trabajo, asi que el
+  tamano final era el mismo a partir del nivel de encaje. Ahora el modo tiles
+  usa el zoom nominal del modo pintar (10 % a 4000 %) y solo reduce la
+  cuadricula si el zoom es pequeno; cuando no cabe, se recorta y se centra la
+  celda activa. El dibujo de cada tile, sus bordes y los botones "+" se
+  recortan al area de trabajo para no pintar encima de las barras ni de los
+  paneles. Verificado con `--tiles --clics "977,684"` (un nivel de zoom mas):
+  `lienzo=56,-101,1056,899 zoom=14`, las barras y paneles conservan sus
+  pixeles, y el trazo `--arrastre "500,550;500,630"` queda negro continuo
+  dentro del tile activo.
+
+- **12-11-2026 (fase 15, lineas azules con zoom alto)** - Con el zoom nominal,
+  un tile mas grande que el area de trabajo dejaba dos lineas azules verticales
+  (el marco del tile activo) cruzando todo el lienzo; se veia ya en el 1000 %.
+  Ahora cada cara del marco se dibuja solo si cabe entera en la vista, asi que
+  al desbordar no se pinta ninguna linea suelta. El tile activo sigue marcado en
+  azul cuando la cuadricula encaja y en el visor `VISTA DE TILES`. Verificado
+  de 1000 % a 4000 %: el azul fuera de las ventanas flotantes pasa de 3691 a 0
+  pixeles, y en 300 % el marco azul del tile se conserva (267 pixeles fuera de
+  los paneles). El trazo entre dos tiles sigue continuo en `--arrastre
+  "500,350;500,470"` (negro de 350 a 470 sin corte).
+
+- **12-11-2026 (fase 16, texto entre tiles)** - La caja de la herramienta de
+  texto ya puede salir del documento activo y extenderse a los tiles vecinos:
+  `texto_pixel_local` mapea la pantalla a coordenadas del tile activo con
+  `tiles_punto_global`, y `texto_limites_globales` limita la caja a la
+  cuadricula ocupada. Al confirmar se comprueba la escritura en cada tile,
+  se guarda una unica instantanea en `g.deshacer` y se estampa en todos los
+  tiles existentes con el desplazamiento de su celda; las celdas libres
+  cubiertas por la caja no crean tiles. La previsualizacion del tile activo
+  sigue saliendo de `texto_documento_visible` y `texto_dibujar_preview_tiles`
+  completa las celdas vecinas recortando el overlay al area de cada tile.
+  Arrastrar, soltar, mover, redimensionar y colocar el cursor usan el mismo
+  mapeo extendido. Verificado con `--tiles --sin-ventanas --herramienta 5`,
+  zoom 300 %, una caja de (500,330) a (640,470): el texto aparece en el tile
+  activo y en el inferior, al confirmar desaparecen las hormigas y `Ctrl+Z`
+  deja ambos tiles en blanco en un solo paso. El modo pintar normal y el
+  editor de menus conservan su texto (2466 y 327 pixeles oscuros de prueba).
+
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,

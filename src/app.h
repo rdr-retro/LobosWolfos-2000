@@ -316,9 +316,11 @@ typedef unsigned char  u8;
 
 /* Modo tiles: cuadricula de lienzos independientes. */
 #define TILES_MODO_MAX        128
-#define TILES_HUECO           18   /* separacion entre tiles (cabe el boton "+") */
+#define TILES_HUECO           0    /* sin separacion: los tiles se tocan */
 #define TILES_HUECO_VISTA     6    /* separacion reducida dentro del visor */
 #define TILES_BOTON           14   /* lado de los botones "+" de cada cara */
+/* Margen exterior de la cuadricula donde se colocan los botones "+". */
+#define TILES_EXTERIOR        TILES_BOTON
 #define TILES_BORDE           0x00808080u
 #define TILES_BORDE_ACTIVO    0x003278E0u
 #define TILES_FONDO           0x00101820u
@@ -728,6 +730,12 @@ typedef struct App {
     Documento doc;
     char doc_ruta[MAX_PATH];
     PilaUndo deshacer, rehacer;
+    /* Lienzo propio del editor de menus: se crea con la resolucion del
+     * proyecto (AJUSTES DEL PROYECTO) y se intercambia con `doc` al entrar
+     * y salir de la vista, para no tocar el documento de pintar. */
+    Documento doc_menus;
+    PilaUndo deshacer_menus, rehacer_menus;
+    int doc_menus_listo;
     Seleccion sel;
 
     Herramienta herramienta;
@@ -1049,7 +1057,7 @@ void pintura_doble_clic(int x, int y);
 void pintura_tecla(int vk, int ctrl, int shift);
 void pintura_caracter(int ch);
 void pintura_dibujar_lienzo(void);
-void pintura_dibujar_documento(Documento *d, Lienzo l);
+void pintura_dibujar_documento(Documento *d, Lienzo l, Zona clip);
 void pintura_dibujar_solo_overlays(void);
 int  pintura_punto_documento(int x, int y, int *dx, int *dy);
 int  pintura_herramienta_actual(void);
@@ -1084,6 +1092,8 @@ void texto_cancelar(void);
 void texto_invalidar(void);
 void texto_dibujar_barra(void);
 void texto_dibujar_caja(void);
+void texto_dibujar_preview_tiles(TilesLayout *layout, const TileCoord *coords,
+                                 int ncoords, Zona clip);
 Documento *texto_documento_visible(void);
 int  texto_en_menu(int x, int y);
 int  texto_en_caja(int x, int y);
@@ -1296,6 +1306,7 @@ int  elementos_ordenar_lista(int *orden, int *hijos);
 void logica_iniciar(void);
 int  sidebar_derecho_ancho(void);
 Zona herramienta_zona(int indice);
+Zona menus_boton_texto_zona(void);
 Zona panel_textura_zona(void);
 Zona textura_menu_zona(void);
 Zona textura_muestra_zona(int indice, int juego);
@@ -1447,6 +1458,8 @@ void app_nueva_imagen(int ancho, int alto);
 void app_abrir_imagen(const char *ruta);
 void app_guardar_imagen(const char *ruta, int png);
 void app_cambiar_vista(Vista vista);
+void app_vista_documento(Vista anterior, Vista nueva);
+void app_menus_resolucion(void);
 void app_alternar_mapa(void);
 void app_alternar_gestor_modulos(void);
 void app_alternar_editor_menus(void);

@@ -682,6 +682,9 @@ int app_iniciar(void) {
     doc_componer_todo(&g.doc);
     pila_iniciar(&g.deshacer, MAX_UNDO);
     pila_iniciar(&g.rehacer, MAX_UNDO);
+    pila_iniciar(&g.deshacer_menus, MAX_UNDO);
+    pila_iniciar(&g.rehacer_menus, MAX_UNDO);
+    g.doc_menus_listo = 0;
     seleccion_limpiar(&g.sel);
     mapa_iniciar();
     tiles_modo_iniciar();
@@ -714,7 +717,10 @@ void app_terminar(void) {
     pestanas_terminar();
     pila_liberar(&g.deshacer);
     pila_liberar(&g.rehacer);
+    pila_liberar(&g.deshacer_menus);
+    pila_liberar(&g.rehacer_menus);
     doc_liberar(&g.doc);
+    if (g.doc_menus_listo) doc_liberar(&g.doc_menus);
     seleccion_liberar(&g.sel);
     mapa_liberar();
     mapa_miniaturas_liberar();
@@ -816,13 +822,96 @@ void app_guardar_imagen(const char *ruta, int png) {
     }
 }
 
+/* Intercambia dos pilas de deshacer sin copiar sus instantaneas. */
+static void intercambiar_pilas(PilaUndo *a, PilaUndo *b) {
+    PilaUndo t = *a;
+    *a = *b;
+    *b = t;
+}
+
+/* Prepara el lienzo propio del editor de menus con la resolucion del
+ * proyecto. Se crea la primera vez y se redimensiona si las propiedades
+ * del proyecto cambian. */
+static void menus_doc_asegurar(void) {
+    int w = limitar(g.ajustes.ancho, MIN_LADO, LIENZO_MAX);
+    int h = limitar(g.ajustes.alto, MIN_LADO, LIENZO_MAX);
+    if (!g.doc_menus_listo) {
+        g.doc_menus = doc_nuevo(w, h, LIENZO);
+        if (!g.doc_menus.capas[0].pixeles) {
+            doc_liberar(&g.doc_menus);
+            return;
+        }
+        doc_componer_todo(&g.doc_menus);
+        g.doc_menus_listo = 1;
+    } else if (g.doc_menus.ancho != w || g.doc_menus.alto != h) {
+        doc_redimensionar(&g.doc_menus, w, h);
+        doc_componer_todo(&g.doc_menus);
+        /* Las instantaneas antiguas tienen el tamano anterior. */
+        pila_limpiar(&g.deshacer_menus);
+        pila_limpiar(&g.rehacer_menus);
+    }
+}
+
+/* Entra en el editor de menus: cambia `g.doc` por el lienzo del proyecto y
+ * guarda el documento de pintar (con su historial) en `doc_menus`. */
+static void menus_doc_entrar(void) {
+    menus_doc_asegurar();
+    if (!g.doc_menus_listo) return;
+    doc_intercambiar(&g.doc, &g.doc_menus);
+    intercambiar_pilas(&g.deshacer, &g.deshacer_menus);
+    intercambiar_pilas(&g.rehacer, &g.rehacer_menus);
+    seleccion_limpiar(&g.sel);
+}
+
+/* Sale del editor de menus: devuelve el documento de pintar y su historial. */
+static void menus_doc_salir(void) {
+    if (!g.doc_menus_listo) return;
+    doc_intercambiar(&g.doc, &g.doc_menus);
+    intercambiar_pilas(&g.deshacer, &g.deshacer_menus);
+    intercambiar_pilas(&g.rehacer, &g.rehacer_menus);
+    seleccion_limpiar(&g.sel);
+}
+
+/* Ajusta el documento activo al tipo de vista: el editor de menus usa su
+ * lienzo propio, el resto de vistas el documento de pintar. */
+void app_vista_documento(Vista anterior, Vista nueva) {
+    if (anterior == nueva) return;
+    if (anterior == VISTA_MENUS) menus_doc_salir();
+    if (nueva == VISTA_MENUS) menus_doc_entrar();
+}
+
+/* Las propiedades del proyecto mandan: si cambian estando en el editor de
+ * menus, el lienzo se redimensiona en el acto. */
+void app_menus_resolucion(void) {
+    int w, h;
+    if (g.vista != VISTA_MENUS || !g.doc_menus_listo) return;
+    w = limitar(g.ajustes.ancho, MIN_LADO, LIENZO_MAX);
+    h = limitar(g.ajustes.alto, MIN_LADO, LIENZO_MAX);
+    if (g.doc.ancho == w && g.doc.alto == h) return;
+    doc_redimensionar(&g.doc, w, h);
+    doc_componer_todo(&g.doc);
+    pila_limpiar(&g.deshacer);
+    pila_limpiar(&g.rehacer);
+    lienzo_actualizar();
+    app_invalidar();
+}
+
 void app_cambiar_vista(Vista vista) {
     int desde_paneles;
     int saliendo_menus;
+    Vista anterior;
     if (vista == g.vista) return;
+    anterior = g.vista;
     desde_paneles = (g.vista == VISTA_MODULOS || g.vista == VISTA_MENUS);
     saliendo_menus = (g.vista == VISTA_MENUS);
+    /* Cierra la edicion en curso sobre el lienzo que se va a ocultar. */
+    if (saliendo_menus || vista == VISTA_MENUS) {
+        if (g.texto_activo) texto_confirmar();
+        if (g.sel.activa && g.sel.flotante)
+            seleccion_soltar(&g.sel, &g.doc, &g.deshacer);
+    }
     g.vista = vista;
+    app_vista_documento(anterior, vista);
     g.menu_abierto = -1;
     /* Cancela cualquier arrastre del gestor al cambiar de modo. */
     g.modulo_arrastrando = 0;
@@ -1188,7 +1277,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_SETCURSOR: {
             int zona = LOWORD(lp);
             if (zona == HTCLIENT) {
-                if (lienzo_contiene(g.raton_x, g.raton_y) && g.vista == VISTA_PINTAR) {
+                if (lienzo_contiene(g.raton_x, g.raton_y) &&
+                    (g.vista == VISTA_PINTAR ||
+                     (g.vista == VISTA_MENUS && g.herramienta == H_TEXTO))) {
                     SetCursor(LoadCursorA(NULL, IDC_CROSS));
                 } else {
                     SetCursor(LoadCursorA(NULL, IDC_ARROW));
@@ -1222,7 +1313,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
  * empiece por "--" o el final de la linea. Asi `--captura ruta.bmp
  * --gestor` no arrastra las flags siguientes dentro del valor. */
 static char *arg_valor(char *cmd, const char *nombre) {
-    static char bufs[16][MAX_PATH];
+    static char bufs[32][MAX_PATH];
     static int buf_i = 0;
     char *p = cmd;
     size_t n = strlen(nombre);
@@ -1347,6 +1438,12 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
         char *herr_arg = arg_valor(cmd, "--herramienta");
         char *clics_arg = arg_valor(cmd, "--clics");
         char *arrastre_arg = arg_valor(cmd, "--arrastre");
+        /* En modo captura no se procesa el bucle de mensajes, asi que ni
+         * WM_SIZE ni WM_PAINT han preparado el buffer todavia. Se deja listo
+         * el lienzo antes de simular clics para que la interaccion parta de
+         * la geometria real y no de un lienzo 0,0,0,0. */
+        if (!g.pixeles) app_redimensionar(ANCHO_INICIAL, ALTO_INICIAL);
+        lienzo_actualizar();
         if (menu_arg) g.menu_abierto = atoi(menu_arg);
         if (vista_arg && strncmp(vista_arg, "mapa", 4) == 0) g.vista = VISTA_MAPA;
         /* Ruta de mapa para pruebas: carga el .mav antes de simular clics. */
@@ -1365,6 +1462,14 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
             }
         }
         if (strstr(cmd, "--tiles") != NULL) tiles_modo_entrar();
+        /* Captura limpia: oculta las ventanas flotantes que taparian el
+         * lienzo en las pruebas automatizadas. */
+        if (strstr(cmd, "--sin-ventanas") != NULL) {
+            g.panel_opciones = 0;
+            g.patron_visible = 0;
+            g.info_visible = 0;
+            g.tiles_visible = 0;
+        }
         if (strstr(cmd, "--gestor") != NULL) g.vista = VISTA_MODULOS;
         /* Item de prueba del gestor: nombre de un .mav de la carpeta maps. */
         {
@@ -1411,6 +1516,11 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                     g.vista = VISTA_MODULOS;
             }
         }
+        /* Entrada directa al editor de menus para pruebas. Va despues de
+         * cargar la logica para poder comprobar el lienzo a la resolucion
+         * del proyecto recien abierto. */
+        if (vista_arg && strncmp(vista_arg, "menus", 5) == 0)
+            app_alternar_editor_menus();
         /* Editor de codigo abierto por id de funcion (fase 8): como un
          * clic en el boton de la seccion FUNCIONES. */
         {
@@ -1543,6 +1653,50 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 g.boton_izq = 0;
                 app_soltar(ax1, ay1, 0);
             }
+        }
+        /* Teclado simulado para la herramienta de texto despues de
+         * --arrastre: permite definir una caja que cruza tiles y escribir. */
+        {
+            char *tt_arg = arg_valor(cmd, "--texto-teclas");
+            if (tt_arg) {
+                const char *p = tt_arg;
+                while (*p) {
+                    if (p[0] == '\\' && p[1]) {
+                        if (p[1] == 'b') { app_tecla(VK_BACK, 0, 0); p += 2; continue; }
+                        if (p[1] == 'n') { app_tecla(VK_RETURN, 0, 0); p += 2; continue; }
+                        if (p[1] == 'e') { app_tecla(VK_ESCAPE, 0, 0); p += 2; continue; }
+                        if (p[1] == '\\') { app_caracter('\\'); p += 2; continue; }
+                        p++;
+                        continue;
+                    }
+                    app_caracter((unsigned char)*p);
+                    p++;
+                }
+            }
+        }
+        /* Confirmacion simulada del texto: un clic simple fuera de la caja. */
+        {
+            char *cf_arg = arg_valor(cmd, "--clic-final");
+            if (cf_arg) {
+                int cx = 0, cy = 0;
+                if (sscanf(cf_arg, "%d,%d", &cx, &cy) == 2) {
+                    g.boton_izq = 1;
+                    app_pulsar(cx, cy, 0);
+                    g.boton_izq = 0;
+                    app_soltar(cx, cy, 0);
+                    /* El clic fuera confirma y abre una caja nueva vacia; se
+                     * descarta para que la captura muestre solo lo estampado. */
+                    if (g.texto_activo && g.texto.largo == 0)
+                        app_tecla(VK_ESCAPE, 0, 0);
+                }
+            }
+        }
+        /* Deshacer simulado tras el texto para comprobar la instantanea. */
+        if (strstr(cmd, "--deshacer") != NULL) {
+            app_tecla(0x5A, 1, 0);
+            /* La instantanea de tiles reactiva el visor; en captura limpia se
+             * vuelve a ocultar para que no tape el lienzo. */
+            if (strstr(cmd, "--sin-ventanas") != NULL) g.tiles_visible = 0;
         }
         /* Paneo simulado del editor de mapas con el boton central. */
         {
@@ -1727,6 +1881,48 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
         if (raton_arg) {
             int rx = 0, ry = 0;
             if (sscanf(raton_arg, "%d,%d", &rx, &ry) == 2) app_mover(rx, ry, 0);
+        }
+        /* Volcado de estado para pruebas: vista, documento activo y
+         * geometria del lienzo en una linea de texto. */
+        {
+            char *volcar_arg = arg_valor(cmd, "--volcar");
+            if (volcar_arg) {
+                char volcar_ruta[MAX_PATH];
+                int vn = 0;
+                FILE *vf;
+                Zona vt;
+                Lienzo vl;
+                while (volcar_arg[vn] && volcar_arg[vn] != ' ' &&
+                       volcar_arg[vn] != '\t' && vn < MAX_PATH - 1) {
+                    volcar_ruta[vn] = volcar_arg[vn];
+                    vn++;
+                }
+                volcar_ruta[vn] = 0;
+                vf = volcar_ruta[0] ? fopen(volcar_ruta, "w") : NULL;
+                if (vf) {
+                    vt = zona_trabajo();
+                    vl = g.lienzo;
+                    fprintf(vf,
+                            "ancho=%d alto=%d vista=%d doc=%dx%d "
+                            "menus=%dx%d listo=%d ajustes=%dx%d "
+                            "lienzo=%d,%d,%d,%d zoom=%d trab=%d,%d,%d,%d "
+                            "menu=%d zona_menus=%d,%d,%d,%d args=%s|%s\n",
+                            g.ancho, g.alto, (int)g.vista,
+                            g.doc.ancho, g.doc.alto,
+                            g.doc_menus.ancho, g.doc_menus.alto,
+                            g.doc_menus_listo,
+                            g.ajustes.ancho, g.ajustes.alto,
+                            vl.x0, vl.y0, vl.x1, vl.y1, g.zoom_idx,
+                            vt.x, vt.y, vt.ancho, vt.alto,
+                            g.menu_abierto,
+                            modulos_lienzo_zona().x, modulos_lienzo_zona().y,
+                            modulos_lienzo_zona().ancho,
+                            modulos_lienzo_zona().alto,
+                            menu_arg ? menu_arg : "-",
+                            clics_arg ? clics_arg : "-");
+                    fclose(vf);
+                }
+            }
         }
         app_dibujar();
         ok = imagen_guardar_bmp(captura, g.pixeles, g.ancho, g.alto);
