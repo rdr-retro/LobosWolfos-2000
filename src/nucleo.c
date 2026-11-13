@@ -1637,23 +1637,41 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
         }
         /* Arrastre simulado "x0,y0;x1,y1": pulsa en el primer punto, recorre
          * el trayecto con el boton izquierdo apretado y suelta en el segundo.
-         * Sirve para probar gestos como el redimensionado del lienzo. */
+         * Admite varios gestos separados por "|" y un prefijo opcional
+         * "herramienta:" en cada uno, por ejemplo
+         * "12:100,200;300,400|15:150,250;150,350". Asi se puede dibujar y
+         * despues mover una seleccion en la misma prueba. */
         if (arrastre_arg) {
-            int ax0 = 0, ay0 = 0, ax1 = 0, ay1 = 0;
-            if (sscanf(arrastre_arg, "%d,%d;%d,%d", &ax0, &ay0, &ax1, &ay1) == 4) {
-                int paso;
-                app_mover(ax0, ay0, 0);
-                g.boton_izq = 1;
-                app_pulsar(ax0, ay0, 0);
-                for (paso = 1; paso <= 24; paso++) {
-                    int mx = ax0 + (ax1 - ax0) * paso / 24;
-                    int my = ay0 + (ay1 - ay0) * paso / 24;
-                    app_mover(mx, my, 1);
+            const char *seg = arrastre_arg;
+            while (*seg) {
+                int ax0 = 0, ay0 = 0, ax1 = 0, ay1 = 0, n = 0, herr = -1;
+                const char *p = seg;
+                if (sscanf(p, "%d:%n", &herr, &n) == 1 && n > 0) p += n;
+                if (sscanf(p, "%d,%d;%d,%d%n", &ax0, &ay0, &ax1, &ay1, &n) != 4)
+                    break;
+                if (herr >= 0 && herr < H_TOTAL) g.herramienta = (Herramienta)herr;
+                {
+                    int paso;
+                    app_mover(ax0, ay0, 0);
+                    g.boton_izq = 1;
+                    app_pulsar(ax0, ay0, 0);
+                    for (paso = 1; paso <= 24; paso++) {
+                        int mx = ax0 + (ax1 - ax0) * paso / 24;
+                        int my = ay0 + (ay1 - ay0) * paso / 24;
+                        app_mover(mx, my, 1);
+                    }
+                    g.boton_izq = 0;
+                    app_soltar(ax1, ay1, 0);
                 }
-                g.boton_izq = 0;
-                app_soltar(ax1, ay1, 0);
+                seg = p + n;
+                while (*seg == '|' || *seg == ' ' || *seg == ';') seg++;
             }
         }
+        /* Portapapeles simulado tras el arrastre: copiar/cortar la seleccion
+         * y pegar el bloque flotante para comprobar que se dibuja. */
+        if (strstr(cmd, "--copiar") != NULL) pintura_copiar(0);
+        if (strstr(cmd, "--cortar") != NULL) pintura_copiar(1);
+        if (strstr(cmd, "--pegar") != NULL) pintura_pegar();
         /* Teclado simulado para la herramienta de texto despues de
          * --arrastre: permite definir una caja que cruza tiles y escribir. */
         {

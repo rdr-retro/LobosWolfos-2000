@@ -1312,7 +1312,7 @@ void pintura_seleccion_iniciar(int x, int y, int boton, int libre) {
     if (g.sel.activa) {
         Zona caja = seleccion_caja(&g.sel);
         if (caja.ancho > 0 && dx >= caja.x && dy >= caja.y &&
-            dx < caja.x + caja.ancho && dy < caja.y + caja.ancho && seleccion_contiene(&g.sel, dx, dy)) {
+            dx < caja.x + caja.ancho && dy < caja.y + caja.alto && seleccion_contiene(&g.sel, dx, dy)) {
             pila_guardar(&g.deshacer, &g.doc);
             pila_limpiar(&g.rehacer);
             seleccion_levantar(&g.sel, &g.doc);
@@ -1336,6 +1336,11 @@ void pintura_seleccion_iniciar(int x, int y, int boton, int libre) {
         g.sel.tipo = 0;
         g.sel.x0 = dx; g.sel.y0 = dy; g.sel.x1 = dx + 1; g.sel.y1 = dy + 1;
         g.sel.mascara = NULL;
+        g.sel_moviendo = 0;
+        /* Esquina de anclaje fija: no usa las coordenadas normalizadas, que
+         * se intercambian al arrastrar hacia arriba o hacia la izquierda. */
+        g.sel_ini_x = dx;
+        g.sel_ini_y = dy;
         g.sel_arrastrando = 3;
     }
 }
@@ -1365,7 +1370,7 @@ void pintura_seleccion_mover(int x, int y) {
         dy = (int)floorf((float)(y - g.lienzo.y0) / f);
     }
     if (g.sel_arrastrando == 3) {
-        int x0 = g.sel.x0, y0 = g.sel.y0;
+        int x0 = g.sel_ini_x, y0 = g.sel_ini_y;
         int x1 = dx, y1 = dy;
         if (x1 < x0) { int t = x0; x0 = x1; x1 = t; }
         if (y1 < y0) { int t = y0; y0 = y1; y1 = t; }
@@ -1782,10 +1787,65 @@ void pintura_dibujar_lienzo(void) {
     pintura_dibujar_solo_overlays();
 }
 
+/* Contenido flotante de una seleccion levantada (mover, cortar o pegar). La
+ * capa de origen queda vacia al levantar, asi que sin esto el bloque parece
+ * desaparecer. Se muestrea en espacio de pantalla con la misma division entera
+ * que el blit del lienzo y se recorta a la zona de trabajo. */
+static void pintura_dibujar_flotante(void) {
+    Zona tr = zona_trabajo();
+    Zona caja;
+    int cw = g.lienzo.x1 - g.lienzo.x0;
+    int ch = g.lienzo.y1 - g.lienzo.y0;
+    int w, h, x, y, x0, y0, x1, y1;
+
+    if (!g.sel.activa || !g.sel.flotante) return;
+    if (cw <= 0 || ch <= 0 || g.doc.ancho <= 0 || g.doc.alto <= 0) return;
+    caja = seleccion_caja(&g.sel);
+    w = caja.ancho;
+    h = caja.alto;
+    if (w <= 0 || h <= 0) return;
+
+    pantalla_desde_doc(caja.x, caja.y, &x0, &y0);
+    pantalla_desde_doc_fin(caja.x + w, caja.y + h, &x1, &y1);
+    if (x0 < tr.x) x0 = tr.x;
+    if (y0 < tr.y) y0 = tr.y;
+    if (x1 > zona_derecha(tr)) x1 = zona_derecha(tr);
+    if (y1 > zona_abajo(tr)) y1 = zona_abajo(tr);
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > g.ancho) x1 = g.ancho;
+    if (y1 > g.alto) y1 = g.alto;
+    if (x0 >= x1 || y0 >= y1) return;
+
+    for (y = y0; y < y1; y++) {
+        int sy = (int)(((long long)(y - g.lienzo.y0) * g.doc.alto) / ch);
+        int ly;
+        if (sy < caja.y || sy >= caja.y + h) continue;
+        ly = sy - caja.y;
+        for (x = x0; x < x1; x++) {
+            int sx = (int)(((long long)(x - g.lienzo.x0) * g.doc.ancho) / cw);
+            int lx, alfa;
+            u32 src;
+            size_t p;
+            if (sx < caja.x || sx >= caja.x + w) continue;
+            lx = sx - caja.x;
+            if (g.sel.mascara && !g.sel.mascara[ly * w + lx]) continue;
+            src = g.sel.flotante[ly * w + lx];
+            alfa = (int)((src >> 24) & 0xFF);
+            if (alfa <= 0) continue;
+            p = (size_t)y * g.ancho + x;
+            g.pixeles[p] = color_mezclar(g.pixeles[p], src, alfa);
+        }
+    }
+}
+
 /* Mangos, seleccion, caja de texto y cursor del documento activo. Se separa
  * del lienzo para poder pintarlo sobre la cuadricula del modo tiles. */
 void pintura_dibujar_solo_overlays(void) {
     float f = zoom_escala(zoom_porcentaje(g.zoom_idx));
+
+    /* Bloque flotante: debe verse mientras se arrastra, se corta o se pega. */
+    pintura_dibujar_flotante();
 
     /* Seleccion. */
     if (g.sel.activa) {

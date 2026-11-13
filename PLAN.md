@@ -523,6 +523,23 @@ el motor ya compila.
   deja ambos tiles en blanco en un solo paso. El modo pintar normal y el
   editor de menus conservan su texto (2466 y 327 pixeles oscuros de prueba).
 
+- **13-11-2026 (fase 17, selección rectangular)** - Al arrastrar una
+  selección para moverla o cortarla, el bloque levantado ya se dibuja sobre el
+  lienzo: `pintura_dibujar_flotante` muestrea `g.sel.flotante` con la misma
+  división entera que el blit del lienzo, mezcla el alfa de cada píxel y
+  recorta el resultado al área de trabajo (también en modo tiles). La caja
+  rectangular guarda la esquina de anclaje en `g.sel_ini_x/y` al empezar el
+  arrastre, en vez de reutilizar las coordenadas normalizadas, así que
+  seleccionar de abajo hacia arriba o de derecha a izquierda conserva el
+  tamaño y el punto de origen. También se corrigió el límite vertical del clic
+  dentro de una selección, que usaba el ancho en lugar del alto. Verificado con
+  el arnés ampliado (`--arrastre` acepta varios gestos separados por `|` con
+  prefijo de herramienta, y `--copiar/--cortar/--pegar`): una selección de
+  (556,399) a (456,299) dibuja las hormigas en todo el borde 456..555 x
+  299..398; un rectángulo negro movido con tres gestos deja hueco blanco en el
+  origen y el bloque negro visible en (680,530), y el corte deja el hueco
+  limpio.
+
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,

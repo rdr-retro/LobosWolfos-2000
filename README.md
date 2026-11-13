@@ -410,8 +410,11 @@ El editor acepta además flags de línea de comandos para pruebas
 automáticas sin tocar la ventana: `--captura ruta` (dibuja un fotograma
 y guarda el BMP), `--gestor` (abre el gestor de lógica), `--abrir-logica
 ruta` y `--guardar-logica ruta` (abrir y guardar el `.logic` sin
-diálogo), `--clics "x,y;x,y"` y `--arrastre "x0,y0;x1,y1"` (clics y
-arrastres simulados), `--vista menus` (abre directamente el editor de
+diálogo), `--clics "x,y;x,y"` y `--arrastre "x0,y0;x1,y1"`
+(gestos simulados; `--arrastre` admite varios gestos separados por `|` y un
+prefijo de herramienta, como `"12:100,200;300,400|15:150,250;150,350"`),
+`--copiar`, `--cortar` y `--pegar` (portapapeles tras el arrastre),
+`--vista menus` (abre directamente el editor de
 menús, después de cargar la lógica si se indica) y `--volcar ruta`
 (escribe una línea con la vista, los documentos, los ajustes del proyecto,
 la geometría del lienzo y el estado de los menús para comparar pruebas),
