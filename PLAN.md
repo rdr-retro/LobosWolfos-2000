@@ -540,6 +540,28 @@ el motor ya compila.
   origen y el bloque negro visible en (680,530), y el corte deja el hueco
   limpio.
 
+- **13-11-2026 (fase 18, barra de título integrada)** - Las pestañas del
+  navegador comparten una sola franja con los controles de ventana. La ventana
+  se crea como `WS_POPUP | WS_THICKFRAME` (Windows vuelve a añadir `WS_CAPTION`
+  a cualquier ventana con marco que no sea popup) y después se activan
+  `WS_SYSMENU`, `WS_MINIMIZEBOX` y `WS_MAXIMIZEBOX`; el área cliente se corrige
+  a 1200x700 tras crear la ventana. En la franja de 34 px (`TAB_BARRA_ALTO`) se
+  dibuja el caption clásico (degradado azul o gris sin foco, icono y título a la
+  derecha), los controles minimizar/maximizar/cerrar a la izquierda y las
+  pestañas a continuación, empezando en `TITULO_TABS_X` (116 px); el botón `+`
+  sigue a la última pestaña. Las pestañas se reparten el ancho disponible y solo
+  se encogen por debajo del mínimo (92 px) cuando hay muchas, con suelo de 44 px
+  (24 px si la ventana es muy estrecha). `WM_NCHITTEST` devuelve `HTCAPTION` en
+  los huecos de la franja y `HTCLIENT` sobre controles, pestañas y `+`:
+  arrastrar, doble clic para maximizar/restaurar y el menú del sistema siguen
+  funcionando, y los botones actúan al soltar (se descartan en
+  `WM_CAPTURECHANGED`). Verificado por píxeles y capturas: en 1200x700 el
+  degradado va de (11,38,108) a (55,106,161), el icono ocupa 6..21 x 9..24, los
+  botones 30..105, la pestaña activa empieza en 116 y el `+` en 217..241; con
+  `--maximizar` el buffer es 1920x1080 y la franja se mantiene; sin foco la
+  franja es gris (154,154,154). Clics simulados sobre los controles maximizan,
+  restauran, minimizan y cierran; `+` crea una pestaña y la `x` la cierra.
+
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,

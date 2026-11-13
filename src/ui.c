@@ -924,17 +924,50 @@ Zona pestanas_zona(void) {
     return zona_hacer(0, 0, g.ancho, TAB_BARRA_ALTO);
 }
 
+/* Un control de ventana de la barra de titulo (0 minimizar, 1 maximizar o
+ * restaurar, 2 cerrar). */
+Zona titulo_boton_zona(int indice) {
+    int x;
+    if (indice < 0 || indice >= TITULO_BOTONES) return zona_vacia();
+    x = TITULO_BOTONES_X + indice * (TITULO_BOTON_LADO + TITULO_BOTON_HUECO);
+    return zona_hacer(x, (TAB_BARRA_ALTO - TITULO_BOTON_ALTO) / 2,
+                      TITULO_BOTON_LADO, TITULO_BOTON_ALTO);
+}
+
+int titulo_boton_en(int x, int y) {
+    int i;
+    for (i = 0; i < TITULO_BOTONES; i++) {
+        if (zona_contiene(titulo_boton_zona(i), x, y)) return i;
+    }
+    return -1;
+}
+
+/* Zonas de la barra de titulo que deben recibir clics del cliente (controles,
+ * pestanas y boton de nueva pestana). El resto de la franja se comporta como
+ * el caption nativo: arrastra la ventana y el doble clic maximiza o restaura. */
+int titulo_zona_interactiva(int x, int y) {
+    if (y < 0 || y >= TAB_BARRA_ALTO) return 0;
+    if (titulo_boton_en(x, y) >= 0) return 1;
+    if (pestana_en(x, y) >= 0) return 1;
+    if (zona_contiene(pestana_nueva_zona(), x, y)) return 1;
+    return 0;
+}
+
 /* Ancho de una pestana. Se reparte el espacio disponible entre todas para que
- * nunca tapen el boton de nueva pestana, con un minimo y un maximo. */
+ * nunca tapen el boton de nueva pestana, con un minimo y un maximo. El
+ * espacio empieza a la derecha de los controles de ventana. */
 static int pestana_ancho(int indice) {
     int n = g.num_pestanas > 0 ? g.num_pestanas : 1;
-    int disponible = g.ancho - TAB_MARGEN * 2 - TAB_NUEVO_LADO - 12 -
-                     (n - 1) * TAB_HUECO;
+    int disponible = g.ancho - TITULO_TABS_X - TAB_MARGEN -
+                     TAB_NUEVO_LADO - 12 - (n - 1) * TAB_HUECO;
     int maximo = disponible / n;
     int ancho;
     const char *titulo = pestanas_titulo(indice);
     if (maximo > TAB_ANCHO_MAX) maximo = TAB_ANCHO_MAX;
-    if (maximo < TAB_ANCHO_MIN) maximo = TAB_ANCHO_MIN;
+    /* Si hay muchas pestanas se dejan encoger por debajo del minimo normal
+     * para que todas quepan y el boton + siga visible; por debajo de 44 px
+     * solo quedan el favicon y el cierre, y el suelo final es 24 px. */
+    if (maximo < 44) maximo = (maximo < 24) ? 24 : maximo;
     /* favicon + margen + texto + punto de modificado + cerrar */
     ancho = texto_ancho(titulo) + 61;
     if (ancho < TAB_ANCHO_MIN) ancho = TAB_ANCHO_MIN;
@@ -943,7 +976,7 @@ static int pestana_ancho(int indice) {
 }
 
 static int pestana_x(int indice) {
-    int i, x = TAB_MARGEN;
+    int i, x = TITULO_TABS_X;
     for (i = 0; i < indice; i++) x += pestana_ancho(i) + TAB_HUECO;
     return x;
 }
@@ -964,7 +997,7 @@ Zona pestana_cerrar_zona(int indice) {
 }
 
 Zona pestana_nueva_zona(void) {
-    int x = TAB_MARGEN;
+    int x = TITULO_TABS_X;
     int i;
     for (i = 0; i < g.num_pestanas; i++) x += pestana_ancho(i) + TAB_HUECO;
     x += 6;
@@ -982,6 +1015,8 @@ int pestana_en(int x, int y) {
 
 /* Prototipo: mezcla de cobertura usada por el borde suavizado. */
 static void mezclar_cobertura(int x, int y, u32 color, int alfa);
+/* Prototipo: degradado de la barra de titulo (definido mas abajo). */
+static u32 mezclar_color_redondeado(u32 a, u32 b, float t);
 
 /* Interiores de la pestana redondeada. La base queda abierta: la forma sigue
  * hasta el borde inferior de la barra. */
@@ -1105,6 +1140,94 @@ static void dibujar_cruz(int x, int y, int lado, u32 color) {
     dibujar_linea(x + lado - m - 1, y + m, x + m, y + lado - m - 1, color);
 }
 
+/* Fondo de la barra de titulo: degradado clasico azul (o gris si la ventana
+ * no tiene el foco), linea de luz arriba y separador con la barra de menus. */
+static void dibujar_fondo_titulo(void) {
+    u32 arriba = g.ventana_activa ? TITULO_FONDO_A : TITULO_FONDO_OFF_A;
+    u32 abajo = g.ventana_activa ? TITULO_FONDO_B : TITULO_FONDO_OFF_B;
+    int y;
+    for (y = 0; y < TAB_BARRA_ALTO; y++) {
+        float t = (float)y / (float)(TAB_BARRA_ALTO - 1);
+        u32 c = mezclar_color_redondeado(arriba, abajo, t);
+        dibujar_rect(0, y, g.ancho, y + 1, 0xFF000000u | c);
+    }
+    dibujar_rect(0, 0, g.ancho, 1,
+                 g.ventana_activa ? TITULO_LUZ : TITULO_LUZ_OFF);
+    dibujar_rect(0, TAB_BARRA_ALTO - 2, g.ancho, TAB_BARRA_ALTO,
+                 g.ventana_activa ? TITULO_BORDE : TITULO_BORDE_OFF);
+}
+
+/* Icono de la aplicacion, como en el caption nativo. Se carga una sola vez. */
+static void dibujar_icono_titulo(void) {
+    static HICON icono = NULL;
+    static int intentado = 0;
+    if (!intentado) {
+        intentado = 1;
+        icono = (HICON)LoadImageA(GetModuleHandleA(NULL), MAKEINTRESOURCEA(IDI_APP),
+                                  IMAGE_ICON, TITULO_ICONO_LADO, TITULO_ICONO_LADO,
+                                  LR_DEFAULTCOLOR);
+    }
+    if (!icono || !g.memdc) return;
+    DrawIconEx(g.memdc, TITULO_ICONO_X,
+               (TAB_BARRA_ALTO - TITULO_ICONO_LADO) / 2,
+               icono, TITULO_ICONO_LADO, TITULO_ICONO_LADO, 0, NULL, DI_NORMAL);
+}
+
+/* Control de ventana con el bisel clasico de Windows 2000. */
+static void dibujar_control_titulo(int indice, int hover, int pulsado) {
+    Zona z = titulo_boton_zona(indice);
+    int cx = z.x + z.ancho / 2;
+    int cy = z.y + z.alto / 2;
+    int cerrar = (indice == TITULO_BOTON_CERRAR);
+    u32 cara, glifo;
+    if (pulsado) cara = TITULO_BOTON_PULSA;
+    else if (cerrar && hover) cara = TITULO_CERRAR_HOVER;
+    else if (hover) cara = TITULO_BOTON_HOVER;
+    else cara = TITULO_BOTON;
+    glifo = (cerrar && (hover || pulsado)) ? 0x00FFFFFFu : 0x00000000u;
+
+    dibujar_rect_z(z, cara);
+    dibujar_rect(z.x, z.y, zona_derecha(z), z.y + 1,
+                 pulsado ? TITULO_BOTON_SOMBRA : TITULO_BOTON_LUZ);
+    dibujar_rect(z.x, z.y, z.x + 1, zona_abajo(z),
+                 pulsado ? TITULO_BOTON_SOMBRA : TITULO_BOTON_LUZ);
+    dibujar_rect(z.x, zona_abajo(z) - 1, zona_derecha(z), zona_abajo(z),
+                 pulsado ? TITULO_BOTON_LUZ : TITULO_BOTON_SOMBRA);
+    dibujar_rect(zona_derecha(z) - 1, z.y, zona_derecha(z), zona_abajo(z),
+                 pulsado ? TITULO_BOTON_LUZ : TITULO_BOTON_SOMBRA);
+
+    if (indice == TITULO_BOTON_MIN) {
+        dibujar_rect(cx - 4, cy + 3, cx + 5, cy + 5, glifo);
+    } else if (indice == TITULO_BOTON_MAX) {
+        if (g.hwnd && IsZoomed(g.hwnd)) {
+            /* Restaurar: dos ventanas superpuestas. */
+            dibujar_marco(cx - 4, cy - 5, cx + 5, cy + 4, glifo);
+            dibujar_marco(cx - 1, cy - 2, cx + 7, cy + 6, glifo);
+            dibujar_rect(cx - 1, cy - 2, cx + 7, cy - 1, glifo);
+        } else {
+            dibujar_marco(cx - 5, cy - 4, cx + 6, cy + 5, glifo);
+            dibujar_rect(cx - 5, cy - 4, cx + 6, cy - 3, glifo);
+        }
+    } else {
+        dibujar_linea(cx - 4, cy - 4, cx + 4, cy + 4, glifo);
+        dibujar_linea(cx + 4, cy - 4, cx - 4, cy + 4, glifo);
+    }
+}
+
+/* Titulo de la ventana a la derecha de las pestanas. Se omite si no cabe. */
+static void dibujar_titulo_texto(Zona nueva) {
+    int derecha = g.ancho - 10;
+    int ancho, x, y;
+    if (!g.titulo[0]) return;
+    ancho = texto_menu_ancho(g.titulo);
+    x = derecha - ancho;
+    if (x < zona_derecha(nueva) + 8) return;
+    y = (TAB_BARRA_ALTO - texto_menu_alto()) / 2;
+    dibujar_texto_menu(x + 1, y + 1, g.titulo, 0x00101820u);
+    dibujar_texto_menu(x, y, g.titulo,
+                       g.ventana_activa ? TITULO_TEXTO : TITULO_TEXTO_OFF);
+}
+
 void ui_dibujar_pestanas(void) {
     int i;
     int mouse_x = g.raton_x, mouse_y = g.raton_y;
@@ -1112,11 +1235,15 @@ void ui_dibujar_pestanas(void) {
     int tab_hover = raton_en_barra ? pestana_en(mouse_x, mouse_y) : -1;
     Zona nueva = pestana_nueva_zona();
 
-    /* Fondo de la franja y linea de union con la barra de menus. */
-    dibujar_rect(0, 0, g.ancho, TAB_BARRA_ALTO, TAB_BARRA_FONDO);
-    dibujar_rect(0, 0, g.ancho, 1, TAB_BARRA_LUZ);
-    dibujar_rect(0, TAB_BARRA_ALTO - 2, g.ancho, TAB_BARRA_ALTO,
-                 TAB_BARRA_BORDE);
+    /* Una sola barra superior: controles de ventana + pestanas del navegador. */
+    dibujar_fondo_titulo();
+    dibujar_icono_titulo();
+    for (i = 0; i < TITULO_BOTONES; i++) {
+        int hover = raton_en_barra &&
+                    zona_contiene(titulo_boton_zona(i), mouse_x, mouse_y);
+        dibujar_control_titulo(i, hover, g.titulo_boton_pulsado == i);
+    }
+    dibujar_titulo_texto(nueva);
 
     for (i = 0; i < g.num_pestanas; i++) {
         Zona t = pestana_zona(i);
@@ -1163,15 +1290,15 @@ void ui_dibujar_pestanas(void) {
                      sobre_cerrar ? 0x00FFFFFFu : texto);
     }
 
-    /* Boton circular de nueva pestana. */
+    /* Boton circular de nueva pestana, con el mismo bisel que los controles. */
     if (zona_derecha(nueva) < g.ancho - 2) {
         int hover = raton_en_barra && zona_contiene(nueva, mouse_x, mouse_y);
         int cx = nueva.x + nueva.ancho / 2;
         int cy = nueva.y + nueva.alto / 2;
-        u32 color = hover ? TAB_ACTIVA_TEXTO : TAB_INACTIVA_TEXTO;
-        dibujar_circulo(cx, cy, 9, hover ? TAB_ACTIVA_BORDE : TAB_BARRA_BORDE, 1);
+        u32 color = 0x00000000u;
+        dibujar_circulo(cx, cy, 9, TITULO_BOTON_SOMBRA, 1);
         dibujar_circulo(cx, cy, 8,
-                        hover ? TAB_HOVER_FONDO : TAB_BARRA_FONDO, 1);
+                        hover ? TITULO_BOTON_HOVER : TITULO_BOTON, 1);
         dibujar_rect(cx - 5, cy - 1, cx + 6, cy + 1, color);
         dibujar_rect(cx - 1, cy - 5, cx + 1, cy + 6, color);
     }

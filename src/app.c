@@ -822,6 +822,24 @@ int clic_pestanas(int x, int y, int boton) {
     return 1;
 }
 
+/* Accion de un control de la barra de titulo propia. */
+void titulo_accion(int boton) {
+    if (!g.hwnd) return;
+    switch (boton) {
+        case TITULO_BOTON_MIN:
+            ShowWindow(g.hwnd, SW_MINIMIZE);
+            break;
+        case TITULO_BOTON_MAX:
+            ShowWindow(g.hwnd, IsZoomed(g.hwnd) ? SW_RESTORE : SW_MAXIMIZE);
+            break;
+        case TITULO_BOTON_CERRAR:
+            PostMessageA(g.hwnd, WM_CLOSE, 0, 0);
+            break;
+        default:
+            break;
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /* Gestor de logica: elementos del panel izquierdo                     */
 /* ------------------------------------------------------------------ */
@@ -2307,8 +2325,16 @@ void app_pulsar(int x, int y, int boton) {
         }
     }
 
-    /* La franja de pestanas esta por encima de la barra de menus. */
+    /* La barra de titulo integra los controles de ventana y las pestanas. */
     if (y < TAB_BARRA_ALTO) {
+        int tb = (boton == 0) ? titulo_boton_en(x, y) : -1;
+        if (tb >= 0) {
+            g.titulo_boton_pulsado = tb;
+            g.menu_abierto = -1;
+            app_invalidar();
+            return;
+        }
+        g.titulo_boton_pulsado = -1;
         clic_pestanas(x, y, boton);
         return;
     }
@@ -2413,6 +2439,13 @@ void app_soltar(int x, int y, int boton) {
     g.raton_y = y;
     if (g.ajustes_visible) {
         ajustes_soltar(x, y);
+        return;
+    }
+    if (g.titulo_boton_pulsado >= 0) {
+        int tb = g.titulo_boton_pulsado;
+        g.titulo_boton_pulsado = -1;
+        if (boton == 0 && titulo_boton_en(x, y) == tb) titulo_accion(tb);
+        app_invalidar();
         return;
     }
     g.opcion_arrastrada = -1;
@@ -2740,6 +2773,8 @@ void app_caracter(int ch) {
 void app_doble_clic(int x, int y) {
     if (g.ajustes_visible) return;
     if (y >= 0 && y < TAB_BARRA_ALTO) {
+        /* Los controles de ventana tienen prioridad sobre el doble clic. */
+        if (titulo_boton_en(x, y) >= 0) return;
         if (pestana_en(x, y) < 0 &&
             !zona_contiene(pestana_nueva_zona(), x, y))
             pestanas_nueva_modo();

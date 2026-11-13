@@ -14,7 +14,8 @@ para cargar y guardar PNG.
 - Herramienta de texto con varias fuentes y tamaños.
 - Patrón de textura repetido, visor de mosaico y guardado de tiles en PNG.
 - Pestañas de modo: Pintar, Tiles, Mapa y patrón comparten el mismo documento;
-  cada pestaña conserva su vista, zoom y desplazamiento.
+  cada pestaña conserva su vista, zoom y desplazamiento. Las pestañas viven en
+  la barra de título, junto a los controles de ventana (fase 18).
 - Gestor de lógica: paneles izquierdo, derecho e inferior (los laterales del
   mismo ancho), un botón de item arrastrable y un lienzo desplazable con
   rejilla. Los items son mapas `.mav` de la carpeta `maps` junto al ejecutable:
@@ -426,6 +427,7 @@ la herramienta de texto después de `--arrastre`, también con escapes),
 `--clic-final x,y` (confirma el texto con un clic y descarta la caja vacía
 que abre el clic), `--deshacer` (pulsa `Ctrl+Z` al final), `--sin-ventanas`
 (oculta opciones, patrón, información y visor de tiles en las capturas),
+`--maximizar` (captura con la ventana maximizada),
 `--funcion-borrar x,y` (clic derecho simulado
 que pide confirmación de borrado) y `--modulos-rueda x,y,delta[,ctrl]`
 (la rueda del gestor, que desplaza la sección FUNCIONES). Para la vista

@@ -457,6 +457,7 @@ void app_actualizar_titulo(void) {
         }
     }
     titulo[sizeof(titulo) - 1] = 0;
+    recortar_texto(g.titulo, titulo, sizeof(g.titulo));
     /* El titulo lleva acentos en UTF-8: se convierte a UTF-16 para que
      * SetWindowTextW los muestre bien en la barra de titulos. */
     {
@@ -466,6 +467,7 @@ void app_actualizar_titulo(void) {
         else
             SetWindowTextA(g.hwnd, titulo);
     }
+    app_invalidar();
 }
 
 void app_dibujar(void) {
@@ -665,6 +667,8 @@ int app_iniciar(void) {
     g.modulo_drag_i = -1;
     g.modulo_snap_linea_x = -1;
     g.modulo_snap_linea_y = -1;
+    g.ventana_activa = 1;
+    g.titulo_boton_pulsado = -1;
     cargar_preferencias();
     cargar_paleta();
 
@@ -1174,8 +1178,33 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             app_redimensionar(LOWORD(lp), HIWORD(lp));
             app_invalidar();
             return 0;
+        case WM_ACTIVATE:
+            g.ventana_activa = (LOWORD(wp) != WA_INACTIVE);
+            if (!g.ventana_activa) g.titulo_boton_pulsado = -1;
+            app_invalidar();
+            return 0;
+        case WM_CAPTURECHANGED:
+            if (g.titulo_boton_pulsado >= 0) {
+                g.titulo_boton_pulsado = -1;
+                app_invalidar();
+            }
+            return 0;
         case WM_ERASEBKGND:
             return 1;
+        case WM_NCHITTEST: {
+            /* La barra de titulo se dibuja en el area cliente. Solo los
+             * controles y las pestanas reciben clics; el resto se comporta
+             * como el caption nativo (arrastrar, doble clic, menu sistema). */
+            LRESULT ht = DefWindowProcA(hwnd, msg, wp, lp);
+            POINT p;
+            p.x = GET_X_LPARAM(lp);
+            p.y = GET_Y_LPARAM(lp);
+            ScreenToClient(hwnd, &p);
+            if (ht == HTCLIENT && p.y >= 0 && p.y < TAB_BARRA_ALTO &&
+                !titulo_zona_interactiva(p.x, p.y))
+                return HTCAPTION;
+            return ht;
+        }
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC dc = BeginPaint(hwnd, &ps);
@@ -1363,7 +1392,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
     WNDCLASSEXA wc;
     HWND hwnd;
     MSG msg;
-    RECT r;
+    DWORD estilo;
     HMODULE user32;
     char *captura;
     (void)prev;
@@ -1393,19 +1422,46 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
         return 1;
     }
 
-    r.left = 0; r.top = 0;
-    r.right = ANCHO_INICIAL; r.bottom = ALTO_INICIAL;
-    AdjustWindowRectEx(&r, WS_OVERLAPPEDWINDOW, FALSE, 0);
-    hwnd = CreateWindowExA(0, "LobosWolfos2000", TP_NOMBRE " " TP_VERSION,
-                           WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
-                           CW_USEDEFAULT, CW_USEDEFAULT,
-                           r.right - r.left, r.bottom - r.top,
-                           NULL, NULL, inst, NULL);
+    /* Sin caption nativo: la barra de titulo y las pestanas comparten una
+     * sola franja dibujada en el cliente. Se crea como ventana emergente
+     * (WS_POPUP) porque Windows anade WS_CAPTION a cualquier ventana con
+     * marco que no sea popup; despues se activan los estilos de sistema. */
+    {
+        RECT marco;
+        int px, py;
+        marco.left = 0; marco.top = 0;
+        marco.right = ANCHO_INICIAL; marco.bottom = ALTO_INICIAL;
+        estilo = WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN;
+        AdjustWindowRectEx(&marco, estilo, FALSE, 0);
+        px = (GetSystemMetrics(SM_CXSCREEN) - (marco.right - marco.left)) / 2;
+        py = (GetSystemMetrics(SM_CYSCREEN) - (marco.bottom - marco.top)) / 3;
+        hwnd = CreateWindowExA(0, "LobosWolfos2000", TP_NOMBRE " " TP_VERSION,
+                               estilo, px < 0 ? 0 : px, py < 0 ? 0 : py,
+                               marco.right - marco.left,
+                               marco.bottom - marco.top,
+                               NULL, NULL, inst, NULL);
+    }
     if (!hwnd) {
         app_terminar();
         return 1;
     }
     g.hwnd = hwnd;
+    /* Menu del sistema (Alt+Espacio), minimizar y maximizar sin caption. */
+    SetWindowLongA(hwnd, GWL_STYLE,
+                   GetWindowLongA(hwnd, GWL_STYLE) |
+                   WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
+    /* El area cliente debe medir lo mismo que el buffer inicial: se corrige
+     * el marco despues de crear la ventana porque AdjustWindowRectEx no
+     * siempre acierta con el marco del gestor de ventanas. */
+    {
+        RECT cr, wr;
+        GetClientRect(hwnd, &cr);
+        GetWindowRect(hwnd, &wr);
+        SetWindowPos(hwnd, NULL, 0, 0,
+                     (wr.right - wr.left) + (ANCHO_INICIAL - cr.right),
+                     (wr.bottom - wr.top) + (ALTO_INICIAL - cr.bottom),
+                     SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
     app_actualizar_titulo();
 
     /* Modo de captura interna: dibuja un fotograma en el buffer y lo guarda
@@ -1443,6 +1499,11 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
          * el lienzo antes de simular clics para que la interaccion parta de
          * la geometria real y no de un lienzo 0,0,0,0. */
         if (!g.pixeles) app_redimensionar(ANCHO_INICIAL, ALTO_INICIAL);
+        /* Prueba del estado maximizado sin bucle de mensajes: WM_SIZE deja
+         * el buffer con el tamano de la pantalla y el dibujo usa la barra
+         * superior completa. */
+        if (strstr(cmd, "--maximizar") != NULL)
+            ShowWindow(hwnd, SW_MAXIMIZE);
         lienzo_actualizar();
         if (menu_arg) g.menu_abierto = atoi(menu_arg);
         if (vista_arg && strncmp(vista_arg, "mapa", 4) == 0) g.vista = VISTA_MAPA;

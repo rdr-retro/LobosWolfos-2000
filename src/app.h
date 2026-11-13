@@ -68,6 +68,26 @@ typedef unsigned char  u8;
 #define TAB_FAVICON_A        0x00647C94u
 #define TAB_FAVICON_B        0x00DCE6F0u
 
+/* Barra de titulo propia (estilo clasico de Windows 2000): degradado azul,
+ * texto blanco y botones grises con bisel. Las pestanas del navegador viven
+ * en esta misma franja, a la derecha de los controles de ventana. */
+#define TITULO_FONDO_A       0x000A246Au
+#define TITULO_FONDO_B       0x003A6EA5u
+#define TITULO_FONDO_OFF_A   0x007F7F7Fu
+#define TITULO_FONDO_OFF_B   0x00B4B4B4u
+#define TITULO_TEXTO         0x00FFFFFFu
+#define TITULO_TEXTO_OFF     0x00E8E8E8u
+#define TITULO_LUZ           0x005A8EC0u
+#define TITULO_BORDE         0x00203050u
+#define TITULO_LUZ_OFF       0x00D0D0D0u
+#define TITULO_BORDE_OFF     0x00606060u
+#define TITULO_BOTON         0x00D4D0C8u
+#define TITULO_BOTON_HOVER   0x00E8E4DCu
+#define TITULO_BOTON_PULSA   0x00B8B4ACu
+#define TITULO_BOTON_LUZ     0x00FFFFFFu
+#define TITULO_BOTON_SOMBRA  0x00808080u
+#define TITULO_CERRAR_HOVER  0x00C94A4Au
+
 #define MANGO            0x004090F0u
 #define MANGO_BORDE      0x00205080u
 #define MANGO_ACTIVO     0x00F08030u
@@ -102,6 +122,24 @@ typedef unsigned char  u8;
 #define MENU_BARRA_ALTO   36
 #define TAB_BARRA_ALTO    34
 #define AREA_SUP_ALTO     (TAB_BARRA_ALTO + MENU_BARRA_ALTO)
+
+/* Controles de ventana dibujados dentro de la barra de titulo. Van a la
+ * izquierda para que las pestanas queden a su derecha. */
+#define TITULO_BOTON_MIN     0
+#define TITULO_BOTON_MAX     1
+#define TITULO_BOTON_CERRAR  2
+#define TITULO_BOTONES       3
+#define TITULO_BOTON_LADO    24
+#define TITULO_BOTON_ALTO    20
+#define TITULO_BOTON_HUECO   2
+#define TITULO_BOTONES_ANCHO \
+    (TITULO_BOTONES * TITULO_BOTON_LADO + \
+     (TITULO_BOTONES - 1) * TITULO_BOTON_HUECO)
+#define TITULO_MARGEN        6
+#define TITULO_ICONO_LADO    16
+#define TITULO_ICONO_X       TITULO_MARGEN
+#define TITULO_BOTONES_X     (TITULO_ICONO_X + TITULO_ICONO_LADO + 8)
+#define TITULO_TABS_X        (TITULO_BOTONES_X + TITULO_BOTONES_ANCHO + 10)
 #define BARRA_ALTO        60
 #define BARRA_ABAJO_ALTO  32
 
@@ -726,6 +764,8 @@ typedef struct App {
     int raton_x, raton_y;
     int raton_dentro;
     int boton_izq, boton_der, boton_medio;
+    int ventana_activa;       /* 1 = barra de titulo azul; 0 = gris */
+    int titulo_boton_pulsado; /* control de ventana pulsado; -1 = ninguno */
 
     Documento doc;
     char doc_ruta[MAX_PATH];
@@ -941,6 +981,7 @@ typedef struct App {
     /* Mensajes */
     char estado[256];
     u32 estado_hasta;
+    char titulo[128];         /* texto de la barra de titulo propia */
 
     int salir;
 } App;
@@ -1217,6 +1258,12 @@ Zona pestana_nueva_zona(void);
 int  pestana_en(int x, int y);
 int  clic_pestanas(int x, int y, int boton);
 void ui_dibujar_pestanas(void);
+
+/* Controles de la barra de titulo propia. */
+Zona titulo_boton_zona(int indice);
+int  titulo_boton_en(int x, int y);
+int  titulo_zona_interactiva(int x, int y);
+void titulo_accion(int boton);
 void ui_dibujar(void);
 void ui_dibujar_barra_menus(void);
 void ui_dibujar_sidebar(void);
