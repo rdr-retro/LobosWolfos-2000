@@ -691,6 +691,34 @@ el motor ya compila.
   imágenes y `recursos/ascii.png` sigue fuera del repositorio. Verificado con
   `build.bat prueba` (12/12 y 8/8) y con `-Repetir`.
 
+- **15-11-2026 (fase 24, LOGIC3: modelo, lector, escritor y migrador)** - Se
+  añaden `src/logic3.h` y `src/logic3.c` con el modelo del capítulo 4 del plan
+  maestro: `Proyecto3`, `Escena3`, `Objeto3`, `Evento3`, `Bloque3`, `Variable3`,
+  `Lista3`, `Traje3` y `Funcion3`, con los topes de la tabla 3.2. El lector
+  trabaja sobre el archivo completo en memoria, acepta LF y CRLF, decodifica
+  los escapes `\"`, `\\` y `\n`, ignora las secciones desconocidas y valida
+  ids, referencias, expresiones `=...` y el código `codigo.lobo` con
+  `lobo_parsear`; los errores son `linea N: motivo`. El escritor es
+  determinista y termina en `FIN` y `CRC32 %08X`; el CRC cubre el prefijo hasta
+  el salto de línea real tras `FIN` y se calcula antes de tokenizar, porque el
+  tokenizador parte el buffer en sitio. La conversión LOGIC2→LOGIC3 crea una
+  escena con el primer mapa, un objeto `Escena` del tamaño del proyecto, el
+  evento `fotograma` y un bloque `codigo.lobo` por función usada en orden
+  espacial (la cabecera `PROYECTO` pasa a `proyecto` y `carpetas`); la
+  exportación de emergencia LOGIC3→LOGIC2 genera un item por escena y una
+  función `Codigo N` por bloque, ordenadas por `y`. ARCHIVO detecta LOGIC3 por
+  cabecera: al abrirlo se guarda el modelo y se vuelca una vista clásica en
+  `g.modulos`/`g.funciones`; al guardar se escribe el modelo, no la vista.
+  Flags nuevos: `--abrir-logic3`, `--guardar-logic3`, `--convertir-logic2` y
+  `--exportar-logic2`, y `--volcar` añade `logic3= escenas= objetos= eventos=
+  bloques= variables=`. La suite `pruebas/logic3.ps1` cubre 10 casos
+  (conversión, ida y vuelta byte a byte, exportación, LOGIC2 clásico,
+  detección por cabecera desde el diálogo clásico, CRC
+  alterado, CRC con formato inválido, versión futura, falta de `FIN` y
+  secciones desconocidas con CRC opcional) y `build.bat prueba` pasa ahora las
+  tres suites (12/12, 10/10 y 8/8). El runtime no cambia: `game.exe` sigue
+  leyendo LOGIC2.
+
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,

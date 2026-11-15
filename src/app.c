@@ -908,6 +908,9 @@ void titulo_accion(int boton) {
 /* ------------------------------------------------------------------ */
 /* Reinicia la logica unica: sin elementos y con la vista centrada. */
 void logica_iniciar(void) {
+    /* Un proyecto nuevo o clasico deja de tener un LOGIC3 activo; el
+     * lector de LOGIC3 lo reactiva despues de esta llamada. */
+    logic3_olvidar();
     g.elementos_scroll = 0;
     g.num_modulos = 0;
     g.modulo_siguiente_id = 1;
@@ -1008,6 +1011,10 @@ int logica_guardar_archivo(const char *ruta) {
     FILE *f;
     int ok;
 
+    /* Si el proyecto activo es LOGIC3 se guarda el modelo completo, no
+     * la proyeccion clasica del gestor. */
+    if (logic3_activo()) return logic3_guardar_actual(ruta);
+
     if (!logica_guardar_memoria(&datos, &largo)) return 0;
     f = fopen(ruta, "wb");
     if (!f) {
@@ -1033,6 +1040,19 @@ int logica_cargar_archivo(const char *ruta) {
     char linea[512];
     int pan_x, pan_y, num, i, max_id;
     int es_logic2 = 0;
+
+    /* Deteccion por cabecera: el mismo dialogo abre .logic clasicos y
+     * proyectos LOGIC3 (fase 24). */
+    {
+        FILE *pf = fopen(ruta, "rb");
+        if (pf) {
+            char cabecera[16];
+            int hay = fgets(cabecera, sizeof(cabecera), pf) != NULL;
+            fclose(pf);
+            if (hay && strncmp(cabecera, "LOGIC3", 6) == 0)
+                return logic3_cargar_editor(ruta);
+        }
+    }
 
     f = fopen(ruta, "rb");
     if (!f) return 0;
@@ -1191,7 +1211,7 @@ void dialogo_guardar_logica(void) {
     memset(&ofn, 0, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = g.hwnd;
-    ofn.lpstrFilter = "Logica (*.logic)\0*.logic\0Todos los archivos\0*.*\0\0";
+    ofn.lpstrFilter = "Logica (*.logic;*.logic3)\0*.logic;*.logic3\0Todos los archivos\0*.*\0\0";
     ofn.lpstrFile = ruta;
     ofn.nMaxFile = MAX_PATH;
     ofn.lpstrInitialDir = carpeta;
@@ -1262,7 +1282,7 @@ void dialogo_abrir_logica(void) {
     memset(&ofn, 0, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = g.hwnd;
-    ofn.lpstrFilter = "Logica (*.logic)\0*.logic\0Todos los archivos\0*.*\0\0";
+    ofn.lpstrFilter = "Logica (*.logic;*.logic3)\0*.logic;*.logic3\0Todos los archivos\0*.*\0\0";
     ofn.lpstrFile = ruta;
     ofn.nMaxFile = MAX_PATH;
     ofn.lpstrInitialDir = carpeta;

@@ -25,6 +25,10 @@ para cargar y guardar PNG.
   pueden mover y se acoplan entre sí por sus lados con efecto imán. El panel
   izquierdo lista los elementos del lienzo; hay una sola lógica y se guarda
   como archivo `.logic`.
+- Proyectos `LOGIC3` (fase 24): el editor abre y guarda el formato nuevo con
+  escenas, objetos, eventos, bloques, variables, listas y trajes, detecta la
+  cabecera al abrir un `.logic`, convierte un LOGIC2 existente y exporta de
+  emergencia a LOGIC2. El motor sigue leyendo LOGIC2 hasta la fase 25.
 - Apertura y exportación de PNG/BMP y mapas `.mav`, con un menú **EXPORTAR**
   propio para las dos exportaciones de imagen.
 - Guardado del proyecto entero en un paquete `.wolfo` (lógica, mapas y tiles)
@@ -65,11 +69,12 @@ También se puede compilar desde PowerShell:
 
 ## Pruebas
 
-`build.bat prueba` compila el editor y pasa las dos suites:
+`build.bat prueba` compila el editor y pasa las tres suites:
 
 ```bat
-build.bat prueba              conformidad + regresion
+build.bat prueba              conformidad + logic3 + regresion
 build.bat prueba conformidad  solo el lenguaje lobo
+build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba regresion    solo la interfaz del editor
 build.bat prueba actualizar   reescribe los patrones (revisar el diff)
 ```
@@ -479,6 +484,10 @@ menús, después de cargar la lógica si se indica) y `--volcar ruta`
 (escribe una línea con la vista, los documentos, los ajustes del proyecto,
 la geometría del lienzo, los módulos del gestor, el mapa abierto, el paso de
 la guía y el estado de los menús para comparar pruebas),
+`--abrir-logic3 ruta` y `--guardar-logic3 ruta` (abren y guardan un proyecto
+LOGIC3 sin diálogo), `--convertir-logic2 ruta` (convierte el LOGIC2 en
+`ruta.logic3` y lo deja activo) y `--exportar-logic2 ruta` (exportación de
+emergencia del modelo LOGIC3 a LOGIC2),
 y, para la sección FUNCIONES (fase 8),
 `--funcion-abrir <id>` (abre el editor de código de esa función),
 `--codigo-teclas "texto"` (escribe en el editor abierto, con `\n`, `\t`,
@@ -518,8 +527,9 @@ procesado en `src\nucleo.c`.
   menú COMPILE (compilar el proyecto para Windows y para BIOS) y el paquete
   `.wolfo`,
   `src/juego_ventana.c` la vista previa de los botones play/pausa/stop,
-  `src/ajustes.c` las propiedades del proyecto y `src/ejemplo.c` el juego de
-  ejemplo y su guía (menú AYUDA).
+  `src/ajustes.c` las propiedades del proyecto, `src/logic3.c` el modelo, el
+  lector, el escritor y el migrador del formato LOGIC3 y `src/ejemplo.c` el
+  juego de ejemplo y su guía (menú AYUDA).
 - `motor/` — motor egine: núcleo en ensamblador 32 bits (`nucleo32.s`),
   interfaz común (`motor.h`), carga del proyecto (`activo.c`) y `juego.c`
   (`game.exe`).

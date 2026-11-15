@@ -1524,6 +1524,24 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                     g.vista = VISTA_MODULOS;
             }
         }
+        /* Apertura directa de un proyecto LOGIC3 (fase 24). */
+        {
+            char *l3_arg = arg_valor(cmd, "--abrir-logic3");
+            if (l3_arg) {
+                char l3_ruta[MAX_PATH];
+                int n = 0;
+                while (l3_arg[n] && l3_arg[n] != ' ' &&
+                       l3_arg[n] != '\t' && n < MAX_PATH - 1) {
+                    l3_ruta[n] = l3_arg[n];
+                    n++;
+                }
+                l3_ruta[n] = 0;
+                if (l3_ruta[0] && logic3_cargar_editor(l3_ruta)) {
+                    g.vista = VISTA_MODULOS;
+                    app_actualizar_titulo();
+                }
+            }
+        }
     }
     if (captura) {
         int ok;
@@ -1625,6 +1643,22 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 }
                 logic_ruta[n] = 0;
                 if (logic_ruta[0] && logica_cargar_archivo(logic_ruta))
+                    g.vista = VISTA_MODULOS;
+            }
+        }
+        /* Proyecto LOGIC3 explicito (fase 24). */
+        {
+            char *l3_arg = arg_valor(cmd, "--abrir-logic3");
+            if (l3_arg) {
+                char l3_ruta[MAX_PATH];
+                int n = 0;
+                while (l3_arg[n] && l3_arg[n] != ' ' &&
+                       l3_arg[n] != '\t' && n < MAX_PATH - 1) {
+                    l3_ruta[n] = l3_arg[n];
+                    n++;
+                }
+                l3_ruta[n] = 0;
+                if (l3_ruta[0] && logic3_cargar_editor(l3_ruta))
                     g.vista = VISTA_MODULOS;
             }
         }
@@ -1955,6 +1989,52 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 logica_guardar_archivo(logic_ruta);
             }
         }
+        /* Guardado directo de un LOGIC3 activo (fase 24). */
+        {
+            char *l3_arg = arg_valor(cmd, "--guardar-logic3");
+            if (l3_arg) {
+                char l3_ruta[MAX_PATH];
+                int n = 0;
+                while (l3_arg[n] && l3_arg[n] != ' ' &&
+                       l3_arg[n] != '\t' && n < MAX_PATH - 1) {
+                    l3_ruta[n] = l3_arg[n];
+                    n++;
+                }
+                l3_ruta[n] = 0;
+                if (l3_ruta[0]) logic3_guardar_actual(l3_ruta);
+            }
+        }
+        /* Conversion LOGIC2 -> LOGIC3 (fase 24): escribe <ruta>.logic3
+         * y deja el modelo convertido activo. */
+        {
+            char *conv_arg = arg_valor(cmd, "--convertir-logic2");
+            if (conv_arg) {
+                char conv_ruta[MAX_PATH];
+                int n = 0;
+                while (conv_arg[n] && conv_arg[n] != ' ' &&
+                       conv_arg[n] != '\t' && n < MAX_PATH - 1) {
+                    conv_ruta[n] = conv_arg[n];
+                    n++;
+                }
+                conv_ruta[n] = 0;
+                if (conv_ruta[0]) logic3_convertir_logic2(conv_ruta);
+            }
+        }
+        /* Exportacion de emergencia LOGIC3 -> LOGIC2 (fase 24). */
+        {
+            char *exp_arg = arg_valor(cmd, "--exportar-logic2");
+            if (exp_arg) {
+                char exp_ruta[MAX_PATH];
+                int n = 0;
+                while (exp_arg[n] && exp_arg[n] != ' ' &&
+                       exp_arg[n] != '\t' && n < MAX_PATH - 1) {
+                    exp_ruta[n] = exp_arg[n];
+                    n++;
+                }
+                exp_ruta[n] = 0;
+                if (exp_ruta[0]) logic3_exportar_logic2(exp_ruta);
+            }
+        }
         /* Guardado directo del paquete .wolfo (pruebas sin dialogo, fase
          * 15): escribe logica, mapas y tiles en un solo archivo. */
         {
@@ -2038,6 +2118,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 FILE *vf;
                 Zona vt;
                 Lienzo vl;
+                int l3 = 0, l3e = 0, l3o = 0, l3ev = 0, l3b = 0, l3v = 0;
                 while (volcar_arg[vn] && volcar_arg[vn] != ' ' &&
                        volcar_arg[vn] != '\t' && vn < MAX_PATH - 1) {
                     volcar_ruta[vn] = volcar_arg[vn];
@@ -2048,11 +2129,15 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 if (vf) {
                     vt = zona_trabajo();
                     vl = g.lienzo;
+                    l3 = logic3_activo();
+                    if (l3) logic3_contar(&l3e, &l3o, &l3ev, &l3b, &l3v);
                     fprintf(vf,
                             "ancho=%d alto=%d vista=%d doc=%dx%d "
                             "menus=%dx%d listo=%d ajustes=%dx%d "
                             "lienzo=%d,%d,%d,%d zoom=%d trab=%d,%d,%d,%d "
                             "menu=%d zona_menus=%d,%d,%d,%d modulos=%d "
+                            "logic3=%d escenas=%d objetos=%d eventos=%d "
+                            "bloques=%d variables=%d "
                             "guia=%d paso=%d mapa=%s args=%s|%s\n",
                             g.ancho, g.alto, (int)g.vista,
                             g.doc.ancho, g.doc.alto,
@@ -2066,6 +2151,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                             modulos_lienzo_zona().ancho,
                             modulos_lienzo_zona().alto,
                             g.num_modulos,
+                            l3, l3e, l3o, l3ev, l3b, l3v,
                             g.guia_visible, g.guia_paso,
                             g.mapa_ruta[0] ? g.mapa_ruta : "-",
                             menu_arg ? menu_arg : "-",

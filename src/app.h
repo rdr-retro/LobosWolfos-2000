@@ -1485,6 +1485,19 @@ int  logica_guardar_archivo(const char *ruta);
 int  logica_cargar_archivo(const char *ruta);
 int  logica_guardar_memoria(char **datos, int *largo);
 
+/* Proyecto LOGIC3 (logic3.c, fase 24). El editor guarda el modelo
+ * completo; la vista clasica de `g.modulos`/`g.funciones` es solo una
+ * proyeccion para el gestor y para el motor LOGIC2. */
+int  logic3_cargar_editor(const char *ruta);
+int  logic3_guardar_actual(const char *ruta);
+int  logic3_exportar_logic2(const char *ruta);
+int  logic3_convertir_logic2(const char *ruta);
+int  logic3_activo(void);
+void logic3_olvidar(void);
+const char *logic3_ultimo_error(void);
+void logic3_contar(int *escenas, int *objetos, int *eventos,
+                   int *bloques, int *variables);
+
 /* Ajustes del proyecto (ajustes.c, fase 14) */
 void ajustes_proyecto_iniciar(void);
 void ajustes_proyecto_abrir(void);

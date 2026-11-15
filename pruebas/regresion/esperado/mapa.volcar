@@ -1,1 +1,1 @@
-ancho=1200 alto=700 vista=1 doc=80x80 menus=0x0 listo=0 ajustes=640x480 lienzo=356,199,756,599 zoom=10 trab=79,130,955,538 menu=-1 zona_menus=166,70,748,598 modulos=0 guia=0 paso=0 mapa=maps\mapa.mav args=-|-
+ancho=1200 alto=700 vista=1 doc=80x80 menus=0x0 listo=0 ajustes=640x480 lienzo=356,199,756,599 zoom=10 trab=79,130,955,538 menu=-1 zona_menus=166,70,748,598 modulos=0 logic3=0 escenas=0 objetos=0 eventos=0 bloques=0 variables=0 guia=0 paso=0 mapa=maps\mapa.mav args=-|-

@@ -107,6 +107,7 @@ La experiencia objetivo:
 | Runtime Windows | `motor/juego.c`, `motor/activo.c`, `motor/nucleo32.s` | Un sprite, un mapa, 60 FPS |
 | Runtime BIOS | `loboswolfos/kernel/src/*.rs` | Reimplementacion paralela en Rust |
 | Vista previa | `src/juego_ventana.c` | Usa el mismo blob y motor que `game.exe` |
+| Proyecto LOGIC3 | `src/logic3.c`, `src/logic3.h` | Modelo, lector, escritor y migrador (fase 24); runtime aun LOGIC2 |
 | Paquete | `src/compilar.c` | Blob `LGB1`, `.wolfo`, BIOS |
 
 ### 2.2 Modelo de datos actual
@@ -745,6 +746,8 @@ sobre el commit `b99080f`: 12/12 y 8/8, con `-Repetir` determinista.
 
 ### Fase 24 - LOGIC3: modelo, lector, escritor y migrador
 
+**Estado:** hecha (15-11-2026).
+
 **Objetivo:** el editor guarda y abre el nuevo modelo sin cambiar aun el
 runtime.
 
@@ -771,6 +774,12 @@ runtime.
 **Criterio de salida:** un LOGIC2 de prueba se convierte, se guarda, se
 recarga y conserva mapas, funciones y ajustes; el editor clasico sigue
 abriendo LOGIC2 sin cambios.
+
+**Entregado:** `src/logic3.h`, `src/logic3.c`, integracion en ARCHIVO y en
+`--volcar`, los flags `--abrir-logic3`, `--guardar-logic3`,
+`--convertir-logic2` y `--exportar-logic2`, y la suite `pruebas/logic3.ps1`
+con `pruebas/logic3/base.logic`, `esperado.logic3` y `esperado-export.log`
+(10 casos). Verificado con `build.bat prueba` (12/12, 10/10 y 8/8).
 
 ### Fase 25 - VM resumible y lobo 3 (Windows)
 

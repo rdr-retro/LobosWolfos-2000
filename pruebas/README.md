@@ -1,7 +1,8 @@
 # Pruebas de LobosWolfos 2000
 
-Suite de la fase 23: congela el lenguaje lobo y la interfaz del editor
-antes de cambiar el motor (fases 24 y siguientes).
+Tres suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
+(fase 24) y la interfaz del editor (fase 23). Congelan el comportamiento
+antes de cambiar el runtime en las fases siguientes.
 
 Todo es texto: los patrones de las capturas son hashes SHA-256 y
 volcados de estado, no imagenes. `recursos/ascii.png` no se versiona y
@@ -10,8 +11,9 @@ las pruebas no lo necesitan.
 ## Comandos
 
 ```bat
-build.bat prueba              compila y pasa las dos suites
+build.bat prueba              compila y pasa las tres suites
 build.bat prueba conformidad  solo la suite del lenguaje
+build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba regresion    solo la regresion del editor
 build.bat prueba actualizar   reescribe los patrones con el estado actual
 ```
@@ -21,6 +23,7 @@ Tambien se pueden llamar por separado:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\ejecutar.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\ejecutar.ps1 -Repetir
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\logic3.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\regresion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\linea_base.ps1
 ```
@@ -66,6 +69,43 @@ programa escribe sus resultados ahi y la traza los congela.
 
 `-Repetir` ejecuta cada caso dos veces y comprueba que la traza y el BMP
 no cambian: es la prueba de determinismo del runtime.
+
+## Proyecto LOGIC3 (`logic3.ps1`)
+
+La suite de la fase 24 comprueba el modelo nuevo sin tocar el runtime:
+`game.exe` sigue leyendo LOGIC2.
+
+| Archivo | Que es |
+|---|---|
+| `logic3\base.logic` | fixture LOGIC2 con un mapa, un codigo y `PROYECTO` |
+| `logic3\esperado.logic3` | LOGIC3 canonico que debe producir la conversion |
+| `logic3\esperado-export.log` | LOGIC2 canonico de la exportacion de emergencia |
+
+Casos:
+
+| Caso | Cubre |
+|---|---|
+| `convertir` | LOGIC2 -> LOGIC3, volcado (`logic3=1`, contadores) y archivo canonico |
+| `ida_vuelta` | abrir, guardar y comparar byte a byte con `esperado.logic3` |
+| `exportar` | LOGIC3 -> LOGIC2 de emergencia y archivo canonico |
+| `clasico` | el LOGIC2 exportado y el fixture abren sin activar LOGIC3 |
+| `detectar` | `--abrir-logica` detecta la cabecera LOGIC3 y `--guardar-logica` lo conserva |
+| `crc` | un CRC32 que no coincide se rechaza |
+| `crc_texto` | un CRC32 con formato invalido se rechaza |
+| `version` | una version futura se rechaza |
+| `sin_fin` | un archivo sin `FIN` se rechaza |
+| `extension` | secciones desconocidas se ignoran y el CRC es opcional |
+
+Cada caso ejecuta el editor en una carpeta temporal con `--captura` y
+`--volcar`, y comprueba los campos `logic3=`, `escenas=`, `objetos=`,
+`eventos=`, `bloques=` y `variables=` del volcado. Para regenerar los
+patrones tras un cambio intencionado:
+
+```bat
+build.bat prueba logic3
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\logic3.ps1 -Actualizar
+git diff pruebas\logic3
+```
 
 ## Regresion del editor (`regresion.ps1`)
 
