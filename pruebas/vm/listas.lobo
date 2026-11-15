@@ -1,0 +1,6 @@
+# Listas de enteros: anadir, ordenar, largo y elemento.
+lista inventario
+anadir(inventario, 7)
+anadir(inventario, 2)
+ordenar(inventario)
+x = x + largo(inventario) + elemento(inventario, 0)

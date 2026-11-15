@@ -719,6 +719,28 @@ el motor ya compila.
   tres suites (12/12, 10/10 y 8/8). El runtime no cambia: `game.exe` sigue
   leyendo LOGIC2.
 
+- **16-11-2026 (fase 25, VM resumible y lobo 3)** - Se rediseñan
+  `motor/lobo.h` y `motor/lobo.c`: `LoboPrograma` guarda sus instrucciones en
+  un buffer que crece y `LoboMaquina` es resumible (`pc`, `pila`, `frames`,
+  `espera`, `estado`). Hay dos modos de compilación: `LOBO_MODO_CLASICO`
+  conserva los topes y la sintaxis de LOGIC2 (`lobo_parsear` y
+  `lobo_ejecutar` siguen siendo el atajo clásico) y `LOBO_MODO_VM` usa los
+  topes de la tabla 3.2 y entiende `esperar`, `detener`, `funcion`/`retornar`,
+  `llamar("nombre", ...)`, `$globales`, `@variables de entidad`, `lista` y sus
+  funciones, `mensaje "texto"` y `clonar`, con pila de llamadas de 32 frames y
+  desbordamiento controlado. `motor/logic3_motor.c` es el lector LOGIC3 mínimo
+  del runtime: cabecera, mapa de la primera escena y bloques `codigo.lobo` de
+  los eventos `fotograma`. `game.exe` añade `--logic3` (memoria compartida de
+  globales, listas, mensajes y clones; traza `vm: N scripts` y
+  `vm i:estado:pc:espera`) y `--vm-test` (programa suelto sin GDI+ ni ventanas,
+  con `--tecla` y traza de estado por fotograma). El editor valida
+  `codigo.lobo` y las expresiones con el compilador VM y arranca el
+  `LoboPrograma` antes de compilar en `funciones_codigo_validar()`. La suite
+  `pruebas/vm.ps1` cubre 8 casos y la paridad clásico/VM de los scripts de
+  conformidad; `build.bat prueba` pasa las cuatro suites (12/12, 10/10, 9/9 y
+  8/8) y el criterio de salida queda congelado en
+  `pruebas/vm/esperar_dos.logic3` (dos scripts, uno espera y el otro avanza).
+
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,

@@ -1803,7 +1803,13 @@ int modulos_funcion_en(int x, int y) {
  * ("" = compila). De "linea N: motivo" saca la linea para la franja. */
 void funciones_codigo_validar(FuncionCodigo *f) {
     LoboPrograma prog;
-    if (lobo_parsear(f->codigo, &prog, f->error, sizeof(f->error))) {
+    int ok;
+    /* El compilador reutiliza el buffer del programa: hay que arrancarlo
+     * a cero (el programa clasico ya no usa un buffer estatico). */
+    lobo_programa_iniciar(&prog);
+    ok = lobo_parsear(f->codigo, &prog, f->error, sizeof(f->error));
+    lobo_programa_liberar(&prog);
+    if (ok) {
         f->error[0] = 0;
         f->error_linea = 0;
     } else {

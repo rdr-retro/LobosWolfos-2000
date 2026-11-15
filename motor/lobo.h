@@ -1,13 +1,16 @@
-/* lobo.h - lenguaje de los botones FUNCIONES (fase 8).
+/* lobo.h - lenguaje de los botones FUNCIONES (fase 8) y lobo 3 (fase 25).
  *
  * lobo es el lenguaje propio de LobosWolfos 2000: el codigo que se
  * escribe dentro de los botones FUNCIONES del gestor de logica y que
- * viaja como texto en el .logic del proyecto (formato LOGIC2). El mismo
- * texto lo interpretan los dos destinos: el motor de 32 bits (game.exe,
- * este archivo) y el kernel loboswolfos (puerto en kernel/src/lobo.rs),
- * asi que un boton escrito en el editor corre igual en Windows y en la
- * BIOS.
+ * viaja como texto en el .logic del proyecto (formato LOGIC2) o en los
+ * bloques codigo.lobo de un proyecto LOGIC3. El mismo texto lo
+ * interpretan los dos destinos: el motor de 32 bits (game.exe, este
+ * archivo) y el kernel loboswolfos (puerto en kernel/src/lobo.rs), asi
+ * que un boton escrito en el editor corre igual en Windows y en la BIOS.
  *
+ * ------------------------------------------------------------------
+ * Modo clasico (LOGIC2, fase 8)
+ * ------------------------------------------------------------------
  * El lenguaje (palabras en espanol, sin acentos, una sentencia por linea):
  *
  *   si <expr>            ... fin        condicional (con sino opcional)
@@ -26,25 +29,89 @@
  * nombre asignado en el programa es una variable local del script: nace
  * a 0 y conserva su valor entre fotogramas (hasta 16 por script).
  *
+ * ------------------------------------------------------------------
+ * Modo VM (lobo 3, fase 25)
+ * ------------------------------------------------------------------
+ * El modo VM amplia el lenguaje sin cambiar nada del modo clasico:
+ *
+ *   esperar <expr>                  deja el script esperando N fotogramas
+ *   detener                         termina este script
+ *   detener todo                    pide terminar la escena
+ *   clonar                          pide un clon (fase 26)
+ *   mensaje "texto"                 emite un mensaje (fase 27)
+ *   funcion <nombre>(<p1>, ...)     ... fin       funcion de usuario
+ *   retornar [<expr>]               vuelve de la funcion con un valor
+ *   lista <nombre>                  declara una lista de enteros
+ *   $nombre                         variable global (persiste entre scripts)
+ *   @nombre                         variable de la entidad actual
+ *   llamar("nombre", <args...>)     llama a una funcion de usuario
+ *   largo(l) / elemento(l, i) / contiene(l, v)
+ *   fijar(l, i, v) / anadir(l, v) / insertar(l, i, v)
+ *   borrar(l, i) / limpiar(l) / ordenar(l)
+ *
+ * Un script puede estar listo, esperando o terminado. `esperar` guarda
+ * el contador y el puntero de instruccion, asi que el resto de scripts
+ * del fotograma siguen corriendo. `detener` marca el script terminado;
+ * en el evento de fotograma vuelve a empezar en el siguiente fotograma.
+ * Las funciones tienen su propia pila de llamadas (32 niveles) y sus
+ * parametros se guardan como locales que se restauran al volver.
+ *
  * `lobo_parsear` compila el texto a una lista de instrucciones en
- * memoria; `lobo_ejecutar` recorre esa lista con una pila de valores.
- * Cada ejecucion tiene un presupuesto de instrucciones (LOBO_PASOS_MAX)
- * para que un bucle sin salida no cuelgue el fotograma.
+ * memoria; `lobo_ejecutar` recorre esa lista de una vez (modo clasico,
+ * con un presupuesto de pasos LOBO_PASOS_MAX) y `lobo_vm_fotograma`
+ * ejecuta la VM resumible hasta un evento o hasta agotar el
+ * presupuesto LOBO_PASOS_VM_MAX, conservando el estado para el
+ * siguiente fotograma.
+ *
+ * El programa guarda sus instrucciones en un buffer que crece con
+ * realloc: hay que dejarlo a cero (static/global) o llamar antes a
+ * lobo_programa_iniciar. lobo_programa_liberar suelta la memoria.
  */
 #ifndef LOBO_H
 #define LOBO_H
 
+/* Modos de compilacion: el clasico mantiene los topes de LOGIC2 y no
+ * entiende la sintaxis nueva; el modo VM usa los topes de la tabla 3.2
+ * del plan maestro. */
+#define LOBO_MODO_CLASICO 0
+#define LOBO_MODO_VM      1
+
 /* Limites compartidos con el puerto del kernel (lobo.rs): el texto y
  * los programas caben iguales en los dos destinos. */
-#define LOBO_INSTS_MAX   256 /* instrucciones por programa */
-#define LOBO_PILA_MAX    32  /* valores apilados por expresion */
-#define LOBO_LOCALES_MAX 16  /* variables locales por script */
-#define LOBO_NOMBRE_MAX   32 /* largo de un nombre de variable */
-#define LOBO_ERROR_MAX    96 /* largo del mensaje de error de parsear */
-#define LOBO_PASOS_MAX    200000 /* pasos por ejecucion (por fotograma) */
+#define LOBO_INSTS_CLASICO 256  /* instrucciones por programa clasico */
+#define LOBO_INSTS_MAX     4096 /* tope del programa en modo VM */
+#define LOBO_PILA_MAX      32   /* valores apilados por expresion (clasico) */
+#define LOBO_PILA_VM_MAX   256  /* pila de la VM (tabla 3.2) */
+#define LOBO_LOCALES_CLASICO 16 /* variables locales por script clasico */
+#define LOBO_LOCALES_MAX   64   /* locales por script en modo VM */
+#define LOBO_NOMBRE_MAX    32   /* largo de un nombre de variable */
+#define LOBO_ERROR_MAX     96   /* largo del mensaje de error de parsear */
+#define LOBO_PASOS_MAX     200000  /* pasos por ejecucion clasica */
+#define LOBO_PASOS_VM_MAX  1000000 /* instrucciones por fotograma (VM) */
+
+/* Topes del modo VM (tabla 3.2 del plan maestro). */
+#define LOBO_FUNCIONES_MAX 64   /* funciones de usuario por programa */
+#define LOBO_PARAMS_MAX    8    /* parametros por funcion */
+#define LOBO_FRAMES_MAX    32   /* profundidad de llamadas */
+#define LOBO_TEXTOS_MAX    64   /* textos distintos por programa */
+#define LOBO_TEXTO_MAX     64   /* largo de un texto (64 bytes) */
+#define LOBO_GLOBALES_MAX  128  /* variables globales */
+#define LOBO_ENTIDAD_VARS_MAX 64 /* variables por entidad */
+#define LOBO_LISTAS_MAX    32   /* listas por programa */
+#define LOBO_LISTA_ELEMENTOS_MAX 256 /* elementos por lista */
+
+/* Estados de un script en la VM. */
+#define LOBO_VM_LISTO     0
+#define LOBO_VM_ESPERANDO 1
+#define LOBO_VM_TERMINADO 2
+
+/* Resultado de lobo_paso. */
+#define LOBO_PASO_SIGUE   0 /* instruccion ejecutada, se puede seguir */
+#define LOBO_PASO_EVENTO  1 /* esperar/detener/fin: parar este fotograma */
+#define LOBO_PASO_ERROR   2 /* pila mal, salto mal, sin frames... */
 
 /* Indices de las variables del juego dentro del espacio comun
- * (0..3 globales, 4..19 locales del script). */
+ * (0..3 globales del juego, 4..67 locales del script). */
 #define LOBO_VAR_X         0
 #define LOBO_VAR_Y         1
 #define LOBO_VAR_VEL       2
@@ -60,7 +127,8 @@
 #define LOBO_TECLA_CERRAR    0x20
 
 /* Codigo de operacion de cada instruccion. El numero de cada uno es
- * parte del formato: el kernel (lobo.rs) usa la misma numeracion. */
+ * parte del formato: el kernel (lobo.rs) usa la misma numeracion y los
+ * opcodes nuevos se anaden al final para no romperla. */
 enum {
     LOBO_NUM = 0,     /* valor: constante a apilar */
     LOBO_VAR,         /* valor: indice de variable */
@@ -84,7 +152,27 @@ enum {
     LOBO_ASIGNA,      /* valor: indice de variable */
     LOBO_SALTO,       /* valor: instruccion destino */
     LOBO_SALTO_FALSO, /* valor: destino si el tope de la pila es 0 */
-    LOBO_POP          /* descarta el tope (sentencia-expr suelta) */
+    LOBO_POP,         /* descarta el tope (sentencia-expr suelta) */
+    /* --- fase 25: lobo 3 --- */
+    LOBO_ESPERAR,        /* espera N fotogramas (N del tope de la pila) */
+    LOBO_LLAMAR,         /* valor: indice de funcion */
+    LOBO_RETORNAR,       /* vuelve con el tope de la pila */
+    LOBO_CARGAR_GLOBAL,  /* valor: indice de variable global */
+    LOBO_GUARDAR_GLOBAL, /* valor: indice de variable global */
+    LOBO_CARGAR_ENTIDAD, /* valor: indice de variable de entidad */
+    LOBO_GUARDAR_ENTIDAD,/* valor: indice de variable de entidad */
+    LOBO_LISTA_LARGO,    /* valor: lista; apila la longitud */
+    LOBO_LISTA_ELEMENTO, /* valor: lista; apila elemento[i] */
+    LOBO_LISTA_FIJAR,    /* valor: lista; fija [i] = v */
+    LOBO_LISTA_ANADIR,   /* valor: lista; anade v al final */
+    LOBO_LISTA_INSERTAR, /* valor: lista; inserta v en i */
+    LOBO_LISTA_BORRAR,   /* valor: lista; quita el elemento i */
+    LOBO_LISTA_TIENE,    /* valor: lista; apila 0/1 si contiene v */
+    LOBO_LISTA_ORDENAR,  /* valor: lista; ordena de menor a mayor */
+    LOBO_LISTA_LIMPIAR,  /* valor: lista; vacia la lista */
+    LOBO_MENSAJE,        /* valor: indice de texto */
+    LOBO_DETENER,        /* valor: 0 este script, 1 todo */
+    LOBO_CLONAR          /* pedir un clon (apila 0) */
 };
 
 /* Una instruccion del programa compilado. */
@@ -93,11 +181,41 @@ typedef struct LoboInst {
     int valor;       /* constante, indice o destino segun el op */
 } LoboInst;
 
-/* Programa compilado: lista plana de instrucciones. */
+/* Funcion de usuario compilada. */
+typedef struct LoboFuncion {
+    char nombre[LOBO_NOMBRE_MAX];
+    int inicio;                  /* primera instruccion del cuerpo */
+    int params;                  /* parametros declarados */
+    int param_local[LOBO_PARAMS_MAX]; /* indice local de cada parametro */
+} LoboFuncion;
+
+/* Programa compilado: lista plana de instrucciones ampliable. */
 typedef struct LoboPrograma {
-    LoboInst insts[LOBO_INSTS_MAX];
+    LoboInst *insts; /* buffer de instrucciones (NULL hasta compilar) */
     int largo;       /* instrucciones usadas */
+    int capacidad;   /* instrucciones reservadas */
+    LoboFuncion funciones[LOBO_FUNCIONES_MAX];
+    int num_funciones;
+    char textos[LOBO_TEXTOS_MAX][LOBO_TEXTO_MAX];
+    int num_textos;
 } LoboPrograma;
+
+/* Una lista de enteros con capacidad fija. */
+typedef struct LoboLista {
+    int n;
+    int elem[LOBO_LISTA_ELEMENTOS_MAX];
+} LoboLista;
+
+/* Memoria compartida por los scripts de un proyecto (variables
+ * globales, variables de entidad, listas y mensajes). */
+typedef struct LoboMemoria {
+    int globales[LOBO_GLOBALES_MAX];
+    int entidad_vars[LOBO_ENTIDAD_VARS_MAX];
+    LoboLista listas[LOBO_LISTAS_MAX];
+    char mensaje[LOBO_TEXTO_MAX];
+    int mensajes; /* mensajes emitidos en total */
+    int clones;   /* clones pedidos en total */
+} LoboMemoria;
 
 /* Lo que el juego expone a los scripts: posicion del sprite, velocidad,
  * contador de fotogramas, bits de entrada y la prueba de colision de la
@@ -105,28 +223,70 @@ typedef struct LoboPrograma {
 typedef struct LoboEstado {
     int x, y, vel, fotograma;
     unsigned entrada; /* bits LOBO_TECLA_* */
+    LoboMemoria *memoria; /* compartida; puede ser NULL en modo clasico */
     int (*choca)(void *ctx, int x, int y);
     void *ctx;
 } LoboEstado;
+
+/* Un frame de llamada: donde volver y el estado que hay que restaurar. */
+typedef struct LoboFrame {
+    int retorno;   /* pc al que volver */
+    int pila_base; /* valores apilados al entrar (sin contar parametros) */
+    int locales[LOBO_LOCALES_MAX];
+} LoboFrame;
 
 /* Estado persistente de un script entre fotogramas. */
 typedef struct LoboMaquina {
     int locales[LOBO_LOCALES_MAX];
     int cerrar;  /* 1 si el script llamo a cerrar() */
-    int agotado; /* 1 si se quedo sin presupuesto de pasos */
+    int agotado; /* 1 si se quedo sin presupuesto o de pila */
+    /* --- VM resumible (fase 25) --- */
+    int pc;          /* instruccion actual */
+    int pila[LOBO_PILA_VM_MAX];
+    int np;          /* valores apilados */
+    LoboFrame frames[LOBO_FRAMES_MAX];
+    int num_frames;
+    int espera;      /* fotogramas que faltan; 0 = listo */
+    int estado;      /* LOBO_VM_* */
+    int detener_todo;/* 1 si el script pidio detener la escena */
+    int clones;      /* clones pedidos por este script */
 } LoboMaquina;
 
-/* Compila el texto de un script. Devuelve 1 si compila; si no, 0 y
- * `error` lleva el mensaje "linea N: ...". `programa` queda vacio. */
-int lobo_parsear(const char *texto, LoboPrograma *programa,
-                char *error, int tam_error);
+/* Prepara un programa para compilar (buffer a cero). */
+void lobo_programa_iniciar(LoboPrograma *programa);
 
-/* Ejecuta un programa ya compilado contra el estado del juego. La
- * maquina conserva las locales y las peticiones de cerrar. */
+/* Suelta el buffer de instrucciones de un programa. */
+void lobo_programa_liberar(LoboPrograma *programa);
+
+/* Compila el texto de un script en el modo indicado. Devuelve 1 si
+ * compila; si no, 0 y `error` lleva el mensaje "linea N: ...". El
+ * programa debe estar a cero o reiniciado; al recompilar aprovecha el
+ * buffer que ya tuviera. */
+int lobo_compilar(const char *texto, LoboPrograma *programa, int modo,
+                  char *error, int tam_error);
+
+/* Compatibilidad: compila en modo clasico (LOGIC2). */
+int lobo_parsear(const char *texto, LoboPrograma *programa,
+                 char *error, int tam_error);
+
+/* Ejecuta un programa ya compilado contra el estado del juego, de una
+ * vez (modo clasico). La maquina conserva las locales y las peticiones
+ * de cerrar. */
 void lobo_ejecutar(const LoboPrograma *programa, LoboEstado *estado,
                    LoboMaquina *maquina);
 
-/* Reinicia una maquina (locales a cero) para un uso nuevo. */
+/* Ejecuta una instruccion de la VM y devuelve LOBO_PASO_*. */
+int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
+              LoboMaquina *maquina);
+
+/* Ejecuta el fotograma de un script en la VM: descuenta la espera,
+ * reengancha el evento de fotograma si termino y corre hasta un evento
+ * o hasta agotar LOBO_PASOS_VM_MAX. Devuelve 1 si llego a un evento,
+ * 0 si agoto el presupuesto. */
+int lobo_vm_fotograma(const LoboPrograma *programa, LoboEstado *estado,
+                      LoboMaquina *maquina);
+
+/* Reinicia una maquina (locales a cero y VM lista) para un uso nuevo. */
 void lobo_maquina_reiniciar(LoboMaquina *maquina);
 
 #endif /* LOBO_H */

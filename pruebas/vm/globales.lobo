@@ -1,0 +1,3 @@
+# Las variables globales ($) persisten entre fotogramas y entre scripts.
+$n = $n + 1
+x = x + $n

@@ -1,0 +1,7 @@
+# Llamadas con parametros y retorno: la pila de frames guarda y restaura
+# las locales del llamante.
+funcion suma(a, b)
+  retornar a + b
+fin
+x = llamar("suma", 2, 3)
+x = x + llamar("suma", 4, 5)

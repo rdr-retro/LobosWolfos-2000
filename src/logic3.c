@@ -1205,8 +1205,12 @@ static int validar_expresion(const char *valor, int linea, const char *que,
                              char *error, int tam) {
     LoboPrograma programa;
     char e[LOBO_ERROR_MAX];
+    int ok;
     if (!valor || valor[0] != '=') return 1;
-    if (!lobo_parsear(valor + 1, &programa, e, sizeof(e)))
+    lobo_programa_iniciar(&programa);
+    ok = lobo_compilar(valor + 1, &programa, LOBO_MODO_VM, e, sizeof(e));
+    lobo_programa_liberar(&programa);
+    if (!ok)
         return fallo3(error, tam, linea, "expresion de %s no compila: %s", que, e);
     return 1;
 }
@@ -1442,7 +1446,12 @@ int logic3_validar(const Proyecto3 *p, char *error, int tam_error) {
             if (codigo && codigo[0]) {
                 LoboPrograma programa;
                 char e[LOBO_ERROR_MAX];
-                if (!lobo_parsear(codigo, &programa, e, sizeof(e)))
+                int ok;
+                lobo_programa_iniciar(&programa);
+                ok = lobo_compilar(codigo, &programa, LOBO_MODO_VM, e,
+                                   sizeof(e));
+                lobo_programa_liberar(&programa);
+                if (!ok)
                     FALLO_VALIDAR(b->linea, "codigo.lobo no compila: %s", e);
             }
         }

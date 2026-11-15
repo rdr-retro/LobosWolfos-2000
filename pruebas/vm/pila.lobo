@@ -1,0 +1,6 @@
+# Recursion sin fin: al llegar a 32 frames la VM corta con error y el
+# fotograma no se cuelga.
+funcion f(n)
+  retornar llamar("f", n + 1)
+fin
+x = llamar("f", 0)

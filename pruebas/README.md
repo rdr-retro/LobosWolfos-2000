@@ -1,8 +1,9 @@
 # Pruebas de LobosWolfos 2000
 
-Tres suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
-(fase 24) y la interfaz del editor (fase 23). Congelan el comportamiento
-antes de cambiar el runtime en las fases siguientes.
+Cuatro suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
+(fase 24), la VM resumible y lobo 3 (fase 25) y la interfaz del editor
+(fase 23). Congelan el comportamiento antes de cambiar el runtime en las
+fases siguientes.
 
 Todo es texto: los patrones de las capturas son hashes SHA-256 y
 volcados de estado, no imagenes. `recursos/ascii.png` no se versiona y
@@ -11,9 +12,10 @@ las pruebas no lo necesitan.
 ## Comandos
 
 ```bat
-build.bat prueba              compila y pasa las tres suites
+build.bat prueba              compila y pasa las cuatro suites
 build.bat prueba conformidad  solo la suite del lenguaje
 build.bat prueba logic3       solo el proyecto LOGIC3
+build.bat prueba vm           solo la VM y lobo 3
 build.bat prueba regresion    solo la regresion del editor
 build.bat prueba actualizar   reescribe los patrones con el estado actual
 ```
@@ -24,6 +26,7 @@ Tambien se pueden llamar por separado:
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\ejecutar.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\ejecutar.ps1 -Repetir
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\logic3.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\vm.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\regresion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\linea_base.ps1
 ```
@@ -106,6 +109,50 @@ build.bat prueba logic3
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\logic3.ps1 -Actualizar
 git diff pruebas\logic3
 ```
+
+## VM resumible y lobo 3 (`vm.ps1`)
+
+La suite de la fase 25 congela la VM resumible y el compilador en modo VM.
+Los casos viven en `pruebas\vm`:
+
+| Archivo | Que es |
+|---|---|
+| `<nombre>.lobo` | programa suelto; se ejecuta con `game.exe --vm-test` durante 8 fotogramas |
+| `<nombre>.esperado` | traza exacta del caso |
+| `<nombre>.logic3` | proyecto LOGIC3; se ejecuta con `--logic3 --captura` durante 8 fotogramas |
+| `<nombre>.bmp.sha256` | hash del BMP del caso `.logic3` |
+
+Casos:
+
+| Caso | Cubre |
+|---|---|
+| `esperar` | `esperar 3` deja la VM en espera y reanuda en el fotograma 4 |
+| `esperar_dos` | criterio de salida: dos scripts, uno espera y el otro avanza cada fotograma |
+| `funciones` | `llamar`/`retornar`, parametros y restauracion de locales |
+| `globales` | `$global` persiste entre fotogramas |
+| `listas` | `lista`, `anadir`, `ordenar`, `largo`, `elemento` |
+| `detener` | `detener` corta el script y el evento vuelve a empezar |
+| `mensajes` | `mensaje` y `clonar` anotan en la memoria compartida |
+| `pila` | recursion sin fin: el tope de 32 frames corta con error sin colgar el fotograma |
+
+La traza de `--vm-test` es una linea por fotograma:
+
+```text
+vm <fotograma> estado <estado> pc <pc> np <pila> espera <espera> x <x> y <y> msg <n> clones <n> err <n>
+```
+
+`estado` 1 es esperando, 2 terminado. La traza de `--logic3` anade la
+cabecera `vm: N scripts`, una linea `vm: script i bloque b objeto o evento e`
+por script y, por fotograma, `vm i:estado:pc:espera` y la salida `x y`.
+
+Ademas, la suite comprueba la **paridad clasico/VM**: los scripts de
+conformidad que en clasico dan `lobo: 1 scripts` se ejecutan tambien con
+`--vm-test` y deben producir la misma secuencia de `x` e `y`. Se excluye
+`limites_pasos`, cuyo presupuesto por fotograma es distinto a proposito.
+
+Para anadir un caso: crear el `.lobo` o `.logic3`, ejecutar
+`pruebas\vm.ps1 -Filtro <nombre>* -Actualizar`, revisar el `.esperado` a
+mano y volver a pasarla sin `-Actualizar` y con `-Repetir`.
 
 ## Regresion del editor (`regresion.ps1`)
 

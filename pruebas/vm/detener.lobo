@@ -1,0 +1,5 @@
+# detener corta el script: lo que va despues no se ejecuta. En el evento
+# de fotograma el script vuelve a empezar en el fotograma siguiente.
+x = x + 1
+detener
+x = x + 100

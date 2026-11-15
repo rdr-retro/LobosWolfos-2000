@@ -85,7 +85,7 @@ echo Listo: "%SALIDA%"
 exit /b 0
 
 rem ------------------------------------------------------------------
-rem  Modo pruebas: build.bat prueba [conformidad^|logic3^|regresion^|actualizar]
+rem  Modo pruebas: build.bat prueba [conformidad^|logic3^|vm^|regresion^|actualizar]
 rem  Compila el editor con la configuracion normal y pasa las suites.
 rem ------------------------------------------------------------------
 :pruebas
@@ -97,6 +97,7 @@ if /i "%~2"=="actualizar" goto pruebas_actualizar
 if /i "%~2"=="regresion" goto pruebas_regresion
 if /i "%~2"=="conformidad" goto pruebas_conformidad
 if /i "%~2"=="logic3" goto pruebas_logic3
+if /i "%~2"=="vm" goto pruebas_vm
 
 echo.
 echo === Suite de conformidad del lenguaje ===
@@ -105,6 +106,10 @@ if errorlevel 1 exit /b 1
 echo.
 echo === Proyecto LOGIC3 ===
 %PS% "%AQUI%pruebas\logic3.ps1"
+if errorlevel 1 exit /b 1
+echo.
+echo === VM resumible y lobo 3 ===
+%PS% "%AQUI%pruebas\vm.ps1"
 if errorlevel 1 exit /b 1
 echo.
 echo === Regresion visual del editor ===
@@ -119,6 +124,10 @@ exit /b %ERRORLEVEL%
 %PS% "%AQUI%pruebas\logic3.ps1"
 exit /b %ERRORLEVEL%
 
+:pruebas_vm
+%PS% "%AQUI%pruebas\vm.ps1"
+exit /b %ERRORLEVEL%
+
 :pruebas_regresion
 %PS% "%AQUI%pruebas\regresion.ps1"
 exit /b %ERRORLEVEL%
@@ -127,6 +136,8 @@ exit /b %ERRORLEVEL%
 %PS% "%AQUI%pruebas\ejecutar.ps1" -Actualizar
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\logic3.ps1" -Actualizar
+if errorlevel 1 exit /b 1
+%PS% "%AQUI%pruebas\vm.ps1" -Actualizar
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\regresion.ps1" -Actualizar
 exit /b %ERRORLEVEL%

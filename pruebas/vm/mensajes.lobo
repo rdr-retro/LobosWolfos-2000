@@ -1,0 +1,5 @@
+# mensaje y clonar: la VM apunta el mensaje y suma clones en la memoria
+# compartida (el scheduler que los reparte llega en la fase 27).
+mensaje "hola"
+clonar
+x = x + 1

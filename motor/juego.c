@@ -1,12 +1,15 @@
 /* juego.c - game.exe, el juego montado sobre el motor egine (fase 3).
  *
- * Abre una ventana, carga el proyecto (un .logic del gestor de logica o
- * directamente un .mav con sus tiles PNG), dibuja el mapa con el nucleo
- * en ensamblador (motor_mapa_render) y mueve un sprite con el teclado
- * colisionando contra las celdas del mapa (motor_aabb).
+ * Abre una ventana, carga el proyecto (un .logic del gestor de logica, un
+ * .logic3 de los juegos complejos o directamente un .mav con sus tiles
+ * PNG), dibuja el mapa con el nucleo en ensamblador
+ * (motor_mapa_render) y mueve un sprite con el teclado colisionando
+ * contra las celdas del mapa (motor_aabb).
  *
  * Flags de prueba (mismo estilo que el editor):
  *   --logica ruta     proyecto .logic del gestor (busca el mapa en maps/)
+ *   --logic3 ruta     proyecto LOGIC3: scripts codigo.lobo con la VM
+ *                     resumible de la fase 25 (esperar no bloquea)
  *   --mapa ruta       mapa .mav directo (gana al proyecto)
  *   --captura ruta    corre N fotogramas sin ventana y guarda BMP; sale
  *   --fotogramas N    fotogramas de la captura (60 por defecto)
@@ -14,8 +17,10 @@
  *                     (izquierda/derecha/arriba/abajo/saltar)
  *   --traza ruta      escribe en el archivo una linea por fotograma con
  *                     la posicion del lobo (y una cabecera lobo: N);
- *                     sirve para comparar un script con el movimiento
- *                     por defecto de forma determinista
+ *                     en modo --logic3 anade una linea "vm ..." por
+ *                     fotograma con el estado de cada script
+ *   --vm-test ruta    compila un .lobo en modo VM y volca su estado paso
+ *                     a paso (para depurar la maquina sin proyecto)
  */
 #include <windows.h>
 #include <stdio.h>
@@ -23,6 +28,7 @@
 #include <string.h>
 #include "motor.h"
 #include "lobo.h"
+#include "logic3_motor.h"
 
 #define VENTANA_ANCHO 640
 #define VENTANA_ALTO  480
@@ -64,6 +70,88 @@ static void aplicar_ajustes(void) {
     if (g_alto < 200 || g_alto > 4096) g_alto = VENTANA_ALTO;
     if (g_fps < 1 || g_fps > 1000) g_fps = FPS_OBJETIVO;
     if (g_velocidad < 1 || g_velocidad > 10) g_velocidad = SPRITE_VEL;
+}
+
+/* Los ajustes del proyecto LOGIC3 vienen del lector del motor (no de
+ * activo.c, que solo entiende LOGIC2). */
+static void aplicar_ajustes_l3(const MotorL3 *p) {
+    g_ancho = p->ancho;
+    g_alto = p->alto;
+    g_fps = p->fps;
+    g_limitar = p->limitar_cuadros;
+    g_velocidad = p->velocidad;
+    g_fondo = (u32)p->fondo;
+    if (g_ancho < 320 || g_ancho > 4096) g_ancho = VENTANA_ANCHO;
+    if (g_alto < 200 || g_alto > 4096) g_alto = VENTANA_ALTO;
+    if (g_fps < 1 || g_fps > 1000) g_fps = FPS_OBJETIVO;
+    if (g_velocidad < 1 || g_velocidad > 10) g_velocidad = SPRITE_VEL;
+}
+
+/* Archivo legible (mismo criterio que activo.c). */
+static int archivo_existe(const char *ruta) {
+    FILE *f;
+    if (!ruta || !ruta[0]) return 0;
+    f = fopen(ruta, "rb");
+    if (!f) return 0;
+    fclose(f);
+    return 1;
+}
+
+/* Copia de texto con tope (siempre termina en cero). */
+static void copiar_texto(char *dst, int tam, const char *src) {
+    int i;
+    if (tam <= 0) return;
+    for (i = 0; i < tam - 1 && src && src[i]; i++) dst[i] = src[i];
+    dst[i] = '\0';
+}
+
+/* Carpeta de una ruta (sin la barra final). */
+static void ruta_carpeta(const char *ruta, char *dst, int tam) {
+    int i, corte = -1;
+    for (i = 0; ruta && ruta[i]; i++)
+        if (ruta[i] == '\\' || ruta[i] == '/') corte = i;
+    if (corte < 0) {
+        if (tam > 0) dst[0] = '\0';
+        return;
+    }
+    if (corte >= tam) corte = tam - 1;
+    for (i = 0; i < corte; i++) dst[i] = ruta[i];
+    dst[corte] = '\0';
+}
+
+/* Resuelve el mapa de la primera escena del LOGIC3: tal cual, en maps\
+ * junto al ejecutable, o junto al propio .logic3 (con y sin maps\). */
+static int resolver_mapa_l3(const char *ruta_logic3, const char *mapa,
+                            char *dst, int tam) {
+    char carpeta[MAX_PATH], prueba[MAX_PATH];
+
+    if (!mapa || !mapa[0]) return 0;
+    if (archivo_existe(mapa)) {
+        copiar_texto(dst, tam, mapa);
+        return 1;
+    }
+    _snprintf(prueba, sizeof(prueba), "maps\\%s", mapa);
+    prueba[sizeof(prueba) - 1] = '\0';
+    if (archivo_existe(prueba)) {
+        copiar_texto(dst, tam, prueba);
+        return 1;
+    }
+    ruta_carpeta(ruta_logic3, carpeta, sizeof(carpeta));
+    if (carpeta[0]) {
+        _snprintf(prueba, sizeof(prueba), "%s\\%s", carpeta, mapa);
+        prueba[sizeof(prueba) - 1] = '\0';
+        if (archivo_existe(prueba)) {
+            copiar_texto(dst, tam, prueba);
+            return 1;
+        }
+        _snprintf(prueba, sizeof(prueba), "%s\\maps\\%s", carpeta, mapa);
+        prueba[sizeof(prueba) - 1] = '\0';
+        if (archivo_existe(prueba)) {
+            copiar_texto(dst, tam, prueba);
+            return 1;
+        }
+    }
+    return 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -161,6 +249,15 @@ static int g_num_scripts;
 
 static FILE *g_traza; /* --traza: una linea por fotograma */
 
+/* --- modo VM (fase 25): un programa y una maquina por script --- */
+static MotorL3 g_l3;
+static LoboPrograma g_vm_programas[MOTOR_L3_SCRIPTS_MAX];
+static LoboMaquina g_vm_maquinas[MOTOR_L3_SCRIPTS_MAX];
+static int g_vm_origen[MOTOR_L3_SCRIPTS_MAX]; /* script del LOGIC3 */
+static int g_num_vm;
+static int g_modo_vm;
+static LoboMemoria g_memoria; /* globales, listas y mensajes compartidos */
+
 /* Callback de choca() del lenguaje: la caja del sprite contra el
  * mapa solido. */
 static int lobo_choca(void *ctx, int x, int y) {
@@ -212,10 +309,61 @@ static void scripts_preparar(int con_ventana) {
     if (g_traza) fprintf(g_traza, "lobo: %d scripts\n", g_num_scripts);
 }
 
-/* Una linea de traza por fotograma: contador, x e y del lobo. */
+/* Compila los scripts de un LOGIC3: cada bloque codigo.lobo trae su
+ * propio texto y su propia maquina, todos contra la misma memoria
+ * compartida (globales, listas y mensajes de la fase 25). */
+static void scripts_preparar_l3(int con_ventana) {
+    int i;
+
+    g_num_vm = 0;
+    memset(&g_memoria, 0, sizeof(g_memoria));
+    for (i = 0; i < g_l3.num_scripts; i++) {
+        MotorL3Script *s = &g_l3.scripts[i];
+        char error[LOBO_ERROR_MAX];
+
+        lobo_programa_iniciar(&g_vm_programas[g_num_vm]);
+        if (!lobo_compilar(s->codigo, &g_vm_programas[g_num_vm], LOBO_MODO_VM,
+                           error, sizeof(error))) {
+            if (g_traza)
+                fprintf(g_traza, "vm: error bloque %d %s\n", s->bloque, error);
+            if (con_ventana) {
+                char msg[256];
+                _snprintf(msg, sizeof(msg),
+                          "El script del bloque %d no compila:\n%s",
+                          s->bloque, error);
+                msg[sizeof(msg) - 1] = '\0';
+                MessageBoxA(NULL, msg, "egine", MB_ICONWARNING);
+            }
+            continue;
+        }
+        lobo_maquina_reiniciar(&g_vm_maquinas[g_num_vm]);
+        g_vm_origen[g_num_vm] = i;
+        g_num_vm++;
+    }
+    if (g_traza) {
+        fprintf(g_traza, "vm: %d scripts\n", g_num_vm);
+        for (i = 0; i < g_num_vm; i++) {
+            const MotorL3Script *s = &g_l3.scripts[g_vm_origen[i]];
+            fprintf(g_traza, "vm: script %d bloque %d objeto %d evento %d\n", i,
+                    s->bloque, s->objeto, s->evento);
+        }
+    }
+}
+
+/* Una linea de traza por fotograma: contador, x e y del lobo. En modo VM
+ * se anade una linea con el estado de cada script (indice:estado:pc:
+ * espera), que es lo que demuestra que un script esperando no bloquea a
+ * los demas. */
 static void traza_fotograma(void) {
-    if (g_traza)
-        fprintf(g_traza, "%d %d %d\n", juego.fotograma, juego.x, juego.y);
+    int i;
+    if (!g_traza) return;
+    fprintf(g_traza, "%d %d %d\n", juego.fotograma, juego.x, juego.y);
+    if (!g_modo_vm) return;
+    fprintf(g_traza, "vm");
+    for (i = 0; i < g_num_vm; i++)
+        fprintf(g_traza, " %d:%d:%d:%d", i, g_vm_maquinas[i].estado,
+                g_vm_maquinas[i].pc, g_vm_maquinas[i].espera);
+    fprintf(g_traza, "\n");
 }
 
 /* ------------------------------------------------------------------ */
@@ -229,6 +377,29 @@ static void actualizar(void) {
 
     /* Escape cierra siempre, alla donde se mueva el lobo. */
     if (e & MOTOR_ENT_CERRAR) juego.corriendo = 0;
+
+    if (g_modo_vm && g_num_vm > 0) {
+        /* Modo VM (fase 25): cada script conserva su pc, su pila y su
+         * espera; un script esperando no frena a los demas. */
+        LoboEstado st;
+        int i;
+        st.x = juego.x;
+        st.y = juego.y;
+        st.vel = g_velocidad;
+        st.fotograma = juego.fotograma;
+        st.entrada = juego.entrada;
+        st.memoria = &g_memoria;
+        st.choca = lobo_choca;
+        st.ctx = NULL;
+        for (i = 0; i < g_num_vm; i++) {
+            lobo_vm_fotograma(&g_vm_programas[i], &st, &g_vm_maquinas[i]);
+            if (g_vm_maquinas[i].cerrar || g_vm_maquinas[i].detener_todo)
+                juego.corriendo = 0;
+        }
+        juego.x = st.x;
+        juego.y = st.y;
+        return;
+    }
 
     if (g_num_scripts > 0) {
         /* Modo scripts (fase 8): el codigo lobo de los botones
@@ -444,11 +615,95 @@ static int correr_captura(const char *ruta_bmp, int fotogramas) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Banco de pruebas de la VM (--vm-test)                              */
+/* ------------------------------------------------------------------ */
+
+/* Lee un archivo de texto entero (NULL si no se puede). */
+static char *leer_texto(const char *ruta, int *largo) {
+    FILE *f = fopen(ruta, "rb");
+    char *datos;
+    long n;
+    if (!f) return NULL;
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return NULL; }
+    n = ftell(f);
+    if (n < 0 || n > 1024L * 1024) { fclose(f); return NULL; }
+    if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return NULL; }
+    datos = (char *)malloc((size_t)n + 1);
+    if (!datos) { fclose(f); return NULL; }
+    if (n > 0 && fread(datos, 1, (size_t)n, f) != (size_t)n) {
+        free(datos);
+        fclose(f);
+        return NULL;
+    }
+    datos[n] = '\0';
+    *largo = (int)n;
+    fclose(f);
+    return datos;
+}
+
+/* Compila un .lobo en modo VM y ejecuta N fotogramas, volcando en la
+ * traza el estado de la maquina despues de cada uno. Sin ventana y sin
+ * proyecto: sirve para depurar opcodes y el planificador. */
+static int correr_vm_test(const char *ruta_lobo, const char *ruta_traza,
+                          int fotogramas, unsigned tecla) {
+    char *texto;
+    int largo = 0, i, resultado = 0;
+    LoboPrograma programa;
+    LoboMaquina maquina;
+    LoboMemoria memoria;
+    LoboEstado st;
+    char error[LOBO_ERROR_MAX];
+    FILE *traza;
+
+    texto = leer_texto(ruta_lobo, &largo);
+    if (!texto) return 1;
+    traza = fopen(ruta_traza, "wt");
+    if (!traza) { free(texto); return 1; }
+
+    lobo_programa_iniciar(&programa);
+    if (!lobo_compilar(texto, &programa, LOBO_MODO_VM, error, sizeof(error))) {
+        fprintf(traza, "vm: error %s\n", error);
+        fclose(traza);
+        free(texto);
+        lobo_programa_liberar(&programa);
+        return 1;
+    }
+    free(texto);
+
+    memset(&memoria, 0, sizeof(memoria));
+    lobo_maquina_reiniciar(&maquina);
+    memset(&st, 0, sizeof(st));
+    st.x = 16;
+    st.y = 16;
+    st.vel = SPRITE_VEL;
+    st.entrada = tecla;
+    st.memoria = &memoria;
+    st.choca = lobo_choca;
+    st.ctx = NULL;
+
+    fprintf(traza, "vm: %d instrucciones %d funciones\n", programa.largo,
+            programa.num_funciones);
+    for (i = 0; i < fotogramas; i++) {
+        st.fotograma = i + 1;
+        lobo_vm_fotograma(&programa, &st, &maquina);
+        fprintf(traza,
+                "vm %d estado %d pc %d np %d espera %d x %d y %d msg %d "
+                "clones %d err %d\n",
+                i + 1, maquina.estado, maquina.pc, maquina.np, maquina.espera,
+                st.x, st.y, memoria.mensajes, memoria.clones, maquina.agotado);
+    }
+    fclose(traza);
+    lobo_programa_liberar(&programa);
+    return resultado;
+}
+
+/* ------------------------------------------------------------------ */
 /* main                                                                */
 /* ------------------------------------------------------------------ */
 
 static int opcion(const char *nombre) {
     return strcmp(nombre, "--logica") == 0 || strcmp(nombre, "--mapa") == 0 ||
+           strcmp(nombre, "--logic3") == 0 || strcmp(nombre, "--vm-test") == 0 ||
            strcmp(nombre, "--captura") == 0 ||
            strcmp(nombre, "--fotogramas") == 0 ||
            strcmp(nombre, "--tecla") == 0 || strcmp(nombre, "--traza") == 0;
@@ -456,6 +711,7 @@ static int opcion(const char *nombre) {
 
 int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show) {
     const char *ruta_logica = NULL, *ruta_mapa = NULL, *ruta_bmp = NULL;
+    const char *ruta_logic3 = NULL, *ruta_vm_test = NULL;
     const char *ruta_traza = NULL;
     int fotogramas = 60;
     unsigned tecla = 0;
@@ -467,6 +723,8 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         if (opcion(__argv[i]) && i + 1 < __argc) {
             const char *v = __argv[++i];
             if (strcmp(__argv[i - 1], "--logica") == 0) ruta_logica = v;
+            else if (strcmp(__argv[i - 1], "--logic3") == 0) ruta_logic3 = v;
+            else if (strcmp(__argv[i - 1], "--vm-test") == 0) ruta_vm_test = v;
             else if (strcmp(__argv[i - 1], "--mapa") == 0) ruta_mapa = v;
             else if (strcmp(__argv[i - 1], "--captura") == 0) ruta_bmp = v;
             else if (strcmp(__argv[i - 1], "--traza") == 0) ruta_traza = v;
@@ -487,6 +745,16 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         g_traza = fopen(ruta_traza, "wt"); /* si falla: sin traza */
     }
 
+    /* Banco de la VM: no necesita GDI+ ni proyecto. */
+    if (ruta_vm_test) {
+        const char *salida = ruta_traza ? ruta_traza : "vm_test.traza";
+        if (g_traza) {
+            fclose(g_traza);
+            g_traza = NULL;
+        }
+        return correr_vm_test(ruta_vm_test, salida, fotogramas, tecla);
+    }
+
     if (!activo_gdiplus_iniciar()) {
         MessageBoxA(NULL, "No se pudo iniciar GDI+ (gdiplus.dll)",
                     "egine", MB_ICONERROR);
@@ -503,10 +771,45 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     /* Proyecto incrustado (fase 4): si este exe fue compilado por el
      * editor lleva el proyecto pegado al final. Sin rutas explicitas
      * en la linea de comandos, el proyecto sale del propio exe. */
-    if (!ruta_logica && !ruta_mapa && activo_blob_cargar() > 0)
+    if (!ruta_logica && !ruta_mapa && !ruta_logic3 && activo_blob_cargar() > 0)
         ruta_logica = "proyecto.logic";
 
-    if (ruta_mapa) {
+    if (ruta_logic3) {
+        char error[MOTOR_L3_ERROR_MAX];
+        char ruta_mapa_l3[MAX_PATH];
+
+        if (!motor_l3_cargar(ruta_logic3, &g_l3, error, sizeof(error))) {
+            char msg[512];
+            _snprintf(msg, sizeof(msg), "No se pudo cargar el LOGIC3:\n%s",
+                      error);
+            msg[sizeof(msg) - 1] = '\0';
+            MessageBoxA(NULL, msg, "egine", MB_ICONERROR);
+            if (g_traza) fclose(g_traza);
+            return 1;
+        }
+        g_modo_vm = 1;
+        aplicar_ajustes_l3(&g_l3);
+
+        if (g_l3.mapa[0]) {
+            if (!resolver_mapa_l3(ruta_logic3, g_l3.mapa, ruta_mapa_l3,
+                                  sizeof(ruta_mapa_l3)) ||
+                !activo_cargar_mapa(ruta_mapa_l3, &juego.mapa)) {
+                char msg[512];
+                _snprintf(msg, sizeof(msg),
+                          "No se pudo cargar el mapa del LOGIC3:\n%s",
+                          g_l3.mapa);
+                msg[sizeof(msg) - 1] = '\0';
+                MessageBoxA(NULL, msg, "egine", MB_ICONERROR);
+                if (g_traza) fclose(g_traza);
+                return 1;
+            }
+            copiar_texto(juego.mapa_usado, sizeof(juego.mapa_usado),
+                         ruta_mapa_l3);
+        }
+        /* bloques codigo.lobo de los eventos fotograma: un script cada
+         * uno, con la VM resumible */
+        scripts_preparar_l3(ruta_bmp == NULL);
+    } else if (ruta_mapa) {
         if (!activo_cargar_mapa(ruta_mapa, &juego.mapa)) {
             char msg[512];
             _snprintf(msg, sizeof(msg), "No se pudo cargar el mapa:\n%s",
@@ -533,8 +836,8 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     }
 
     /* Ajustes del proyecto (fase 14): resolucion, ritmo, velocidad y
-     * fondo, leidos del trailer del .logic. */
-    aplicar_ajustes();
+     * fondo, leidos del trailer del .logic. El LOGIC3 ya los aplico. */
+    if (!g_modo_vm) aplicar_ajustes();
 
     if (ruta_bmp) {
         buscar_spawn();

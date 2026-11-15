@@ -1,0 +1,4 @@
+# Espera de fotogramas, resumible entre fotogramas.
+x = x + 1
+esperar 3
+y = y + 1

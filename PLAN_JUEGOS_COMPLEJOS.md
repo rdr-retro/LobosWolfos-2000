@@ -783,6 +783,8 @@ con `pruebas/logic3/base.logic`, `esperado.logic3` y `esperado-export.log`
 
 ### Fase 25 - VM resumible y lobo 3 (Windows)
 
+**Estado:** hecha (16-11-2026).
+
 **Objetivo:** ejecutar scripts con estado persistente entre fotogramas.
 
 **Depende de:** 24.
@@ -808,6 +810,33 @@ con `pruebas/logic3/base.logic`, `esperado.logic3` y `esperado-export.log`
 
 **Criterio de salida:** `game.exe --logic3` ejecuta un proyecto con dos
 scripts, uno con `esperar`, y la traza demuestra que no se bloquean.
+
+**Entregado:** `motor/lobo.h` y `motor/lobo.c` rediseñados: `LoboPrograma`
+con instrucciones ampliables (`insts`, `largo`, `capacidad`, `funciones`,
+`textos`), `LoboMaquina` resumible (`pc`, `pila`, `np`, `frames`, `espera`,
+`estado`) y dos modos de compilación, `LOBO_MODO_CLASICO` (topes antiguos y
+sintaxis LOGIC2) y `LOBO_MODO_VM` (topes de la tabla 3.2 y sintaxis nueva).
+`lobo_compilar()` y `lobo_paso()` son la base nueva; `lobo_parsear()` y
+`lobo_ejecutar()` conservan el modo clásico de LOGIC2. Opcodes nuevos:
+`ESPERAR`, `LLAMAR`, `RETORNAR`, `CARGAR_GLOBAL`, `GUARDAR_GLOBAL`,
+`CARGAR_ENTIDAD`, `GUARDAR_ENTIDAD`, `LISTA_*`, `MENSAJE`, `DETENER` y
+`CLONAR`, con pila de llamadas de 32 frames y comprobación de
+desbordamiento. `motor/logic3_motor.c` y `motor/logic3_motor.h` son el lector
+LOGIC3 mínimo del runtime (cabecera, mapa de la primera escena y bloques
+`codigo.lobo` de los eventos `fotograma`). `motor/juego.c` añade `--logic3`
+con memoria compartida (globales, listas, mensajes y clones), traza
+`vm: N scripts` / `vm i:estado:pc:espera` y `--vm-test ruta.lobo` (con
+`--tecla`), que ejecuta un programa suelto sin GDI+ ni ventanas. El editor
+valida `codigo.lobo` y las expresiones `=...` con `lobo_compilar(...,
+LOBO_MODO_VM, ...)` y arranca el `LoboPrograma` antes de compilar en
+`funciones_codigo_validar()` (el buffer ya no es estático). La suite
+`pruebas/vm.ps1` cubre 8 casos (`esperar`, `esperar_dos`, `funciones`,
+`globales`, `listas`, `detener`, `mensajes`, `pila`) y la paridad
+clásico/VM de los 6 scripts de conformidad con un solo elemento. El criterio
+de salida se demuestra con `pruebas/vm/esperar_dos.logic3`: el script 0
+espera tres fotogramas mientras el script 1 avanza cada fotograma.
+`build.bat prueba` pasa las cuatro suites (12/12, 10/10, 9/9 y 8/8) y
+`build.bat prueba vm` ejecuta solo la nueva.
 
 ### Fase 26 - Entidades, escenas y ciclo de vida
 

@@ -25,10 +25,11 @@ para cargar y guardar PNG.
   pueden mover y se acoplan entre sí por sus lados con efecto imán. El panel
   izquierdo lista los elementos del lienzo; hay una sola lógica y se guarda
   como archivo `.logic`.
-- Proyectos `LOGIC3` (fase 24): el editor abre y guarda el formato nuevo con
-  escenas, objetos, eventos, bloques, variables, listas y trajes, detecta la
-  cabecera al abrir un `.logic`, convierte un LOGIC2 existente y exporta de
-  emergencia a LOGIC2. El motor sigue leyendo LOGIC2 hasta la fase 25.
+- Proyectos `LOGIC3` (fases 24 y 25): el editor abre y guarda el formato nuevo
+  con escenas, objetos, eventos, bloques, variables, listas y trajes, detecta
+  la cabecera al abrir un `.logic`, convierte un LOGIC2 existente y exporta de
+  emergencia a LOGIC2. El motor ejecuta los scripts `codigo.lobo` de los
+  eventos de fotograma con una VM resumible (fase 25).
 - Apertura y exportación de PNG/BMP y mapas `.mav`, con un menú **EXPORTAR**
   propio para las dos exportaciones de imagen.
 - Guardado del proyecto entero en un paquete `.wolfo` (lógica, mapas y tiles)
@@ -44,7 +45,8 @@ para cargar y guardar PNG.
   pantallas para empezar sin experiencia previa.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
 - Suite de pruebas en `pruebas/`: conformidad del lenguaje lobo (trazas y
-  hashes de BMP) y regresión visual del editor, con `build.bat prueba`.
+  hashes de BMP), proyecto LOGIC3, VM resumible y regresión visual del editor,
+  con `build.bat prueba`.
 - Plan de la siguiente versión en `PLAN_JUEGOS_COMPLEJOS.md`: juegos complejos
   con un editor de bloques visual (estilo Scratch), formato `LOGIC3`, varias
   escenas y objetos, eventos, variables, listas y una VM resumible. Define las
@@ -69,12 +71,13 @@ También se puede compilar desde PowerShell:
 
 ## Pruebas
 
-`build.bat prueba` compila el editor y pasa las tres suites:
+`build.bat prueba` compila el editor y pasa las cuatro suites:
 
 ```bat
-build.bat prueba              conformidad + logic3 + regresion
+build.bat prueba              conformidad + logic3 + vm + regresion
 build.bat prueba conformidad  solo el lenguaje lobo
 build.bat prueba logic3       solo el proyecto LOGIC3
+build.bat prueba vm           solo la VM y lobo 3
 build.bat prueba regresion    solo la interfaz del editor
 build.bat prueba actualizar   reescribe los patrones (revisar el diff)
 ```
@@ -116,14 +119,23 @@ Para pruebas automáticas sin ventana (captura determinista a BMP):
 motor\game.exe --captura captura.bmp --fotogramas 60 --tecla derecha
 ```
 
-Opción: `--logica ruta` (proyecto `.logic`), `--mapa ruta` (un `.mav`
-directo), `--captura ruta`, `--fotogramas N`, `--tecla nombre`
-(izquierda/derecha/arriba/abajo/saltar) y `--traza ruta` (una línea por
-fotograma con el contador y la posición del lobo; la cabecera
-`lobo: N scripts` confirma que los scripts lobo compilaron y uno que
-falla sale como `lobo: error <id> <motivo>`). La resolución, el límite de
-cuadros, la velocidad y el color de fondo salen de los ajustes del proyecto
-guardados al final del `.logic`.
+Opción: `--logica ruta` (proyecto `.logic`), `--logic3 ruta` (proyecto
+LOGIC3), `--mapa ruta` (un `.mav` directo), `--captura ruta`,
+`--fotogramas N`, `--tecla nombre` (izquierda/derecha/arriba/abajo/saltar)
+y `--traza ruta` (una línea por fotograma con el contador y la posición del
+lobo; la cabecera `lobo: N scripts` confirma que los scripts lobo compilaron
+y uno que falla sale como `lobo: error <id> <motivo>`). La resolución, el
+límite de cuadros, la velocidad y el color de fondo salen de los ajustes del
+proyecto guardados al final del `.logic` o de la cabecera del LOGIC3.
+
+Con `--logic3` el motor compila cada bloque `codigo.lobo` de los eventos
+`fotograma` como un script independiente y los ejecuta en la VM resumible:
+un `esperar` solo detiene su script. La traza añade la cabecera
+`vm: N scripts`, una línea `vm: script i bloque b objeto o evento e` y, por
+fotograma, `vm i:estado:pc:espera`. `--vm-test ruta.lobo` ejecuta un
+programa suelto en la VM sin ventana ni GDI+ y vuelca por fotograma
+`vm <f> estado <e> pc <p> np <n> espera <w> x <x> y <y> msg <n> clones <n>
+err <n>`; lo usa la suite `pruebas\vm.ps1`.
 
 `motor/prueba.c` es un banco de pruebas de consola del núcleo; se compila
 aparte siguiendo las instrucciones de su cabecera y se ejecuta desde la raíz
@@ -232,6 +244,53 @@ por elemento, con sus locales persistentes entre fotogramas) y el
 movimiento por defecto queda fuera; al final del fotograma solo vuelven
 `x` e `y` (vel y fotograma son de entrada). Sin funciones usadas, el juego
 corre con el movimiento por teclado de siempre.
+
+### lobo 3 (modo VM)
+
+Los bloques `codigo.lobo` de un proyecto LOGIC3 se compilan en modo VM con
+la sintaxis anterior más:
+
+```lobo
+# global ($) y variable de entidad (@)
+$puntos = $puntos + 1
+@energia = @energia - 1
+
+# funciones con parametros y retorno
+funcion suma(a, b)
+  retornar a + b
+fin
+x = llamar("suma", 2, 3)
+
+# esperar no bloquea a los demas scripts
+esperar 30
+detener
+
+# listas de enteros
+lista inventario
+anadir(inventario, 7)
+ordenar(inventario)
+x = largo(inventario) + elemento(inventario, 0)
+
+# mensajes y clones (el planificador llega en la fase 27)
+mensaje "hola"
+clonar
+```
+
+Sentencias nuevas: `esperar <expr>` (pausa N fotogramas y reanuda donde
+estaba), `detener` (termina el script), `funcion nombre(a, b)` ... `fin` con
+`retornar <expr>`, `mensaje "texto"` y `clonar`. Las funciones se llaman con
+`llamar("nombre", args...)`. Los textos van entre comillas con los escapes
+`\"`, `\\` y `\n`.
+
+Funciones de lista: `largo(l)`, `elemento(l, i)`, `fijar(l, i, v)`,
+`anadir(l, v)`, `insertar(l, i, v)`, `borrar(l, i)`, `tiene(l, v)`,
+`ordenar(l)` y `limpiar(l)`.
+
+Límites del modo VM (tabla 3.2): 4096 instrucciones, 64 locales, 64
+funciones, 8 parámetros por función, 32 frames de llamada, 256 valores de
+pila, 128 globales, 64 variables de entidad, 32 listas de 256 elementos,
+64 textos de 64 bytes y 1000000 de pasos por fotograma. El modo clásico
+(LOGIC2) conserva sus topes antiguos.
 
 ## Uso
 
