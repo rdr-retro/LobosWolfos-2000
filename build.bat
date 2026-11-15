@@ -10,6 +10,9 @@ set "SRC=%AQUI%src"
 set "OBJ=%AQUI%obj"
 set "SALIDA=%AQUI%LobosWolfos2000.exe"
 
+rem Modo pruebas (fase 23): compila y ejecuta las suites.
+if /i "%~1"=="prueba" goto pruebas
+
 if not "%~1"=="" (
     set "MINGW=%~1"
 ) else (
@@ -80,6 +83,42 @@ goto error
 echo.
 echo Listo: "%SALIDA%"
 exit /b 0
+
+rem ------------------------------------------------------------------
+rem  Modo pruebas: build.bat prueba [conformidad^|regresion^|actualizar]
+rem  Compila el editor con la configuracion normal y pasa las suites.
+rem ------------------------------------------------------------------
+:pruebas
+echo Compilando antes de las pruebas...
+call "%~f0"
+if errorlevel 1 exit /b 1
+set "PS=powershell -NoProfile -ExecutionPolicy Bypass -File"
+if /i "%~2"=="actualizar" goto pruebas_actualizar
+if /i "%~2"=="regresion" goto pruebas_regresion
+if /i "%~2"=="conformidad" goto pruebas_conformidad
+
+echo.
+echo === Suite de conformidad del lenguaje ===
+%PS% "%AQUI%pruebas\ejecutar.ps1"
+if errorlevel 1 exit /b 1
+echo.
+echo === Regresion visual del editor ===
+%PS% "%AQUI%pruebas\regresion.ps1"
+exit /b %ERRORLEVEL%
+
+:pruebas_conformidad
+%PS% "%AQUI%pruebas\ejecutar.ps1"
+exit /b %ERRORLEVEL%
+
+:pruebas_regresion
+%PS% "%AQUI%pruebas\regresion.ps1"
+exit /b %ERRORLEVEL%
+
+:pruebas_actualizar
+%PS% "%AQUI%pruebas\ejecutar.ps1" -Actualizar
+if errorlevel 1 exit /b 1
+%PS% "%AQUI%pruebas\regresion.ps1" -Actualizar
+exit /b %ERRORLEVEL%
 
 :error
 echo.

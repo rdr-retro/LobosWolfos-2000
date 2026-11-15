@@ -1,0 +1,31 @@
+# Aritmetica basica.
+# Cada fotograma deja en x el resultado de una operacion distinta.
+# y no se toca: empieza en 16 (posicion inicial del sprite).
+n = n + 1
+si n == 1
+  x = 2 + 3 * 4
+fin
+si n == 2
+  x = (2 + 3) * 4
+fin
+si n == 3
+  x = 20 / 3
+fin
+si n == 4
+  x = 20 % 3
+fin
+si n == 5
+  x = -7 + 2
+fin
+si n == 6
+  x = 5 - 9
+fin
+si n == 7
+  x = 7 / 0
+fin
+si n == 8
+  x = 7 % 0
+fin
+si n == 9
+  x = 100000 * 30
+fin

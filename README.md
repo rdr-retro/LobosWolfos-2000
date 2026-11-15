@@ -39,6 +39,8 @@ para cargar y guardar PNG.
   el mapa, la lógica y los ajustes) y una **guía paso a paso** de seis
   pantallas para empezar sin experiencia previa.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
+- Suite de pruebas en `pruebas/`: conformidad del lenguaje lobo (trazas y
+  hashes de BMP) y regresión visual del editor, con `build.bat prueba`.
 - Plan de la siguiente versión en `PLAN_JUEGOS_COMPLEJOS.md`: juegos complejos
   con un editor de bloques visual (estilo Scratch), formato `LOGIC3`, varias
   escenas y objetos, eventos, variables, listas y una VM resumible. Define las
@@ -60,6 +62,21 @@ También se puede compilar desde PowerShell:
 ```powershell
 .\build.ps1
 ```
+
+## Pruebas
+
+`build.bat prueba` compila el editor y pasa las dos suites:
+
+```bat
+build.bat prueba              conformidad + regresion
+build.bat prueba conformidad  solo el lenguaje lobo
+build.bat prueba regresion    solo la interfaz del editor
+build.bat prueba actualizar   reescribe los patrones (revisar el diff)
+```
+
+`pruebas/README.md` describe los casos, el formato de las trazas y cómo añadir
+uno nuevo. Los patrones son texto (trazas, volcados y hashes SHA-256): no se
+guardan imágenes en el repositorio.
 
 ## Motor egine (`motor/game.exe`)
 

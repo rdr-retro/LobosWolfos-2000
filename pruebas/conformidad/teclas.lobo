@@ -1,0 +1,20 @@
+# Entrada: solo la tecla mantenida durante la captura esta activa.
+x = 0
+si tecla_derecha
+  x = x + 1
+fin
+si tecla_izquierda
+  x = x + 100
+fin
+si tecla_arriba
+  x = x + 1000
+fin
+si tecla_abajo
+  x = x + 10000
+fin
+si tecla_salto
+  x = x + 100000
+fin
+si tecla_cerrar
+  x = x + 1000000
+fin

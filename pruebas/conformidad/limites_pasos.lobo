@@ -1,0 +1,6 @@
+# Bucle sin salida: el presupuesto de pasos corta la ejecucion del
+# fotograma y el juego sigue. Cada fotograma avanza x lo que deja el
+# presupuesto (28571 iteraciones de 7 instrucciones sobre 200000 pasos).
+mientras 1
+  x = x + 1
+fin

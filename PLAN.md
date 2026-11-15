@@ -669,6 +669,28 @@ el motor ya compila.
   y los criterios de aceptacion. No cambia aun ningun binario: es el contrato
   de trabajo de las siguientes entregas.
 
+- **15-11-2026 (fase 23, suite de conformidad y regresión)** - Se crea
+  `pruebas/` para congelar el runtime y la interfaz antes de tocar el motor.
+  La suite de conformidad (`pruebas/ejecutar.ps1`) tiene 12 casos en
+  `pruebas/conformidad/`: aritmética, precedencia, `si`/`sino`, `mientras`,
+  las 16 locales, teclas, tres errores de compilación (nombre, `fin`,
+  expresión), los límites de locales y de pasos y el render de un mapa. Cada
+  caso incrusta su `.lobo` en un `.logic` temporal, corre `game.exe --captura
+  --traza` y compara la traza exacta; dos casos (`aritmetica` y `render_mapa`)
+  congelan además el hash SHA-256 del BMP. La regresión visual
+  (`pruebas/regresion.ps1`) cubre 8 capturas del editor a 1200x700 (pintar,
+  tiles, mapa, menús ARCHIVO y AYUDA, gestor clásico, guía y juego de ejemplo)
+  comparando código de salida, volcado de `--volcar` y hash del BMP; el caso
+  `ejemplo` corre sobre una copia del editor en una carpeta temporal porque
+  las carpetas del proyecto se crean junto al ejecutable. `build.bat prueba`
+  compila y pasa las dos suites (variantes `conformidad`, `regresion` y
+  `actualizar`), `-Repetir` comprueba el determinismo y `pruebas/linea_base.ps1`
+  escribe `pruebas/linea_base.txt` con fecha, commit, tamaños, hashes, tiempos
+  (≈1,03 s por captura) y memoria pico (17.140 KB el editor, 12.420 KB el
+  motor). Todo son trazas, volcados y hashes de texto: no se versionan
+  imágenes y `recursos/ascii.png` sigue fuera del repositorio. Verificado con
+  `build.bat prueba` (12/12 y 8/8) y con `-Repetir`.
+
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,

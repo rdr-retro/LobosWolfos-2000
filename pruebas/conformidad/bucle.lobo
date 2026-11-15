@@ -1,0 +1,31 @@
+# Bucles mientras: suma, anidamiento y condicion de salida.
+n = n + 1
+si n == 1
+  i = 1
+  suma = 0
+  mientras i <= 10
+    suma = suma + i
+    i = i + 1
+  fin
+  x = suma
+fin
+si n == 2
+  i = 0
+  total = 0
+  mientras i < 3
+    j = 0
+    mientras j < 4
+      total = total + 1
+      j = j + 1
+    fin
+    i = i + 1
+  fin
+  x = total
+fin
+si n == 3
+  i = 10
+  mientras i > 0
+    i = i - 3
+  fin
+  x = i
+fin

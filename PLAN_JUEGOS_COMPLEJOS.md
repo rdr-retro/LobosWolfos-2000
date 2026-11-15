@@ -712,6 +712,8 @@ Cada fase es un commit. Las fases 23-30 son runtime y formato; 31-36 editor;
 
 ### Fase 23 - Congelar la base y crear la suite de conformidad
 
+**Estado:** hecha (15-11-2026).
+
 **Objetivo:** poder cambiar el motor sin miedo.
 
 **Depende de:** nada.
@@ -734,6 +736,12 @@ Cada fase es un commit. Las fases 23-30 son runtime y formato; 31-36 editor;
 
 **Criterio de salida:** `pruebas/ejecutar.ps1` devuelve 0 y las capturas
 coinciden con la linea base.
+
+**Entregado:** `pruebas/conformidad` (12 casos), `pruebas/ejecutar.ps1`,
+`pruebas/regresion.ps1` (8 casos), `pruebas/comun.ps1`,
+`pruebas/linea_base.ps1`, `pruebas/linea_base.txt` y `pruebas/README.md`;
+`build.bat prueba [conformidad|regresion|actualizar]`. La linea base se mide
+sobre el commit `b99080f`: 12/12 y 8/8, con `-Repetir` determinista.
 
 ### Fase 24 - LOGIC3: modelo, lector, escritor y migrador
 

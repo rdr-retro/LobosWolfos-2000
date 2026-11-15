@@ -1,0 +1,3 @@
+lobo: error 1 linea 18: demasiadas variables locales (maximo 16)
+lobo: 0 scripts
+1 16 16

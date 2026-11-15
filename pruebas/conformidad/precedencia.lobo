@@ -1,0 +1,53 @@
+# Precedencia, asociatividad y operadores logicos.
+n = n + 1
+si n == 1
+  x = 1 + 2 == 3
+fin
+si n == 2
+  x = 1 + 2 == 4
+fin
+si n == 3
+  x = 3 > 2 & 2 > 1
+fin
+si n == 4
+  x = 0 | 2 == 2
+fin
+si n == 5
+  x = no 0
+fin
+si n == 6
+  x = no (1 == 1)
+fin
+si n == 7
+  x = (1 + 2) * (3 - 1)
+fin
+si n == 8
+  x = - -5
+fin
+si n == 9
+  x = 2 * 3 + 4 * 5
+fin
+si n == 10
+  x = 2 + 3 < 4 + 5
+fin
+si n == 11
+  x = 1 & 0 | 1
+fin
+si n == 12
+  x = 0 & 1 | 0
+fin
+si n == 13
+  x = 10 - 2 - 3
+fin
+si n == 14
+  x = 100 / 10 / 2
+fin
+si n == 15
+  x = 2 * 3 % 4
+fin
+si n == 16
+  x = 1 == 1 & 2 == 2
+fin
+si n == 17
+  x = no 1 == 2
+fin

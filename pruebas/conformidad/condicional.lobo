@@ -1,0 +1,28 @@
+# si / sino, anidamiento y cuerpos que no se ejecutan.
+n = n + 1
+si n == 1
+  x = 10
+sino
+  x = 20
+fin
+si n == 2
+  si 1
+    y = 30
+  sino
+    y = 40
+  fin
+sino
+  y = 50
+fin
+si n == 3
+  x = 0 - 1
+  si x < 0
+    x = 60
+  fin
+fin
+si n == 4
+  si 0
+    x = 70
+  fin
+  y = 80
+fin

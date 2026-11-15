@@ -1,0 +1,28 @@
+LobosWolfos 2000 - linea base de pruebas
+Fecha: 2026-11-15 20:51
+Commit: b99080f
+
+Esta linea base es informativa. Los hashes de los ejecutables
+cambian en cada compilacion (marca de tiempo del PE); las
+suites congelan trazas y BMP, no el binario.
+
+LobosWolfos2000.exe
+  bytes:  1036369
+  sha256: cf0edaa6fea7695396df61fb6e1a77171182d331573e3248c4b3bd5ea86caf3a
+
+motor\game.exe
+  bytes:  203580
+  sha256: da94e686fc4d2e9cefe66c3aac9e0d39721d878ac39fd3bf776422b8ef98b7ba
+
+Arranque de una captura del editor (1200x700)
+  tiempo: 1.028 ms (min 1.012, max 1.054, 5 muestras)
+  memoria pico en ventana: 17.140 KB
+
+Arranque de una captura del motor (mapa.mav, 30 fotogramas)
+  tiempo: 1.023 ms (min 1.016, max 1.034, 5 muestras)
+  memoria pico en ventana: 12.420 KB
+
+Comandos
+  build.bat prueba
+  pruebas\ejecutar.ps1 -Repetir
+  pruebas\regresion.ps1
