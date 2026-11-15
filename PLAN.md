@@ -9,6 +9,11 @@ editor y se compila a dos destinos: **`game.exe`** para Windows, o una
 Este documento organiza la visión, las piezas, las fases y las decisiones.
 Se actualiza con cada entrega.
 
+El siguiente salto de alcance (juegos complejos con un editor de bloques tipo
+Scratch) vive en **`PLAN_JUEGOS_COMPLEJOS.md`**, con las fases 23 a 45, el
+formato LOGIC3, la VM resumible y el catálogo de bloques. Ese documento es el
+que debe seguir otra IA para continuar el proyecto.
+
 ## 1. Las cuatro piezas
 
 | Pieza | Qué es | Dónde vive |
@@ -653,6 +658,16 @@ el motor ya compila.
   avanza a `paso=1`; en `paso=5` SIGUIENTE cierra la guía y crea el ejemplo;
   `Escape` cierra la guía; `--ejemplo --captura-juego` produce una imagen
   640x480 con el sprite azul sobre el claro verde y los árboles alrededor.
+
+- **15-11-2026 (plan maestro de juegos complejos)** - Se crea
+  `PLAN_JUEGOS_COMPLEJOS.md` como plan ejecutable por otra IA. Mantiene lobo
+  como unico lenguaje de runtime y anade un front-end de bloques que compila a
+  lobo 3, un formato `LOGIC3` con escenas, objetos, eventos, variables y
+  listas, una VM resumible y una vista **Estudio** nueva, conservando el gestor
+  de logica clasico y la compatibilidad con LOGIC1/LOGIC2. Define las fases 23
+  a 45, los presupuestos de memoria, el catalogo de bloques, el plan de pruebas
+  y los criterios de aceptacion. No cambia aun ningun binario: es el contrato
+  de trabajo de las siguientes entregas.
 
 ## 5. Pendiente de decidir
 

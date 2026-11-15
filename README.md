@@ -39,6 +39,10 @@ para cargar y guardar PNG.
   el mapa, la lógica y los ajustes) y una **guía paso a paso** de seis
   pantallas para empezar sin experiencia previa.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
+- Plan de la siguiente versión en `PLAN_JUEGOS_COMPLEJOS.md`: juegos complejos
+  con un editor de bloques visual (estilo Scratch), formato `LOGIC3`, varias
+  escenas y objetos, eventos, variables, listas y una VM resumible. Define las
+  fases 23 a 45 para continuar el proyecto.
 
 ## Compilar
 
@@ -515,6 +519,9 @@ procesado en `src\nucleo.c`.
 - `build.bat` / `build.ps1` — scripts de compilación. El del editor compila
   primero el motor y el kernel, porque sus plantillas viajan incrustadas
   como recursos.
+- `PLAN.md` — historial de fases y decisiones ya entregadas.
+- `PLAN_JUEGOS_COMPLEJOS.md` — plan maestro de las fases 23 a 45 (juegos
+  complejos, LOGIC3, bloques y VM resumible).
 
 ## Licencia
 
