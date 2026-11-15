@@ -960,6 +960,12 @@ typedef struct App {
     u32 *info_imagen;
     int info_w, info_h;
 
+    /* Guia paso a paso para principiantes (fase 22). Es modal: mientras
+     * esta abierta solo responden sus botones, las flechas y Escape. */
+    int guia_visible;
+    int guia_paso;      /* 0..GUIA_PASOS-1 */
+    int guia_hover;     /* boton bajo el raton o -1 */
+
     /* Ajustes del proyecto (fase 14): boton AJUSTES DEL PROYECTO. */
     AjustesProyecto ajustes;
     AjustesProyecto ajustes_ed;   /* copia en edicion */
@@ -1181,6 +1187,9 @@ void tiles_liberar(void);
 void tiles_ordenar_por_fecha(void);
 int  tiles_guardar_actual(void);
 int  tiles_guardar_desde(const u32 *pix, int ancho, int alto, const char *nombre);
+/* Guarda un tile con un nombre concreto (`<nombre>.png`) en la carpeta
+ * `tiles`. Lo usa el juego de ejemplo para crear sus piezas. */
+int  tiles_guardar_como(const u32 *pix, int ancho, int alto, const char *nombre);
 void tile_liberar(TileGuardado *t);
 u32 *tile_miniatura(const TileGuardado *t, int lado);
 
@@ -1282,6 +1291,21 @@ void ui_dibujar_menu_desplegable(void);
 /* (cursor del raton: solo el cursor de Windows, sin circulo dibujado) */
 void ui_dibujar_texturas(void);
 const char *ui_nombre_herramienta(int indice);
+
+/* Guia paso a paso (ui.c/app.c): ventana modal de ayuda al principiante. */
+#define GUIA_PASOS 6
+Zona guia_zona(void);
+Zona guia_boton_zona(int indice); /* 0 anterior, 1 siguiente, 2 cerrar */
+int  guia_boton_en(int x, int y); /* incluye la X: 3 */
+void ui_dibujar_guia(void);
+void guia_abrir(void);
+void guia_cerrar(void);
+void guia_anterior(void);
+void guia_siguiente(void);
+void guia_pulsar(int x, int y, int boton);
+/* Crea en el proyecto un juego de ejemplo completo y lo deja listo para
+ * probar con PLAY (ejemplo.c). */
+void ejemplo_crear_juego(void);
 
 Zona menu_barra_zona(void);
 int  menu_barra_en(int x, int y);

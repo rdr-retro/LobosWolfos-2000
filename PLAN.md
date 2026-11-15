@@ -624,6 +624,36 @@ el motor ya compila.
   210x262 con 8; al pulsar (130,45) se abre `menu=1` y (210,45) abre
   `menu=2`; **INFO** sigue abriendo su ventana.
 
+- **15-11-2026 (fase 22, menú AYUDA y primer juego)** - La barra de menús pasa
+  a 11 etiquetas: **AYUDA** se coloca entre **COMPILE** e **INFO**
+  (`MENU_ETIQUETAS`), con índice 9, e INFO pasa al 10 y sigue abriendo su
+  ventana directamente al pulsar la etiqueta. AYUDA tiene un desplegable de 2
+  filas: **Crear juego de ejemplo** y **Guia paso a paso**. El ejemplo
+  (`src/ejemplo.c`) se genera sin salir del editor: tres tiles de 32x32
+  procedurales (`ejemplo_arbol.png`, `ejemplo_agua.png`, `ejemplo_roca.png`,
+  guardados con `tiles_guardar_como`), el mapa `maps\primer_juego.mav` con un
+  claro interior vacío rodeado de paredes sólidas de árboles, agua y rocas, la
+  lógica con su item de mapa y los ajustes 640x480 / 60 FPS / velocidad 3 /
+  fondo verde `0x001E5A2E` (se fijan después de `logica_iniciar`, que los
+  resetea) y el guardado en `logic\primer_juego.logic`. Las coordenadas del
+  mapa son negativas para que el jugador aparezca dentro del claro, en la celda
+  0,0. La guía es una ventana modal propia (`g.guia_visible`, `g.guia_paso`,
+  `g.guia_hover`) de 6 pasos con botones **ANTERIOR**/**SIGUIENTE**/**CERRAR**,
+  X, puntos de progreso y flechas/`Escape`; en el último paso SIGUIENTE pasa a
+  **CREAR EJEMPLO**. Mientras está abierta bloquea el resto de la interfaz
+  (`app_pulsar`/`app_soltar`/`app_mover`/teclas) y `ui_dibujar` la pinta en las
+  tres vistas. Se acepta que en el motor actual todas las celdas del mapa son
+  sólidas: el ejemplo usa las celdas vacías como suelo caminable y el color de
+  fondo como césped, sin tocar el formato `.mav`. Flags de prueba nuevos:
+  `--ejemplo`, `--guia`, `--guia-paso N` y `guia=`/`paso=` en `--volcar`.
+  Verificado con `build.bat` sin warnings y por píxeles/clics a 1200x700:
+  AYUDA se dibuja en x≈834-902 e INFO en x≈904-954; (840,45) abre `menu=9` y
+  (920,45) abre INFO; la fila 0 deja `vista=2`, `modulos=1` y
+  `mapa=...\maps\primer_juego.mav`; la fila 1 abre `guia=1 paso=0`; SIGUIENTE
+  avanza a `paso=1`; en `paso=5` SIGUIENTE cierra la guía y crea el ejemplo;
+  `Escape` cierra la guía; `--ejemplo --captura-juego` produce una imagen
+  640x480 con el sprite azul sobre el claro verde y los árboles alrededor.
+
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,

@@ -162,6 +162,41 @@ int tiles_guardar_actual(void) {
     return tiles_guardar_desde(g.doc.compuesto, g.doc.ancho, g.doc.alto, NULL);
 }
 
+/* Guarda un tile con un nombre concreto. El nombre se limpia para que solo
+ * tenga letras, numeros, guion y guion bajo; la extension .png se pone aqui.
+ * Si ya existe un archivo con ese nombre se sobrescribe, que es lo que
+ * espera el juego de ejemplo al volver a crearse. */
+int tiles_guardar_como(const u32 *pix, int ancho, int alto, const char *nombre) {
+    char carpeta[MAX_PATH];
+    char ruta[MAX_PATH];
+    char base[64];
+    int i, j = 0;
+    int max_scroll;
+    if (!pix || ancho < 1 || alto < 1 || !nombre || !nombre[0]) return 0;
+    for (i = 0; nombre[i] && j < (int)sizeof(base) - 1; i++) {
+        char c = nombre[i];
+        if (c == '.') break;
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9') || c == '_' || c == '-')
+            base[j++] = c;
+    }
+    base[j] = '\0';
+    if (!base[0]) return 0;
+    carpeta_tiles(carpeta, sizeof(carpeta));
+    crear_carpeta(carpeta);
+    formatear(ruta, sizeof(ruta), "%s\\%s.png", carpeta, base);
+    if (!imagen_guardar_png(ruta, pix, ancho, alto)) {
+        app_estado("No se pudo guardar el tile");
+        return 0;
+    }
+    tiles_cargar();
+    max_scroll = g.num_tiles - TILES_SELECTOR_VISIBLES;
+    if (max_scroll < 0) max_scroll = 0;
+    if (g.tiles_scroll > max_scroll) g.tiles_scroll = max_scroll;
+    app_estado("Tile guardado: %s", ruta);
+    return 1;
+}
+
 u32 *tile_miniatura(const TileGuardado *t, int lado) {
     u32 *mini;
     int x, y;

@@ -4,11 +4,11 @@
  * ========================================================================== */
 #include "app.h"
 
-#define MENU_TOTAL 10
+#define MENU_TOTAL 11
 static const char *MENU_ETIQUETAS[MENU_TOTAL] = {
     "ARCHIVO", "EXPORTAR", "MODO", "EDITAR",
     "SELECCIONAR", "CAPA", "COLORES", "AJUSTES DEL PROYECTO",
-    "COMPILE", "INFO"
+    "COMPILE", "AYUDA", "INFO"
 };
 
 #define MENU_MARGEN 6
@@ -795,6 +795,7 @@ int menu_num_filas(int menu) {
         case 3: return 5;
         case 4: return 3;
         case 8: return 2;
+        case 9: return 2;
         default: return 0;
     }
 }
@@ -860,6 +861,16 @@ Zona menu_panel_zona(int menu) {
             if (ancho > interior) ancho = interior;
             return zona_hacer(etiqueta.x, zona_abajo(etiqueta), ancho,
                               3 + MENU_FILA_ALTO * 2 + 3);
+        case 9:
+            interior = texto_menu_ancho("Crear juego de ejemplo");
+            if (texto_menu_ancho("Guia paso a paso") > interior)
+                interior = texto_menu_ancho("Guia paso a paso");
+            ancho = interior + 8 + 8;
+            interior = g.ancho - etiqueta.x - 2;
+            if (interior < 80) interior = 80;
+            if (ancho > interior) ancho = interior;
+            return zona_hacer(etiqueta.x, zona_abajo(etiqueta), ancho,
+                              3 + MENU_FILA_ALTO * 2 + 3);
         default:
             return zona_vacia();
     }
@@ -907,6 +918,8 @@ int menu_fila_activa(int menu, int fila) {
             if (fila == 1 || fila == 2) return g.sel.activa;
             return 0;
         case 8:
+            return 1;
+        case 9:
             return 1;
         default:
             return 0;
@@ -1560,6 +1573,11 @@ void ui_dibujar_menu_desplegable(void) {
             case 8:
                 dibujar_fila_menu(z, COMPILE_TEXTO[i], NULL, hover, activo,
                                   0x00909090u);
+                break;
+            case 9:
+                if (i == 0) texto = "Crear juego de ejemplo";
+                else texto = "Guia paso a paso";
+                dibujar_fila_menu(z, texto, NULL, hover, activo, 0x00909090u);
                 break;
             default:
                 break;
@@ -3413,6 +3431,236 @@ void ui_dibujar_info(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Guia paso a paso (fase 22)                                          */
+/* ------------------------------------------------------------------ */
+#define GUIA_ANCHO_V       560
+#define GUIA_ALTO_V        392
+#define GUIA_TITULO_ALTO_V 26
+#define GUIA_MARGEN_V      20
+#define GUIA_BOTON_ALTO_V  28
+#define GUIA_BOTON_HUECO_V 10
+
+#define GUIA_FONDO_V        0x00F7F7F7u
+#define GUIA_BORDE_V        0x00506070u
+#define GUIA_TITULO_FONDO_V 0x003278E0u
+#define GUIA_TITULO_TEXTO_V 0x00FFFFFFu
+#define GUIA_TEXTO_V        0x00202020u
+#define GUIA_GRIS_V         0x00707070u
+#define GUIA_ACENTO_V       0x003278E0u
+#define GUIA_BOTON_V        0x00DCDCDCu
+#define GUIA_BOTON_HOV_V    0x00C4D4E8u
+#define GUIA_BOTON_OFF_V    0x00EAEAEAu
+#define GUIA_PISTA_V        0x00FFF4C8u
+#define GUIA_PISTA_BORDE_V  0x00D8C070u
+
+typedef struct GuiaPaso {
+    const char *titulo;
+    const char *lineas[4];
+    const char *consejo;
+} GuiaPaso;
+
+static const GuiaPaso GUIA_TEXTO_V_PASOS[GUIA_PASOS] = {
+    {
+        "1. DIBUJA TU PRIMER TILE",
+        {
+            "Un tile es una pieza pequena del escenario. Empieza con 32x32.",
+            "Abre MODO > MODO TILES y pinta dentro del cuadro con la paleta.",
+            "Pulsa GUARDAR TILE en el panel derecho para crear tu pieza.",
+            "Los tiles se guardan como PNG en la carpeta tiles del proyecto."
+        },
+        "Consejo: pocos colores y formas simples hacen un tile mas claro."
+    },
+    {
+        "2. CONSTRUYE EL ESCENARIO",
+        {
+            "Abre MODO > EDITOR DE MAPAS y elige un tile en el panel derecho.",
+            "Haz clic en la rejilla para colocar piezas; clic derecho borra.",
+            "Los tiles que coloques bloquean el paso del personaje.",
+            "Guarda el mapa con ARCHIVO > GUARDAR MAPA .MAV."
+        },
+        "Consejo: deja celdas vacias para que el personaje pueda caminar."
+    },
+    {
+        "3. UNE EL MAPA A TU JUEGO",
+        {
+            "Abre MODO > GESTOR DE LOGICA. Veras el boton ITEM a la derecha.",
+            "Elige tu mapa en ITEM y arrastralo al lienzo central.",
+            "Ese elemento le dice al juego que mapa debe cargar al empezar.",
+            "Puedes mover el elemento arrastrandolo con el raton."
+        },
+        "Consejo: el primer mapa del proyecto es el que se juega."
+    },
+    {
+        "4. AJUSTA LA VENTANA",
+        {
+            "Pulsa AJUSTES DEL PROYECTO en la barra de menus.",
+            "Elige resolucion, limite de FPS, velocidad y color de fondo.",
+            "El color de fondo es el suelo que se ve entre los tiles.",
+            "Pulsa ACEPTAR para guardar los ajustes en la logica."
+        },
+        "Consejo: 640x480 y 60 FPS funcionan bien en cualquier PC."
+    },
+    {
+        "5. PRUEBA TU JUEGO",
+        {
+            "Pulsa el boton PLAY verde de la barra superior.",
+            "Mueve al lobo con las flechas o con W A S D.",
+            "Escape cierra la prueba y vuelve al editor.",
+            "Si algo no queda bien, cambia el mapa o los ajustes y repite."
+        },
+        "Consejo: prueba muchas veces antes de ensenar tu juego."
+    },
+    {
+        "6. COMPARTE TU JUEGO",
+        {
+            "Abre COMPILE > COMPILAR PARA WINDOWS para crear game.exe.",
+            "El juego lleva dentro tu mapa, tus tiles y tus ajustes.",
+            "Tambien puedes guardar todo con ARCHIVO > GUARDAR PROYECTO.",
+            "Si prefieres empezar con algo hecho, pulsa CREAR EJEMPLO."
+        },
+        "El juego de ejemplo trae tiles, mapa y ajustes listos para jugar."
+    }
+};
+
+Zona guia_zona(void) {
+    int x = (g.ancho - GUIA_ANCHO_V) / 2;
+    int y = (g.alto - GUIA_ALTO_V) / 2;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    return zona_hacer(x, y, GUIA_ANCHO_V, GUIA_ALTO_V);
+}
+
+static Zona guia_cerrar_zona(void) {
+    Zona v = guia_zona();
+    int derecha = zona_derecha(v) < g.ancho ? zona_derecha(v) : g.ancho;
+    int x = derecha - 18 - 3;
+    if (x < v.x) x = v.x;
+    return zona_hacer(x, v.y + 4, 18, 18);
+}
+
+Zona guia_boton_zona(int indice) {
+    Zona v = guia_zona();
+    static const int anchos[3] = { 130, 170, 90 };
+    int total = anchos[0] + anchos[1] + anchos[2] + GUIA_BOTON_HUECO_V * 2;
+    int x0 = v.x + (v.ancho - total) / 2;
+    int y = zona_abajo(v) - GUIA_MARGEN_V - GUIA_BOTON_ALTO_V;
+    if (indice == 3) return guia_cerrar_zona();
+    if (indice < 0 || indice > 2) return zona_vacia();
+    return zona_hacer(x0 + (indice == 0 ? 0 : anchos[0] + GUIA_BOTON_HUECO_V) +
+                              (indice == 2 ? anchos[1] + GUIA_BOTON_HUECO_V : 0),
+                      y, anchos[indice], GUIA_BOTON_ALTO_V);
+}
+
+int guia_boton_en(int x, int y) {
+    int i;
+    if (!g.guia_visible) return -1;
+    for (i = 0; i < 4; i++) {
+        if (zona_contiene(guia_boton_zona(i), x, y)) return i;
+    }
+    return -1;
+}
+
+static void guia_dibujar_boton(int indice, const char *texto, int activo) {
+    Zona z = guia_boton_zona(indice);
+    int hover = activo && zona_contiene(z, g.raton_x, g.raton_y);
+    u32 fondo = !activo ? GUIA_BOTON_OFF_V : (hover ? GUIA_BOTON_HOV_V : GUIA_BOTON_V);
+    u32 color = activo ? GUIA_TEXTO_V : GUIA_GRIS_V;
+    dibujar_rect_z(z, fondo);
+    dibujar_marco_z(z, hover ? GUIA_ACENTO_V : GUIA_BORDE_V);
+    fuente_dibujar(z.x + (z.ancho - fuente_texto_ancho(texto)) / 2,
+                   z.y + (z.alto - 7) / 2, texto, color);
+}
+
+void ui_dibujar_guia(void) {
+    Zona v;
+    Zona cerrar;
+    int i;
+    const GuiaPaso *paso;
+    char marca[32];
+    if (!g.guia_visible) return;
+    if (g.guia_paso < 0) g.guia_paso = 0;
+    if (g.guia_paso >= GUIA_PASOS) g.guia_paso = GUIA_PASOS - 1;
+    paso = &GUIA_TEXTO_V_PASOS[g.guia_paso];
+    v = guia_zona();
+    cerrar = guia_cerrar_zona();
+
+    /* Sombra y ventana. */
+    dibujar_rect(v.x + 5, v.y + 5, zona_derecha(v) + 5, zona_abajo(v) + 5,
+                 0x00808080u);
+    dibujar_rect_z(v, GUIA_FONDO_V);
+    dibujar_rect(v.x, v.y, zona_derecha(v), v.y + GUIA_TITULO_ALTO_V,
+                 GUIA_TITULO_FONDO_V);
+    dibujar_rect(v.x, v.y + GUIA_TITULO_ALTO_V - 1, zona_derecha(v),
+                 v.y + GUIA_TITULO_ALTO_V, GUIA_BORDE_V);
+
+    fuente_dibujar(v.x + 10,
+                   v.y + (GUIA_TITULO_ALTO_V - 7) / 2,
+                   "GUIA PASO A PASO", GUIA_TITULO_TEXTO_V);
+
+    /* Puntos de progreso: uno por paso. */
+    for (i = 0; i < GUIA_PASOS; i++) {
+        int lado = 8;
+        int px = zona_derecha(cerrar) - 18 - GUIA_PASOS * (lado + 4) +
+                 i * (lado + 4);
+        int py = v.y + (GUIA_TITULO_ALTO_V - lado) / 2;
+        dibujar_rect(px, py, px + lado, py + lado,
+                     i == g.guia_paso ? 0x00FFFFFFu : 0x007FA8DCu);
+    }
+
+    /* Boton de cerrar de la barra de titulo. */
+    if (zona_contiene(cerrar, g.raton_x, g.raton_y))
+        dibujar_rect_z(cerrar, 0x00D9534Fu);
+    fuente_dibujar(cerrar.x + (cerrar.ancho - fuente_texto_ancho("X")) / 2,
+                   cerrar.y + (cerrar.alto - 7) / 2, "X",
+                   GUIA_TITULO_TEXTO_V);
+
+    /* Cabecera del paso. */
+    formatear(marca, sizeof(marca), "PASO %d DE %d", g.guia_paso + 1,
+              GUIA_PASOS);
+    fuente_dibujar(zona_derecha(v) - GUIA_MARGEN_V - fuente_texto_ancho(marca),
+                   v.y + 40, marca, GUIA_GRIS_V);
+    fuente_dibujar_escala(v.x + GUIA_MARGEN_V, v.y + 34, paso->titulo,
+                          GUIA_ACENTO_V, 2);
+    dibujar_rect(v.x + GUIA_MARGEN_V, v.y + 64,
+                 zona_derecha(v) - GUIA_MARGEN_V, v.y + 65, 0x00C8D0D8u);
+
+    /* Cuerpo: una linea por fila, con un cuadradito de color. */
+    for (i = 0; i < 4; i++) {
+        int y = v.y + 82 + i * 22;
+        dibujar_rect(v.x + GUIA_MARGEN_V + 2, y + 2,
+                     v.x + GUIA_MARGEN_V + 6, y + 6, GUIA_ACENTO_V);
+        fuente_dibujar(v.x + GUIA_MARGEN_V + 14, y, paso->lineas[i],
+                       GUIA_TEXTO_V);
+    }
+
+    /* Recuadro del consejo. */
+    {
+        Zona pista = zona_hacer(v.x + GUIA_MARGEN_V, v.y + 196,
+                                v.ancho - GUIA_MARGEN_V * 2, 64);
+        dibujar_rect_z(pista, GUIA_PISTA_V);
+        dibujar_marco_z(pista, GUIA_PISTA_BORDE_V);
+        fuente_dibujar(pista.x + 12, pista.y + 12, "CONSEJO", 0x00605020u);
+        fuente_dibujar(pista.x + 12, pista.y + 34, paso->consejo,
+                       GUIA_TEXTO_V);
+    }
+
+    /* Ayuda de teclas y botones. */
+    fuente_dibujar(v.x + GUIA_MARGEN_V, v.y + 312,
+                   "Flechas: cambiar paso     ESC: cerrar la guia",
+                   GUIA_GRIS_V);
+
+    guia_dibujar_boton(0, "ANTERIOR", g.guia_paso > 0);
+    if (g.guia_paso + 1 < GUIA_PASOS)
+        guia_dibujar_boton(1, "SIGUIENTE >", 1);
+    else
+        guia_dibujar_boton(1, "CREAR EJEMPLO", 1);
+    guia_dibujar_boton(2, "CERRAR", 1);
+
+    dibujar_marco_z(v, GUIA_BORDE_V);
+}
+
+
+/* ------------------------------------------------------------------ */
 /* Dibujo general                                                      */
 /* ------------------------------------------------------------------ */
 /* Recorta un rectangulo a la zona indicada. Devuelve 0 si no queda nada. */
@@ -4339,6 +4587,7 @@ void ui_dibujar(void) {
         ui_dibujar_estado();
         ui_dibujar_confirmaciones();
         ui_dibujar_ajustes();
+        ui_dibujar_guia();
         return;
     }
 
@@ -4355,6 +4604,7 @@ void ui_dibujar(void) {
         ui_dibujar_estado();
         ui_dibujar_confirmaciones();
         ui_dibujar_ajustes();
+        ui_dibujar_guia();
         return;
     }
 
@@ -4394,6 +4644,7 @@ void ui_dibujar(void) {
     texto_dibujar_barra();
     ui_dibujar_confirmaciones();
     ui_dibujar_ajustes();
+    ui_dibujar_guia();
 
     /* Linea de estado de estructuras no usadas. */
     for (i = 0; i < 0; i++) { }

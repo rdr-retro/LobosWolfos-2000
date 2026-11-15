@@ -271,6 +271,11 @@ static void ejecutar_menu(int menu, int opcion) {
             else if (opcion == 1) dialogo_compilar_windows();
             break;
         case 9:
+            /* AYUDA (fase 22): ejemplo listo para jugar o guia paso a paso. */
+            if (opcion == 0) ejemplo_crear_juego();
+            else if (opcion == 1) guia_abrir();
+            break;
+        case 10:
             g.info_visible = 1;
             app_invalidar();
             break;
@@ -299,6 +304,49 @@ static void clic_media(int boton) {
             break;
     }
     app_invalidar();
+}
+
+/* ------------------------------------------------------------------ */
+/* Guia paso a paso (fase 22)                                          */
+/* ------------------------------------------------------------------ */
+void guia_abrir(void) {
+    g.guia_visible = 1;
+    g.guia_paso = 0;
+    g.guia_hover = -1;
+    g.menu_abierto = -1;
+    app_invalidar();
+}
+
+void guia_cerrar(void) {
+    if (!g.guia_visible) return;
+    g.guia_visible = 0;
+    g.guia_hover = -1;
+    app_invalidar();
+}
+
+void guia_anterior(void) {
+    if (g.guia_paso > 0) g.guia_paso--;
+    app_invalidar();
+}
+
+void guia_siguiente(void) {
+    if (g.guia_paso + 1 < GUIA_PASOS) {
+        g.guia_paso++;
+        app_invalidar();
+        return;
+    }
+    /* En el ultimo paso el boton crea el juego de ejemplo. */
+    guia_cerrar();
+    ejemplo_crear_juego();
+}
+
+void guia_pulsar(int x, int y, int boton) {
+    int b;
+    if (!g.guia_visible || boton != 0) return;
+    b = guia_boton_en(x, y);
+    if (b == 0) guia_anterior();
+    else if (b == 1) guia_siguiente();
+    else if (b == 2 || b == 3) guia_cerrar();
 }
 
 /* ------------------------------------------------------------------ */
@@ -778,7 +826,7 @@ int clic_lienzo(int x, int y) {
 /* Entrada principal                                                   */
 /* ------------------------------------------------------------------ */
 static void clic_etiqueta_menu(int menu) {
-    if (menu == 9) {
+    if (menu == 10) {
         g.menu_abierto = -1;
         g.textura_menu_abierto = 0;
         g.info_visible = 1;
@@ -2352,6 +2400,12 @@ void app_pulsar(int x, int y, int boton) {
         return;
     }
 
+    /* La guia paso a paso tambien es modal: solo responden sus botones. */
+    if (g.guia_visible) {
+        guia_pulsar(x, y, boton);
+        return;
+    }
+
     /* El menu contextual de capa y las confirmaciones bloquean el resto de la
      * interfaz mientras estan abiertos. */
     if (g.confirmar_borrado || g.confirmar_tile >= 0 || g.capa_menu_abierto >= 0) {
@@ -2492,6 +2546,7 @@ void app_soltar(int x, int y, int boton) {
         ajustes_soltar(x, y);
         return;
     }
+    if (g.guia_visible) return;
     if (g.titulo_boton_pulsado >= 0) {
         int tb = g.titulo_boton_pulsado;
         g.titulo_boton_pulsado = -1;
@@ -2555,6 +2610,14 @@ void app_mover(int x, int y, int botones) {
 
     if (g.ajustes_visible) {
         ajustes_mover(x, y);
+        return;
+    }
+    if (g.guia_visible) {
+        int hover = guia_boton_en(x, y);
+        if (hover != g.guia_hover) {
+            g.guia_hover = hover;
+            app_invalidar();
+        }
         return;
     }
 
@@ -2736,6 +2799,7 @@ void app_rueda(int x, int y, int delta, int ctrl) {
     g.raton_x = x;
     g.raton_y = y;
     if (g.ajustes_visible) return;
+    if (g.guia_visible) return;
     if (g.vista == VISTA_MODULOS) {
         modulos_rueda(x, y, delta, ctrl);
         return;
@@ -2760,6 +2824,13 @@ void app_rueda(int x, int y, int delta, int ctrl) {
 }
 
 void app_tecla(int vk, int ctrl, int shift) {
+    if (g.guia_visible) {
+        if (vk == VK_ESCAPE) guia_cerrar();
+        else if (vk == VK_LEFT || vk == VK_PRIOR) guia_anterior();
+        else if (vk == VK_RIGHT || vk == VK_NEXT || vk == VK_RETURN)
+            guia_siguiente();
+        return;
+    }
     if (ajustes_tecla(vk, ctrl)) return;
     if (g.menu_abierto >= 0 && vk == VK_ESCAPE) {
         g.menu_abierto = -1;
@@ -2806,6 +2877,7 @@ void app_tecla(int vk, int ctrl, int shift) {
 }
 
 void app_caracter(int ch) {
+    if (g.guia_visible) return;
     if (ajustes_caracter(ch)) return;
     /* Editor de codigo lobo abierto: los caracteres imprimibles son
      * suyos (la fuente bitmap es ASCII, 32..126). */
@@ -2823,6 +2895,7 @@ void app_caracter(int ch) {
 
 void app_doble_clic(int x, int y) {
     if (g.ajustes_visible) return;
+    if (g.guia_visible) return;
     if (y >= 0 && y < TAB_BARRA_ALTO) {
         /* Los controles de ventana tienen prioridad sobre el doble clic. */
         if (titulo_boton_en(x, y) >= 0) return;

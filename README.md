@@ -35,6 +35,9 @@ para cargar y guardar PNG.
   con el `.logic` y los aplican la vista previa y `game.exe`.
 - Vista previa del juego con los botones **play/pausa/stop** de la barra:
   prueba el proyecto en una ventana sin compilar ni escribir ningún `.exe`.
+- Menú **AYUDA** con un **juego de ejemplo** listo para jugar (crea los tiles,
+  el mapa, la lógica y los ajustes) y una **guía paso a paso** de seis
+  pantallas para empezar sin experiencia previa.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
 
 ## Compilar
@@ -265,6 +268,17 @@ imagen del documento activo: **Exportar a PNG** y **Exportar a BMP**. Guardan
 en la carpeta `tiles` junto al ejecutable (o en `titles` si se lanzan desde el
 editor de menús), igual que **Abrir imagen**.
 
+El menú **AYUDA**, entre **COMPILE** e **INFO**, es la puerta de entrada para
+quien empieza. **Crear juego de ejemplo** deja el editor con un primer juego
+funcionando sin salir del programa: genera tres tiles de 32x32 (árbol, agua y
+roca), un mapa `maps\primer_juego.mav` con un claro vacío rodeado de paredes
+sólidas, la lógica con su item de mapa y los ajustes del proyecto (640x480,
+60 FPS, velocidad 3 y fondo verde). Basta pulsar **play** para jugarlo.
+**Guia paso a paso** abre una ventana con seis pasos que explican qué es cada
+zona del editor y cómo llegar a ese primer juego; se avanza con
+**SIGUIENTE**/`→` y se retrocede con **ANTERIOR**/`←`, `Escape` o la X la
+cierran y en el último paso **SIGUIENTE** pasa a **CREAR EJEMPLO**.
+
 La opción **Guardar logica .logic** del menú **ARCHIVO** exporta la lógica a
 un archivo de texto con su desplazamiento y cada elemento (posición, tamaño,
 identificador, estado plegado, mapa asociado y función). La opción **Abrir
@@ -361,8 +375,8 @@ selector de items del gestor de lógica). Las imágenes se buscan primero en la
 carpeta `tiles_dir` junto al `.mav`, después junto al propio `.mav` y por
 último en la carpeta `tiles` del ejecutable.
 
-El menú **COMPILE** de la barra de menús, entre **AJUSTES DEL PROYECTO** e
-**INFO**, ofrece **Compilar para BIOS** y **Compilar para Windows**. Ambos toman
+El menú **COMPILE** de la barra de menús, entre **AJUSTES DEL PROYECTO** y
+**AYUDA**, ofrece **Compilar para BIOS** y **Compilar para Windows**. Ambos toman
 el proyecto activo — la lógica del gestor, los mapas que usan sus elementos y
 los tiles de esos mapas — y lo incrustan entero como archivos virtuales (blob
 `LGB1`). El mapa es opcional: si el lienzo no tiene ningún elemento de mapa, el
@@ -442,8 +456,8 @@ prefijo de herramienta, como `"12:100,200;300,400|15:150,250;150,350"`),
 `--vista menus` (abre directamente el editor de
 menús, después de cargar la lógica si se indica) y `--volcar ruta`
 (escribe una línea con la vista, los documentos, los ajustes del proyecto,
-la geometría del lienzo, los módulos del gestor, el mapa abierto y el
-estado de los menús para comparar pruebas),
+la geometría del lienzo, los módulos del gestor, el mapa abierto, el paso de
+la guía y el estado de los menús para comparar pruebas),
 y, para la sección FUNCIONES (fase 8),
 `--funcion-abrir <id>` (abre el editor de código de esa función),
 `--codigo-teclas "texto"` (escribe en el editor abierto, con `\n`, `\t`,
@@ -453,6 +467,8 @@ la herramienta de texto después de `--arrastre`, también con escapes),
 que abre el clic), `--deshacer` (pulsa `Ctrl+Z` al final), `--sin-ventanas`
 (oculta opciones, patrón, información y visor de tiles en las capturas),
 `--maximizar` (captura con la ventana maximizada),
+`--ejemplo` (crea el juego de ejemplo de AYUDA sin pasar por el menú),
+`--guia` y `--guia-paso N` (abren la guía en el paso indicado),
 `--funcion-borrar x,y` (clic derecho simulado
 que pide confirmación de borrado) y `--modulos-rueda x,y,delta[,ctrl]`
 (la rueda del gestor, que desplaza la sección FUNCIONES). Para la vista
@@ -480,8 +496,9 @@ procesado en `src\nucleo.c`.
 - `src/` — código fuente C y recursos de la interfaz. `src/compilar.c` es el
   menú COMPILE (compilar el proyecto para Windows y para BIOS) y el paquete
   `.wolfo`,
-  `src/juego_ventana.c` la vista previa de los botones play/pausa/stop y
-  `src/ajustes.c` las propiedades del proyecto.
+  `src/juego_ventana.c` la vista previa de los botones play/pausa/stop,
+  `src/ajustes.c` las propiedades del proyecto y `src/ejemplo.c` el juego de
+  ejemplo y su guía (menú AYUDA).
 - `motor/` — motor egine: núcleo en ensamblador 32 bits (`nucleo32.s`),
   interfaz común (`motor.h`), carga del proyecto (`activo.c`) y `juego.c`
   (`game.exe`).

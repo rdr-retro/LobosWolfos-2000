@@ -1663,10 +1663,26 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
             }
         }
         if (strstr(cmd, "--info") != NULL) g.info_visible = 1;
+        /* Guia paso a paso abierta (fase 22): --guia o --guia-paso N. Va
+         * antes de --raton y --clics para poder probar sus botones. */
+        if (strstr(cmd, "--guia") != NULL) {
+            char *gp = arg_valor(cmd, "--guia-paso");
+            guia_abrir();
+            if (gp) {
+                int p = atoi(gp);
+                if (p < 0) p = 0;
+                if (p >= GUIA_PASOS) p = GUIA_PASOS - 1;
+                g.guia_paso = p;
+            }
+        }
         if (strstr(cmd, "--patron") != NULL) g.patron_visible = 1;
         if (strstr(cmd, "--mayus") != NULL) g.shift_simulado = 1;
         /* Propiedades del proyecto abiertas (fase 14). */
         if (strstr(cmd, "--ajustes") != NULL) ajustes_proyecto_abrir();
+        /* Juego de ejemplo (fase 22): lo crea igual que AYUDA > Crear juego
+         * de ejemplo, sin pasar por el menu. Va al final para que la captura
+         * muestre ya el gestor con el item y los ajustes puestos. */
+        if (strstr(cmd, "--ejemplo") != NULL) ejemplo_crear_juego();
         if (herr_arg) {
             int h = atoi(herr_arg);
             if (h >= 0 && h < H_TOTAL) g.herramienta = (Herramienta)h;
@@ -2037,7 +2053,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                             "menus=%dx%d listo=%d ajustes=%dx%d "
                             "lienzo=%d,%d,%d,%d zoom=%d trab=%d,%d,%d,%d "
                             "menu=%d zona_menus=%d,%d,%d,%d modulos=%d "
-                            "mapa=%s args=%s|%s\n",
+                            "guia=%d paso=%d mapa=%s args=%s|%s\n",
                             g.ancho, g.alto, (int)g.vista,
                             g.doc.ancho, g.doc.alto,
                             g.doc_menus.ancho, g.doc_menus.alto,
@@ -2050,6 +2066,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                             modulos_lienzo_zona().ancho,
                             modulos_lienzo_zona().alto,
                             g.num_modulos,
+                            g.guia_visible, g.guia_paso,
                             g.mapa_ruta[0] ? g.mapa_ruta : "-",
                             menu_arg ? menu_arg : "-",
                             clics_arg ? clics_arg : "-");
