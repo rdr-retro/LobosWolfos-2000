@@ -686,7 +686,7 @@ el motor ya compila.
   compila y pasa las dos suites (variantes `conformidad`, `regresion` y
   `actualizar`), `-Repetir` comprueba el determinismo y `pruebas/linea_base.ps1`
   escribe `pruebas/linea_base.txt` con fecha, commit, tamaños, hashes, tiempos
-  (≈1,03 s por captura) y memoria pico (17.140 KB el editor, 12.420 KB el
+  (≈1 ms por captura) y memoria pico (17.140 KB el editor, 12.420 KB el
   motor). Todo son trazas, volcados y hashes de texto: no se versionan
   imágenes y `recursos/ascii.png` sigue fuera del repositorio. Verificado con
   `build.bat prueba` (12/12 y 8/8) y con `-Repetir`.
