@@ -911,6 +911,33 @@ mensaje; `al_pulsar` solo una vez por pulsacion; `cada 10` se ejecuta a los
 **Criterio de salida:** la traza muestra el orden exacto de eventos y el
 juego no pierde mensajes.
 
+**Estado:** hecha (16-11-2026).
+
+**Entregado:** `motor/eventos.c` y `motor/eventos.h` con el planificador
+completo: una `LoboMaquina` por script, despacho en el orden del capitulo 5.2,
+cola de mensajes que respeta las esperas, presupuesto de 512 eventos por
+fotograma con aviso y contadores para la traza. Cubre `inicio`, `fotograma`,
+`tecla` (pulsar, mantener y soltar), `recibir`, `tocar` (AABB con espera de 15
+fotogramas), `cada N` (dispara en N, 2N, 3N) y `clonar`; `escena` se dispara
+al entrar en esa escena. `motor/logic3_motor.c` lee todos los tipos de evento y
+sus parametros, y ordena los scripts por capa, objeto, evento y orden.
+`motor/lobo.c` gana `enviar`, `enviar_a`, `detener_script`, `detener_todo` y
+`reiniciar_escena` (con y sin parentesis) y expone `lobo_vm_evento` y
+`lobo_vm_reanudar` para el planificador. `game.exe` anade `--evento N`,
+`--mensaje "texto"` y `--eventos`; la traza escribe
+`evento <fotograma> <tipo> obj <id> ent <id> script <n> ...`,
+`eventos <f> total <n> cola <q>` por fotograma y el resumen
+`eventos final: N avisos A ejecutados E`, y `--volcar` anade
+`eventos N avisos A ejecutados E`. La suite `pruebas/eventos.ps1` cubre ocho
+casos (`recibir`, `teclas`, `cada`, `orden`, `cola`, `tocar`, `reiniciar` y
+`detener`) comparando traza y volcado (sin BMP congelado) y
+`pruebas/vm/alias.*` cubre los alias en la VM. `build.bat prueba` pasa las seis
+suites (12/12, 10/10, 10/10, 4/4, 8/8 y 8/8). El criterio de salida queda
+congelado en `pruebas/eventos/`: `recibir` no corre hasta el mensaje (y el
+mensaje externo llega en el fotograma 1), `teclas` cuenta una pulsacion por
+flanco, `cada` dispara en 10, 20 y 30, `cola` conserva los mensajes
+pospuestos y `detener` congela el despacho.
+
 ### Fase 28 - Variables, listas, funciones y expresiones
 
 **Objetivo:** el lenguaje alcanza para logica de juego real.

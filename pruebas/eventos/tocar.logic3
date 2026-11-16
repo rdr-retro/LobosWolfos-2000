@@ -1,0 +1,17 @@
+LOGIC3
+version 3
+proyecto "Eventos tocar" 320 200 1 60 3 00112233
+carpetas "tiles" "maps" "trajes" "sonidos"
+escena 1 "Escena 1" "" 320 200 00112233
+objeto 1 "Jugador" escena 1 x 10 y 10 w 16 h 16 visible 1 capa 0
+  variable "dir" 0 1
+  variable "toques" 0 0
+  variable "ultimo" 0 0
+  evento 1 fotograma
+  evento 2 tocar 2 "Moneda"
+objeto 2 "Moneda" escena 1 x 40 y 10 w 16 h 16 visible 1 capa 1
+bloque 1 evento 1 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "mi.x = mi.x + mi.variable(\"dir\") * 2\nsi mi.x > 60\n  mi.variable(\"dir\") = 0 - 1\nfin\nsi mi.x < 10\n  mi.variable(\"dir\") = 1\nfin\n"
+bloque 2 evento 2 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "mi.variable(\"toques\") = mi.variable(\"toques\") + 1\nmi.variable(\"ultimo\") = fotograma\n"
+FIN

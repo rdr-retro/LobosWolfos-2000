@@ -198,13 +198,18 @@ enum {
     LOBO_GUARDAR_MI,     /* valor: LOBO_MI_* (campo o VARS + slot) */
     LOBO_CREAR,          /* valor: indice del tag; x e y del tope */
     LOBO_BORRAR_ENTIDAD, /* valor: 0 la actual, 1 la del tope de la pila */
-    LOBO_MOVER_ENTIDAD   /* mueve id, x, y (los tres del tope) */
+    LOBO_MOVER_ENTIDAD,  /* mueve id, x, y (los tres del tope) */
+    /* --- fase 27: mensajes y escena --- */
+    LOBO_ENVIAR,         /* valor: indice del texto; a todos los objetos */
+    LOBO_ENVIAR_A,       /* valor: indice del texto; destino en `extra` */
+    LOBO_REINICIAR_ESCENA /* reinicia la escena actual */
 };
 
 /* Una instruccion del programa compilado. */
 typedef struct LoboInst {
     unsigned char op; /* uno de los LOBO_* de arriba */
     int valor;       /* constante, indice o destino segun el op */
+    int extra;       /* segundo operando (destino de enviar_a) */
 } LoboInst;
 
 /* Funcion de usuario compilada. */
@@ -266,6 +271,13 @@ typedef struct LoboEstado {
     int (*entidad_leer)(void *ctx, int id, int campo);
     int (*entidad_escribir)(void *ctx, int id, int campo, int valor);
     void *ctx_entidades;
+    /* --- eventos y mensajes (fase 27) ---
+     * `destino` NULL o "" = a todos. Sin callback (editor y --vm-test),
+     * enviar() solo deja el ultimo mensaje en memoria->mensaje. */
+    void (*enviar)(void *ctx, int origen, const char *destino,
+                   const char *texto);
+    void (*reiniciar_escena)(void *ctx);
+    void *ctx_eventos;
 } LoboEstado;
 
 /* Un frame de llamada: donde volver y el estado que hay que restaurar. */
@@ -323,9 +335,24 @@ int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
 /* Ejecuta el fotograma de un script en la VM: descuenta la espera,
  * reengancha el evento de fotograma si termino y corre hasta un evento
  * o hasta agotar LOBO_PASOS_VM_MAX. Devuelve 1 si llego a un evento,
- * 0 si agoto el presupuesto. */
+ * 0 si agoto el presupuesto. Es la variante de los eventos que se repiten
+ * cada fotograma (fotograma y tecla mantenida). */
 int lobo_vm_fotograma(const LoboPrograma *programa, LoboEstado *estado,
                       LoboMaquina *maquina);
+
+/* Lanza un evento de un disparo (inicio, recibir, tecla pulsada/soltada,
+ * cada, tocar, clonar). Si el script termino, se reinicia para el nuevo
+ * disparo; si esta esperando, no se toca y devuelve 0 (el planificador
+ * puede posponer el mensaje). Devuelve 1 si llego a un evento. */
+int lobo_vm_evento(const LoboPrograma *programa, LoboEstado *estado,
+                   LoboMaquina *maquina);
+
+/* Continua un script que estaba esperando, sin reiniciarlo si termino.
+ * Lo usa el planificador para los eventos de un disparo: `esperar N`
+ * sigue contando aunque no llegue otro disparo. Devuelve 1 si ejecuto
+ * alguna instruccion. */
+int lobo_vm_reanudar(const LoboPrograma *programa, LoboEstado *estado,
+                     LoboMaquina *maquina);
 
 /* Reinicia una maquina (locales a cero y VM lista) para un uso nuevo. */
 void lobo_maquina_reiniciar(LoboMaquina *maquina);

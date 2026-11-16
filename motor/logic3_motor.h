@@ -1,10 +1,10 @@
-/* logic3_motor.h - lector minimo de LOGIC3 para el motor (fases 25 y 26).
+/* logic3_motor.h - lector minimo de LOGIC3 para el motor (fases 25 a 27).
  *
  * El editor tiene el lector completo en src/logic3.c (modelo, validacion,
- * escritor y conversiones). El motor solo necesita la cabecera del
- * proyecto, las escenas, los objetos con sus variables y trajes, y los
- * scripts `codigo.lobo` de los eventos `fotograma` (fase 25). Las escenas
- * y los objetos alimentan el modulo de entidades en la fase 26.
+ * escritor y conversiones). El motor necesita la cabecera del proyecto,
+ * las escenas, los objetos con sus variables y trajes, y los scripts
+ * `codigo.lobo` de todos los eventos (fase 27). Las escenas y los objetos
+ * alimentan el modulo de entidades (fase 26) y el planificador de eventos.
  *
  * El lector es tolerante: las secciones que no entiende las ignora y los
  * errores de sintaxis devuelven 0 con "linea N: motivo" en `error`. El
@@ -14,7 +14,7 @@
 #ifndef LOGIC3_MOTOR_H
 #define LOGIC3_MOTOR_H
 
-#define MOTOR_L3_SCRIPTS_MAX 64   /* scripts de fotograma por proyecto */
+#define MOTOR_L3_SCRIPTS_MAX 256  /* scripts de evento por proyecto */
 #define MOTOR_L3_CODIGO_MAX  2048 /* bytes de codigo por bloque */
 #define MOTOR_L3_RUTA_MAX    260  /* ruta o nombre de mapa */
 #define MOTOR_L3_NOMBRE_MAX  64   /* nombre de proyecto, escena u objeto */
@@ -25,13 +25,22 @@
 #define MOTOR_L3_TRAJES_MAX  32   /* trajes por objeto */
 
 /* Un script del proyecto: el codigo lobo de un bloque codigo.lobo que
- * cuelga de un evento fotograma. */
+ * cuelga de un evento. `tipo` usa los valores de LOGIC3 (1 inicio,
+ * 2 fotograma, 3 tecla, 4 recibir, 5 tocar, 6 cada, 7 clonar, 8 escena).
+ * Los parametros del evento viajan con el script para que el planificador
+ * no tenga que volver a mirar el proyecto. */
 typedef struct MotorL3Script {
     int bloque;  /* id del bloque en el LOGIC3 (para la traza) */
     int objeto;  /* id del objeto dueno del evento */
     int evento;  /* id del evento */
     int orden;   /* campo orden del bloque */
     int capa;    /* capa del objeto, para el orden de dibujo futuro */
+    int tipo;    /* tipo de evento (los valores de LOGIC3) */
+    char nombre[MOTOR_L3_NOMBRE_MAX]; /* tecla, mensaje o tag de tocar */
+    int flanco;      /* tecla: 0 mantener, 1 pulsar, 2 soltar */
+    int objeto_tocar;/* tocar: id de objeto o -1 */
+    int cada;        /* cada: fotogramas entre disparos */
+    int escena;      /* escena: id de la escena que dispara */
     char codigo[MOTOR_L3_CODIGO_MAX + 1];
 } MotorL3Script;
 

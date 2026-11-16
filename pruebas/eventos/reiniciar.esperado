@@ -1,0 +1,33 @@
+vm: 2 scripts
+vm: script 0 bloque 1 objeto 1 evento 1
+vm: script 1 bloque 2 objeto 1 evento 2
+entidades: 1 iniciales avisos 0
+evento 1 inicio obj 1 ent 1 script 0
+evento 1 fotograma obj 1 ent 1 script 1
+eventos 1 total 2 cola 0
+1 16 16
+vm 0:2:4:0 1:2:10:0
+ent 1 10 10
+evento 2 fotograma obj 1 ent 1 script 1
+eventos 2 total 1 cola 0
+2 16 16
+vm 0:2:4:0 1:2:10:0
+ent 1 10 10
+evento 3 fotograma obj 1 ent 1 script 1
+eventos 3 total 1 cola 0
+3 16 16
+vm 0:0:0:0 1:0:0:0
+ent 2 10 10
+evento 4 inicio obj 1 ent 2 script 0
+evento 4 fotograma obj 1 ent 2 script 1
+eventos 4 total 2 cola 0
+4 16 16
+vm 0:2:4:0 1:2:10:0
+ent 2 10 10
+evento 5 fotograma obj 1 ent 2 script 1
+eventos 5 total 1 cola 0
+5 16 16
+vm 0:2:4:0 1:2:10:0
+ent 2 10 10
+entidades final: 1 avisos 0 creadas 1
+eventos final: 2 avisos 0 ejecutados 7

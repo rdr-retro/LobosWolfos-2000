@@ -1,0 +1,9 @@
+fotogramas 40
+lobo 16 16
+entidades 2 avisos 0 creadas 2
+eventos 2 avisos 0 ejecutados 42
+entidad 1 escena 1 x 34 y 10 w 16 h 16 visible 1 capa 0 vida 1
+  var "dir" -1
+  var "toques" 2
+  var "ultimo" 30
+entidad 2 escena 1 x 40 y 10 w 16 h 16 visible 1 capa 1 vida 1

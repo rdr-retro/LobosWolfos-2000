@@ -1,0 +1,9 @@
+vm: 16 instrucciones 0 funciones
+vm 1 estado 2 pc 12 np 0 espera 0 x 16 y 16 msg 2 clones 0 err 0
+vm 2 estado 2 pc 12 np 0 espera 0 x 16 y 16 msg 4 clones 0 err 0
+vm 3 estado 2 pc 11 np 0 espera 0 x 16 y 16 msg 6 clones 0 err 0
+vm 4 estado 2 pc 11 np 0 espera 0 x 16 y 16 msg 8 clones 0 err 0
+vm 5 estado 2 pc 11 np 0 espera 0 x 16 y 16 msg 10 clones 0 err 0
+vm 6 estado 2 pc 11 np 0 espera 0 x 16 y 16 msg 12 clones 0 err 0
+vm 7 estado 2 pc 11 np 0 espera 0 x 16 y 16 msg 14 clones 0 err 0
+vm 8 estado 2 pc 11 np 0 espera 0 x 16 y 16 msg 16 clones 0 err 0

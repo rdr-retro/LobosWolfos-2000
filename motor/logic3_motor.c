@@ -144,6 +144,11 @@ typedef struct {
     int id;
     int tipo; /* 1 inicio, 2 fotograma, ... (los valores de LOGIC3) */
     int capa;
+    char nombre[MOTOR_L3_NOMBRE_MAX];
+    int flanco;       /* 0 mantener, 1 pulsar, 2 soltar */
+    int objeto_tocar; /* -1 si no aplica */
+    int cada;
+    int escena;
 } EventoVisto;
 
 typedef struct {
@@ -181,8 +186,8 @@ static int tipo_evento(const char *nombre) {
     return 0;
 }
 
-/* Cierra el bloque en curso: si es codigo.lobo de un evento fotograma,
- * se guarda como script del proyecto. */
+/* Cierra el bloque en curso: si es codigo.lobo de un evento, se guarda
+ * como script del proyecto con los parametros del evento. */
 static int cerrar_bloque(L3Lector *l, int linea) {
     MotorL3 *p = l->proy;
     int i, ev = -1;
@@ -192,26 +197,35 @@ static int cerrar_bloque(L3Lector *l, int linea) {
     if (strcmp(l->bloque_tipo, "codigo.lobo") != 0) return 1;
     if (!l->bloque_tiene_codigo || !l->bloque_codigo[0]) return 1;
 
-    /* El bloque referencia un id de evento; se busca el evento. Si hay
-     * varios con el mismo id (ids por objeto), gana el fotograma. */
+    /* El bloque referencia un id de evento; se busca el evento. Los ids
+     * son unicos dentro del objeto pero pueden repetirse entre objetos,
+     * asi que se prefiere el evento del objeto en curso. */
     for (i = 0; i < l->num_eventos; i++) {
         if (l->eventos[i].id != l->bloque_evento) continue;
-        if (ev < 0 || l->eventos[i].tipo == 2) ev = i;
-        if (l->eventos[i].tipo == 2) break;
+        if (l->eventos[i].objeto == l->objeto) { ev = i; break; }
+        if (ev < 0) ev = i;
     }
     if (ev < 0) return 1;                /* evento desconocido: se ignora */
-    if (l->eventos[ev].tipo != 2) return 1; /* solo fotograma en la fase 25 */
+    if (l->eventos[ev].tipo == 0 || l->eventos[ev].tipo == 9)
+        return 1; /* desconocido o llamada de funcion: no es un evento */
 
     if (p->num_scripts >= MOTOR_L3_SCRIPTS_MAX)
         return fallo(linea, "demasiados scripts codigo.lobo");
 
     {
         MotorL3Script *s = &p->scripts[p->num_scripts++];
+        const EventoVisto *e = &l->eventos[ev];
         s->bloque = l->bloque_id;
-        s->objeto = l->eventos[ev].objeto;
-        s->evento = l->eventos[ev].id;
+        s->objeto = e->objeto;
+        s->evento = e->id;
         s->orden = l->bloque_orden;
-        s->capa = l->eventos[ev].capa;
+        s->capa = e->capa;
+        s->tipo = e->tipo;
+        memcpy(s->nombre, e->nombre, sizeof(s->nombre));
+        s->flanco = e->flanco;
+        s->objeto_tocar = e->objeto_tocar;
+        s->cada = e->cada;
+        s->escena = e->escena;
         memcpy(s->codigo, l->bloque_codigo, strlen(l->bloque_codigo) + 1);
     }
     return 1;
@@ -485,7 +499,32 @@ int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
                 e->id = entero(salida, tokens, 1);
                 e->tipo = tipo_evento(texto(salida, tokens, 2));
                 e->capa = l.capa;
+                e->flanco = 0;
+                e->objeto_tocar = -1;
                 if (l.dentro_funcion) e->tipo = 9; /* llamada */
+                /* Parametros por tipo; los mismos campos que escribe el
+                 * editor en src/logic3.c. El lector es tolerante: si falta
+                 * un parametro se deja el valor por defecto. */
+                if (e->tipo == 3) {
+                    if (nt >= 4) copiar_token(e->nombre, sizeof(e->nombre),
+                                              salida, tokens, 3);
+                    if (nt >= 5) {
+                        const char *f = texto(salida, tokens, 4);
+                        if (strcmp(f, "pulsar") == 0) e->flanco = 1;
+                        else if (strcmp(f, "soltar") == 0) e->flanco = 2;
+                    }
+                } else if (e->tipo == 4) {
+                    if (nt >= 4) copiar_token(e->nombre, sizeof(e->nombre),
+                                              salida, tokens, 3);
+                } else if (e->tipo == 5) {
+                    if (nt >= 4) e->objeto_tocar = entero(salida, tokens, 3);
+                    if (nt >= 5) copiar_token(e->nombre, sizeof(e->nombre),
+                                              salida, tokens, 4);
+                } else if (e->tipo == 6) {
+                    if (nt >= 4) e->cada = entero(salida, tokens, 3);
+                } else if (e->tipo == 8) {
+                    if (nt >= 4) e->escena = entero(salida, tokens, 3);
+                }
             }
             goto siguiente;
         }

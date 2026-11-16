@@ -1,0 +1,12 @@
+fotogramas 4
+lobo 16 16
+entidades 1 avisos 0 creadas 1
+eventos 6 avisos 0 ejecutados 11
+entidad 1 escena 1 x 10 y 10 w 16 h 16 visible 1 capa 0 vida 1
+  var "paso" 11
+  var "v_inicio" 1
+  var "v_foto" 10
+  var "v_cada" 11
+  var "v_pulsar" 3
+  var "v_soltar" 9
+  var "v_mantener" 6

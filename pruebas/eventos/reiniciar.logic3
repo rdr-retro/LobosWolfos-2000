@@ -1,0 +1,15 @@
+LOGIC3
+version 3
+proyecto "Eventos reiniciar" 320 200 1 60 3 00112233
+carpetas "tiles" "maps" "trajes" "sonidos"
+escena 1 "Escena 1" "" 320 200 00112233
+objeto 1 "Nave" escena 1 x 10 y 10 w 16 h 16 visible 1 capa 0
+  variable "n" 0 0
+  variable "inicios" 0 0
+  evento 1 inicio
+  evento 2 fotograma
+bloque 1 evento 1 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "mi.variable(\"inicios\") = mi.variable(\"inicios\") + 1\n"
+bloque 2 evento 2 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "mi.variable(\"n\") = mi.variable(\"n\") + 1\nsi fotograma == 3\n  reiniciar_escena()\nfin\n"
+FIN

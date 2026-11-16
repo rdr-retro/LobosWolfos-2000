@@ -758,6 +758,30 @@ el motor ya compila.
   cubre cuatro casos (`dos`, `crear50`, `limite`, `clonar`) y `build.bat prueba`
   pasa las cinco suites.
 
+- **16-11-2026 (fase 27, eventos, planificador y mensajes)** - Nace
+  `motor/eventos.c` y `motor/eventos.h`: un planificador con una `LoboMaquina`
+  por script que reparte los eventos en el orden del capitulo 5.2 (inicio y
+  escena al entrar, reanudacion de esperas, fotograma, tecla mantenida, pulsada
+  y soltada, `cada N`, `tocar` con AABB y espera de 15 fotogramas, `recibir` de
+  la cola y `clonar`). `motor/logic3_motor.c` lee los eventos `inicio`,
+  `fotograma`, `tecla <nombre> <flanco>`, `recibir "<mensaje>"`,
+  `tocar <objeto> "<tag>"`, `cada <fotogramas>`, `clonar` y `escena <id>`.
+  `lobo` gana `enviar("<mensaje>")`, `enviar_a("<objeto>", "<mensaje>")`,
+  `detener_script`, `detener_todo` y `reiniciar_escena` (con y sin
+  parentesis). La cola de mensajes se entrega en el fotograma siguiente si el
+  receptor esta esperando, sin perder mensajes, y un presupuesto de 512 eventos
+  por fotograma evita que un bucle de mensajes cuelgue el juego; al agotarse
+  queda un aviso. `detener todo` congela el despacho de la escena (no cierra el
+  juego) y `reiniciar_escena()` reinstancia las entidades y vuelve a disparar
+  `inicio`. `game.exe` anade `--evento N` (duracion de la pulsacion de
+  `--tecla`), `--mensaje "texto"` (mensaje externo) y `--eventos` (traza y
+  volcado del planificador). La suite `pruebas/eventos.ps1` cubre ocho casos
+  (`recibir`, `teclas`, `cada`, `orden`, `cola`, `tocar`, `reiniciar` y
+  `detener`) comparando traza y volcado sin congelar BMP, y `pruebas/vm/alias.*`
+  cubre los alias en la VM. `build.bat prueba` pasa las seis suites
+  (12/12, 10/10, 10/10, 4/4, 8/8 y 8/8) y el criterio de salida queda
+  congelado en las trazas de `pruebas/eventos/`.
+
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,

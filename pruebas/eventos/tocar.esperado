@@ -1,0 +1,248 @@
+vm: 2 scripts
+vm: script 0 bloque 1 objeto 1 evento 1
+vm: script 1 bloque 2 objeto 1 evento 2
+entidades: 2 iniciales avisos 0
+evento 1 fotograma obj 1 ent 1 script 0
+eventos 1 total 1 cola 0
+1 16 16
+vm 0:2:20:0 1:0:0:0
+ent 1 12 10
+ent 2 40 10
+evento 2 fotograma obj 1 ent 1 script 0
+eventos 2 total 1 cola 0
+2 16 16
+vm 0:2:20:0 1:0:0:0
+ent 1 14 10
+ent 2 40 10
+evento 3 fotograma obj 1 ent 1 script 0
+eventos 3 total 1 cola 0
+3 16 16
+vm 0:2:20:0 1:0:0:0
+ent 1 16 10
+ent 2 40 10
+evento 4 fotograma obj 1 ent 1 script 0
+eventos 4 total 1 cola 0
+4 16 16
+vm 0:2:20:0 1:0:0:0
+ent 1 18 10
+ent 2 40 10
+evento 5 fotograma obj 1 ent 1 script 0
+eventos 5 total 1 cola 0
+5 16 16
+vm 0:2:20:0 1:0:0:0
+ent 1 20 10
+ent 2 40 10
+evento 6 fotograma obj 1 ent 1 script 0
+eventos 6 total 1 cola 0
+6 16 16
+vm 0:2:20:0 1:0:0:0
+ent 1 22 10
+ent 2 40 10
+evento 7 fotograma obj 1 ent 1 script 0
+eventos 7 total 1 cola 0
+7 16 16
+vm 0:2:20:0 1:0:0:0
+ent 1 24 10
+ent 2 40 10
+evento 8 fotograma obj 1 ent 1 script 0
+evento 8 tocar obj 1 ent 1 script 1 2
+eventos 8 total 2 cola 0
+8 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 26 10
+ent 2 40 10
+evento 9 fotograma obj 1 ent 1 script 0
+eventos 9 total 1 cola 0
+9 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 28 10
+ent 2 40 10
+evento 10 fotograma obj 1 ent 1 script 0
+eventos 10 total 1 cola 0
+10 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 30 10
+ent 2 40 10
+evento 11 fotograma obj 1 ent 1 script 0
+eventos 11 total 1 cola 0
+11 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 32 10
+ent 2 40 10
+evento 12 fotograma obj 1 ent 1 script 0
+eventos 12 total 1 cola 0
+12 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 34 10
+ent 2 40 10
+evento 13 fotograma obj 1 ent 1 script 0
+eventos 13 total 1 cola 0
+13 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 36 10
+ent 2 40 10
+evento 14 fotograma obj 1 ent 1 script 0
+eventos 14 total 1 cola 0
+14 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 38 10
+ent 2 40 10
+evento 15 fotograma obj 1 ent 1 script 0
+eventos 15 total 1 cola 0
+15 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 40 10
+ent 2 40 10
+evento 16 fotograma obj 1 ent 1 script 0
+eventos 16 total 1 cola 0
+16 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 42 10
+ent 2 40 10
+evento 17 fotograma obj 1 ent 1 script 0
+eventos 17 total 1 cola 0
+17 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 44 10
+ent 2 40 10
+evento 18 fotograma obj 1 ent 1 script 0
+eventos 18 total 1 cola 0
+18 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 46 10
+ent 2 40 10
+evento 19 fotograma obj 1 ent 1 script 0
+eventos 19 total 1 cola 0
+19 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 48 10
+ent 2 40 10
+evento 20 fotograma obj 1 ent 1 script 0
+eventos 20 total 1 cola 0
+20 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 50 10
+ent 2 40 10
+evento 21 fotograma obj 1 ent 1 script 0
+eventos 21 total 1 cola 0
+21 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 52 10
+ent 2 40 10
+evento 22 fotograma obj 1 ent 1 script 0
+eventos 22 total 1 cola 0
+22 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 54 10
+ent 2 40 10
+evento 23 fotograma obj 1 ent 1 script 0
+eventos 23 total 1 cola 0
+23 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 56 10
+ent 2 40 10
+evento 24 fotograma obj 1 ent 1 script 0
+eventos 24 total 1 cola 0
+24 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 58 10
+ent 2 40 10
+evento 25 fotograma obj 1 ent 1 script 0
+eventos 25 total 1 cola 0
+25 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 60 10
+ent 2 40 10
+evento 26 fotograma obj 1 ent 1 script 0
+eventos 26 total 1 cola 0
+26 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 62 10
+ent 2 40 10
+evento 27 fotograma obj 1 ent 1 script 0
+eventos 27 total 1 cola 0
+27 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 60 10
+ent 2 40 10
+evento 28 fotograma obj 1 ent 1 script 0
+eventos 28 total 1 cola 0
+28 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 58 10
+ent 2 40 10
+evento 29 fotograma obj 1 ent 1 script 0
+eventos 29 total 1 cola 0
+29 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 56 10
+ent 2 40 10
+evento 30 fotograma obj 1 ent 1 script 0
+evento 30 tocar obj 1 ent 1 script 1 2
+eventos 30 total 2 cola 0
+30 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 54 10
+ent 2 40 10
+evento 31 fotograma obj 1 ent 1 script 0
+eventos 31 total 1 cola 0
+31 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 52 10
+ent 2 40 10
+evento 32 fotograma obj 1 ent 1 script 0
+eventos 32 total 1 cola 0
+32 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 50 10
+ent 2 40 10
+evento 33 fotograma obj 1 ent 1 script 0
+eventos 33 total 1 cola 0
+33 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 48 10
+ent 2 40 10
+evento 34 fotograma obj 1 ent 1 script 0
+eventos 34 total 1 cola 0
+34 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 46 10
+ent 2 40 10
+evento 35 fotograma obj 1 ent 1 script 0
+eventos 35 total 1 cola 0
+35 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 44 10
+ent 2 40 10
+evento 36 fotograma obj 1 ent 1 script 0
+eventos 36 total 1 cola 0
+36 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 42 10
+ent 2 40 10
+evento 37 fotograma obj 1 ent 1 script 0
+eventos 37 total 1 cola 0
+37 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 40 10
+ent 2 40 10
+evento 38 fotograma obj 1 ent 1 script 0
+eventos 38 total 1 cola 0
+38 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 38 10
+ent 2 40 10
+evento 39 fotograma obj 1 ent 1 script 0
+eventos 39 total 1 cola 0
+39 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 36 10
+ent 2 40 10
+evento 40 fotograma obj 1 ent 1 script 0
+eventos 40 total 1 cola 0
+40 16 16
+vm 0:2:20:0 1:2:6:0
+ent 1 34 10
+ent 2 40 10
+entidades final: 2 avisos 0 creadas 2
+eventos final: 2 avisos 0 ejecutados 42

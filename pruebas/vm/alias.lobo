@@ -1,0 +1,10 @@
+# alias de la fase 27: enviar(), enviar_a(), reiniciar_escena y
+# detener_script/detener_todo se aceptan con y sin parentesis.
+enviar("hola")
+enviar_a("Receptor", "golpe")
+reiniciar_escena()
+si fotograma >= 3
+  detener_todo
+fin
+detener_script
+x = x + 1

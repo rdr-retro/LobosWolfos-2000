@@ -37,6 +37,14 @@ para cargar y guardar PNG.
   `borrar` y `mover` gestionan su ciclo de vida con ids que no se reutilizan.
   El render provisional dibuja cada entidad como un rectángulo de color con su
   id, para validar el sistema sin assets.
+- Eventos, planificador y mensajes en el motor (fase 27): `motor/eventos.c`
+  reparte los scripts de `inicio`, `fotograma`, `tecla` (pulsar, mantener y
+  soltar), `recibir`, `tocar`, `cada`, `clonar` y `escena` en el orden del
+  capítulo 5.2, con una cola de mensajes que no se pierde si el receptor está
+  esperando. `enviar("mensaje")` y `enviar_a("objeto", "mensaje")` encolan
+  mensajes para los eventos `recibir`; `detener_script`, `detener_todo` y
+  `reiniciar_escena` controlan el despacho, y un presupuesto por fotograma
+  evita que un bucle de mensajes cuelgue el juego.
 - Apertura y exportación de PNG/BMP y mapas `.mav`, con un menú **EXPORTAR**
   propio para las dos exportaciones de imagen.
 - Guardado del proyecto entero en un paquete `.wolfo` (lógica, mapas y tiles)
@@ -52,8 +60,8 @@ para cargar y guardar PNG.
   pantallas para empezar sin experiencia previa.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
 - Suite de pruebas en `pruebas/`: conformidad del lenguaje lobo (trazas y
-  hashes de BMP), proyecto LOGIC3, VM resumible, entidades y escenas y
-  regresión visual del editor, con `build.bat prueba`.
+  hashes de BMP), proyecto LOGIC3, VM resumible, entidades y escenas, eventos
+  y planificador, y regresión visual del editor, con `build.bat prueba`.
 - Plan de la siguiente versión en `PLAN_JUEGOS_COMPLEJOS.md`: juegos complejos
   con un editor de bloques visual (estilo Scratch), formato `LOGIC3`, varias
   escenas y objetos, eventos, variables, listas y una VM resumible. Define las
@@ -78,14 +86,15 @@ También se puede compilar desde PowerShell:
 
 ## Pruebas
 
-`build.bat prueba` compila el editor y pasa las cinco suites:
+`build.bat prueba` compila el editor y pasa las seis suites:
 
 ```bat
-build.bat prueba              conformidad + logic3 + vm + entidades + regresion
+build.bat prueba              conformidad + logic3 + vm + entidades + eventos + regresion
 build.bat prueba conformidad  solo el lenguaje lobo
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
 build.bat prueba entidades    solo entidades, escenas y ciclo de vida
+build.bat prueba eventos      solo eventos, planificador y mensajes
 build.bat prueba regresion    solo la interfaz del editor
 build.bat prueba actualizar   reescribe los patrones (revisar el diff)
 ```
@@ -152,6 +161,17 @@ entidad y fotograma con `--traza`, y un resumen final
 fases anteriores no cambian. `--volcar ruta` escribe el estado final sin
 ventana (`fotogramas`, `lobo`, `entidades N avisos A creadas C` y, con
 `--entidades`, una línea `entidad ...` por cada una con sus variables).
+
+El planificador de eventos (fase 27) se activa con `--logic3` y añade
+`--evento N` (duración en fotogramas de la pulsación de `--tecla`; 0 la
+mantiene) y `--mensaje "texto"` (un mensaje externo para los eventos
+`recibir`). `--eventos` escribe el detalle en la traza: una línea
+`evento <fotograma> <tipo> obj <id> ent <id> script <n> ...` por script
+ejecutado, una línea por fotograma `eventos <f> total <n> cola <q>` (también
+cuando `detener todo` congela el despacho o un mensaje queda en espera) y el
+resumen `eventos final: N avisos A ejecutados E`. Con `--volcar` añade
+`eventos N avisos A ejecutados E`. Sin `--eventos` la traza es igual que en
+las fases anteriores.
 
 `motor/prueba.c` es un banco de pruebas de consola del núcleo; se compila
 aparte siguiendo las instrucciones de su cabecera y se ejecuta desde la raíz

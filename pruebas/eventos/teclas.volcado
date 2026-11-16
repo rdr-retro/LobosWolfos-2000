@@ -1,0 +1,8 @@
+fotogramas 7
+lobo 16 16
+entidades 1 avisos 0 creadas 1
+eventos 3 avisos 0 ejecutados 5
+entidad 1 escena 1 x 10 y 10 w 16 h 16 visible 1 capa 0 vida 1
+  var "pulsos" 1
+  var "soltados" 1
+  var "mantener" 3

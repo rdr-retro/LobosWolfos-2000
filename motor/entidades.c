@@ -44,6 +44,17 @@ void entidades_reiniciar(void) {
     g_creadas = 0;
 }
 
+void entidades_vaciar(void) {
+    int i;
+    for (i = 0; i < ENTIDADES_MAX; i++) {
+        g_entidades[i].usada = 0;
+        g_entidades[i].borrar = 0;
+        g_entidades[i].nueva = 0;
+    }
+    g_nuevas_foto = 0;
+    g_creadas = 0;
+}
+
 int entidades_tipo_agregar(int id_objeto, const char *nombre, int escena,
                            int x, int y, int w, int h, int visible, int capa) {
     int i;
@@ -117,6 +128,26 @@ const char *entidades_tipo_var_nombre(int tipo, int slot) {
     return g_tipos[tipo].var_nombre[slot];
 }
 
+int entidades_tipo_objeto(int tipo) {
+    if (!tipo_valido(tipo)) return -1;
+    return g_tipos[tipo].id;
+}
+
+const char *entidades_tipo_nombre(int tipo) {
+    if (!tipo_valido(tipo)) return "";
+    return g_tipos[tipo].nombre;
+}
+
+int entidades_de_objeto(int id_objeto, int *salida, int maximo) {
+    int tipo = entidades_tipo_por_objeto(id_objeto);
+    int i, n = 0;
+    if (tipo < 0 || !salida) return 0;
+    for (i = 0; i < ENTIDADES_MAX && n < maximo; i++)
+        if (g_entidades[i].usada && g_entidades[i].tipo == tipo)
+            salida[n++] = g_entidades[i].id;
+    return n;
+}
+
 /* Primer hueco libre del array; -1 si esta lleno. */
 static int hueco_libre(void) {
     int i;
@@ -158,6 +189,7 @@ int entidad_crear(int tipo, int x, int y) {
     e->traje = 0;
     e->vida = 1;
     e->es_clon = 0;
+    e->nueva = 1;
     for (i = 0; i < ENTIDAD_VARS_MAX; i++) e->vars[i] = t->var_valor[i];
     g_nuevas_foto++;
     g_creadas++;
@@ -199,6 +231,7 @@ void entidades_fin_fotograma(void) {
         if (g_entidades[i].usada && g_entidades[i].borrar)
             g_entidades[i].usada = 0;
         g_entidades[i].borrar = 0;
+        g_entidades[i].nueva = 0;
     }
     g_nuevas_foto = 0;
 }

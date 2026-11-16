@@ -1,0 +1,20 @@
+LOGIC3
+version 3
+proyecto "Eventos recibir" 320 200 1 60 3 00112233
+carpetas "tiles" "maps" "trajes" "sonidos"
+escena 1 "Escena 1" "" 320 200 00112233
+objeto 1 "Emisor" escena 1 x 20 y 20 w 16 h 16 visible 1 capa 0
+  variable "n" 0 0
+  evento 1 fotograma
+objeto 2 "Receptor" escena 1 x 60 y 20 w 16 h 16 visible 1 capa 1
+  variable "n" 0 0
+  variable "m" 0 0
+  evento 2 recibir "golpe"
+  evento 3 recibir "externo"
+bloque 1 evento 1 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "si fotograma == 3\n  enviar_a(\"Receptor\", \"golpe\")\nfin\n"
+bloque 2 evento 2 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "mi.variable(\"n\") = mi.variable(\"n\") + 1\nmi.x = mi.x + 1\n"
+bloque 3 evento 3 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "mi.variable(\"m\") = mi.variable(\"m\") + 1\n"
+FIN

@@ -30,6 +30,7 @@
 #include "lobo.h"
 #include "logic3_motor.h"
 #include "entidades.h"
+#include "eventos.h"
 
 #define VENTANA_ANCHO 640
 #define VENTANA_ALTO  480
@@ -46,6 +47,7 @@ typedef struct Juego {
     u32 sprite[SPRITE_LADO * SPRITE_LADO]; /* sprite generado, 24x24 */
     int x, y;                /* posicion del sprite en el mundo */
     unsigned entrada;        /* bits MOTOR_ENT_* */
+    unsigned entrada_anterior; /* fotograma previo, para los flancos */
     int fotograma;           /* contador de actualizaciones */
     int corriendo;
 } Juego;
@@ -252,12 +254,15 @@ static FILE *g_traza; /* --traza: una linea por fotograma */
 
 /* --- modo VM (fase 25): un programa y una maquina por script --- */
 static MotorL3 g_l3;
-static LoboPrograma g_vm_programas[MOTOR_L3_SCRIPTS_MAX];
-static LoboMaquina g_vm_maquinas[MOTOR_L3_SCRIPTS_MAX];
-static int g_vm_origen[MOTOR_L3_SCRIPTS_MAX]; /* script del LOGIC3 */
-static int g_num_vm;
+static Eventos g_eventos;       /* planificador de eventos (fase 27) */
 static int g_modo_vm;
 static LoboMemoria g_memoria; /* globales, listas y mensajes compartidos */
+
+/* --- eventos (fase 27) --- */
+static int g_evento_duracion;   /* --evento N: fotogramas que dura la tecla */
+static int g_eventos_traza;     /* --eventos: volcar eventos ejecutados */
+static unsigned g_tecla_guion;  /* tecla del guion de captura */
+static char g_mensaje_ini[LOBO_TEXTO_MAX]; /* --mensaje: mensaje inicial */
 
 /* --- entidades (fase 26) --- */
 static int g_entidades; /* --entidades: detalle en traza y volcado */
@@ -397,16 +402,17 @@ static int ent_mover(void *ctx, int id, int x, int y) {
     return entidad_mover(id, x, y);
 }
 
-/* Primera entidad viva del tipo de ese objeto (0 si no hay). */
-static int entidad_de_objeto(int id_objeto) {
-    int tipo = entidades_tipo_por_objeto(id_objeto);
+
+/* Instancia los objetos de una escena (arranque y reinicio de escena). */
+static void instanciar_escena(int escena) {
     int i;
-    if (tipo < 0) return 0;
-    for (i = 0; i < ENTIDADES_MAX; i++) {
-        Entidad *e = entidad_indice(i);
-        if (e && e->usada && e->tipo == tipo) return e->id;
+    for (i = 0; i < g_l3.num_objetos; i++) {
+        MotorL3Objeto *o = &g_l3.objetos[i];
+        int tipo;
+        if (o->escena != escena) continue;
+        tipo = entidades_tipo_por_objeto(o->id);
+        if (tipo >= 0) entidad_crear(tipo, o->x, o->y);
     }
-    return 0;
 }
 
 /* Registra tipos y variables del LOGIC3 e instancia los objetos de la
@@ -431,13 +437,7 @@ static void entidades_preparar(void) {
                                    o->variables[j].valor);
         }
     }
-    for (i = 0; i < g_l3.num_objetos; i++) {
-        MotorL3Objeto *o = &g_l3.objetos[i];
-        int tipo;
-        if (o->escena != g_l3.escena_inicial) continue;
-        tipo = entidades_tipo_por_objeto(o->id);
-        if (tipo >= 0) entidad_crear(tipo, o->x, o->y);
-    }
+    instanciar_escena(g_l3.escena_inicial);
     /* El cupo de altas por fotograma empieza limpio en el fotograma 1. */
     entidades_fin_fotograma();
 }
@@ -466,6 +466,12 @@ static void lobo_remap_programa(LoboPrograma *p) {
     }
 }
 
+/* Envoltorio para eventos_cargar (que pasa un contexto opcional). */
+static void remapear_programa_cb(void *ctx, LoboPrograma *p) {
+    (void)ctx;
+    lobo_remap_programa(p);
+}
+
 /* Estado compartido por los scripts de un fotograma: posicion del lobo,
  * teclas, memoria de la VM y callbacks de entidades. */
 static void estado_preparar(LoboEstado *st) {
@@ -485,45 +491,36 @@ static void estado_preparar(LoboEstado *st) {
     st->entidad_leer = ent_leer;
     st->entidad_escribir = ent_escribir;
     st->ctx_entidades = NULL;
+    st->enviar = eventos_enviar_cb;
+    st->reiniciar_escena = eventos_reiniciar_cb;
+    st->ctx_eventos = &g_eventos;
 }
 
-/* Compila los scripts de un LOGIC3: cada bloque codigo.lobo trae su
- * propio texto y su propia maquina, todos contra la misma memoria
- * compartida (globales, listas y mensajes de la fase 25). */
+/* Compila todos los scripts del LOGIC3 en el planificador de eventos:
+ * cada bloque codigo.lobo trae su propio texto y su propia maquina,
+ * todos contra la misma memoria compartida (globales, listas y mensajes
+ * de la fase 25). */
 static void scripts_preparar_l3(int con_ventana) {
-    int i;
+    int i, n;
 
-    g_num_vm = 0;
     memset(&g_memoria, 0, sizeof(g_memoria));
-    for (i = 0; i < g_l3.num_scripts; i++) {
-        MotorL3Script *s = &g_l3.scripts[i];
-        char error[LOBO_ERROR_MAX];
-
-        lobo_programa_iniciar(&g_vm_programas[g_num_vm]);
-        if (!lobo_compilar(s->codigo, &g_vm_programas[g_num_vm], LOBO_MODO_VM,
-                           error, sizeof(error))) {
-            if (g_traza)
-                fprintf(g_traza, "vm: error bloque %d %s\n", s->bloque, error);
-            if (con_ventana) {
-                char msg[256];
-                _snprintf(msg, sizeof(msg),
-                          "El script del bloque %d no compila:\n%s",
-                          s->bloque, error);
-                msg[sizeof(msg) - 1] = '\0';
-                MessageBoxA(NULL, msg, "egine", MB_ICONWARNING);
-            }
-            continue;
-        }
-        lobo_maquina_reiniciar(&g_vm_maquinas[g_num_vm]);
-        lobo_remap_programa(&g_vm_programas[g_num_vm]);
-        g_vm_maquinas[g_num_vm].entidad = entidad_de_objeto(s->objeto);
-        g_vm_origen[g_num_vm] = i;
-        g_num_vm++;
+    eventos_iniciar(&g_eventos, g_traza, g_eventos_traza);
+    g_eventos.escena = g_l3.escena_inicial;
+    n = eventos_cargar(&g_eventos, &g_l3, remapear_programa_cb, NULL);
+    if (g_eventos.errores > 0 && con_ventana) {
+        char msg[256];
+        _snprintf(msg, sizeof(msg),
+                  "El script del bloque %d no compila:\n%s",
+                  g_eventos.bloque_error, g_eventos.error);
+        msg[sizeof(msg) - 1] = '\0';
+        MessageBoxA(NULL, msg, "egine", MB_ICONWARNING);
     }
+    eventos_escena_iniciar(&g_eventos, NULL);
+
     if (g_traza) {
-        fprintf(g_traza, "vm: %d scripts\n", g_num_vm);
-        for (i = 0; i < g_num_vm; i++) {
-            const MotorL3Script *s = &g_l3.scripts[g_vm_origen[i]];
+        fprintf(g_traza, "vm: %d scripts\n", n);
+        for (i = 0; i < n; i++) {
+            const EventoScript *s = eventos_script(&g_eventos, i);
             fprintf(g_traza, "vm: script %d bloque %d objeto %d evento %d\n", i,
                     s->bloque, s->objeto, s->evento);
         }
@@ -551,14 +548,17 @@ static void traza_entidades(void) {
  * espera), que es lo que demuestra que un script esperando no bloquea a
  * los demas. */
 static void traza_fotograma(void) {
-    int i;
+    int i, n;
     if (!g_traza) return;
     fprintf(g_traza, "%d %d %d\n", juego.fotograma, juego.x, juego.y);
     if (!g_modo_vm) return;
+    n = eventos_num(&g_eventos);
     fprintf(g_traza, "vm");
-    for (i = 0; i < g_num_vm; i++)
-        fprintf(g_traza, " %d:%d:%d:%d", i, g_vm_maquinas[i].estado,
-                g_vm_maquinas[i].pc, g_vm_maquinas[i].espera);
+    for (i = 0; i < n; i++) {
+        const EventoScript *s = eventos_script(&g_eventos, i);
+        fprintf(g_traza, " %d:%d:%d:%d", i, s->maquina.estado,
+                s->maquina.pc, s->maquina.espera);
+    }
     fprintf(g_traza, "\n");
     traza_entidades();
 }
@@ -566,6 +566,17 @@ static void traza_fotograma(void) {
 /* ------------------------------------------------------------------ */
 /* Actualizar y renderizar un fotograma                                */
 /* ------------------------------------------------------------------ */
+
+/* Reinicia la escena actual: borra las entidades, instancia otra vez los
+ * objetos de la escena y deja los scripts a cero. El proximo fotograma
+ * vuelve a disparar inicio/escena. */
+static void reiniciar_escena_juego(LoboEstado *st) {
+    g_eventos.reiniciar = 0;
+    entidades_vaciar();
+    instanciar_escena(g_eventos.escena);
+    entidades_fin_fotograma();
+    eventos_escena_iniciar(&g_eventos, st);
+}
 
 static void actualizar(void) {
     unsigned e = juego.entrada;
@@ -575,20 +586,20 @@ static void actualizar(void) {
     /* Escape cierra siempre, alla donde se mueva el lobo. */
     if (e & MOTOR_ENT_CERRAR) juego.corriendo = 0;
 
-    if (g_modo_vm && g_num_vm > 0) {
-        /* Modo VM (fase 25): cada script conserva su pc, su pila y su
-         * espera; un script esperando no frena a los demas. */
+    if (g_modo_vm && eventos_num(&g_eventos) > 0) {
+        /* Modo VM (fases 25 a 27): el planificador reparte los eventos;
+         * cada script conserva su pc, su pila y su espera, y un script
+         * esperando no frena a los demas. */
         LoboEstado st;
-        int i;
         estado_preparar(&st);
-        for (i = 0; i < g_num_vm; i++) {
-            lobo_vm_fotograma(&g_vm_programas[i], &st, &g_vm_maquinas[i]);
-            if (g_vm_maquinas[i].cerrar || g_vm_maquinas[i].detener_todo)
-                juego.corriendo = 0;
-        }
+        eventos_fotograma(&g_eventos, &st, juego.fotograma, juego.entrada,
+                          juego.entrada_anterior);
+        juego.entrada_anterior = juego.entrada;
         /* Las bajas se aplican cuando ya no queda ningun script del
          * fotograma mirando la entidad. */
         entidades_fin_fotograma();
+        if (g_eventos.reiniciar) reiniciar_escena_juego(&st);
+        if (eventos_cerrar(&g_eventos)) juego.corriendo = 0;
         juego.x = st.x;
         juego.y = st.y;
         return;
@@ -866,7 +877,15 @@ static int correr_captura(const char *ruta_bmp, int fotogramas) {
     if (!juego.fb) return 1;
     juego.fb_ancho = g_ancho;
     juego.fb_alto = g_alto;
+    if (g_mensaje_ini[0])
+        eventos_mensaje(&g_eventos, 0, NULL, g_mensaje_ini);
     for (i = 0; i < fotogramas && juego.corriendo; i++) {
+        if (g_tecla_guion) {
+            if (g_evento_duracion > 0 && juego.fotograma >= g_evento_duracion)
+                juego.entrada = 0;
+            else
+                juego.entrada = g_tecla_guion;
+        }
         actualizar();
         traza_fotograma();
         renderizar();
@@ -874,6 +893,10 @@ static int correr_captura(const char *ruta_bmp, int fotogramas) {
     if (g_entidades && g_traza)
         fprintf(g_traza, "entidades final: %d avisos %d creadas %d\n",
                 entidades_num(), entidades_avisos(), entidades_creadas());
+    if (g_eventos_traza && g_traza)
+        fprintf(g_traza, "eventos final: %d avisos %d ejecutados %d\n",
+                eventos_num(&g_eventos), eventos_avisos(&g_eventos),
+                eventos_ejecutados(&g_eventos));
     if (!activo_guardar_bmp(ruta_bmp, juego.fb, juego.fb_ancho, juego.fb_alto))
         return 1;
     free(juego.fb);
@@ -892,6 +915,10 @@ static int volcar_estado(const char *ruta) {
     fprintf(f, "lobo %d %d\n", juego.x, juego.y);
     fprintf(f, "entidades %d avisos %d creadas %d\n", entidades_num(),
             entidades_avisos(), entidades_creadas());
+    if (g_modo_vm && g_eventos_traza)
+        fprintf(f, "eventos %d avisos %d ejecutados %d\n",
+                eventos_num(&g_eventos), eventos_avisos(&g_eventos),
+                eventos_ejecutados(&g_eventos));
     if (g_entidades) {
         n = entidades_orden(orden, ENTIDADES_MAX);
         for (i = 0; i < n; i++) {
@@ -917,13 +944,25 @@ static int volcar_estado(const char *ruta) {
  * --captura). */
 static int correr_volcar(const char *ruta, int fotogramas) {
     int i;
+    if (g_mensaje_ini[0])
+        eventos_mensaje(&g_eventos, 0, NULL, g_mensaje_ini);
     for (i = 0; i < fotogramas && juego.corriendo; i++) {
+        if (g_tecla_guion) {
+            if (g_evento_duracion > 0 && juego.fotograma >= g_evento_duracion)
+                juego.entrada = 0;
+            else
+                juego.entrada = g_tecla_guion;
+        }
         actualizar();
         traza_fotograma();
     }
     if (g_entidades && g_traza)
         fprintf(g_traza, "entidades final: %d avisos %d creadas %d\n",
                 entidades_num(), entidades_avisos(), entidades_creadas());
+    if (g_eventos_traza && g_traza)
+        fprintf(g_traza, "eventos final: %d avisos %d ejecutados %d\n",
+                eventos_num(&g_eventos), eventos_avisos(&g_eventos),
+                eventos_ejecutados(&g_eventos));
     return volcar_estado(ruta);
 }
 
@@ -1020,7 +1059,9 @@ static int opcion(const char *nombre) {
            strcmp(nombre, "--captura") == 0 ||
            strcmp(nombre, "--volcar") == 0 ||
            strcmp(nombre, "--fotogramas") == 0 ||
-           strcmp(nombre, "--tecla") == 0 || strcmp(nombre, "--traza") == 0;
+           strcmp(nombre, "--tecla") == 0 || strcmp(nombre, "--traza") == 0 ||
+           strcmp(nombre, "--evento") == 0 ||
+           strcmp(nombre, "--mensaje") == 0;
 }
 
 int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show) {
@@ -1038,6 +1079,10 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
             g_entidades = 1;
             continue;
         }
+        if (strcmp(__argv[i], "--eventos") == 0) {
+            g_eventos_traza = 1;
+            continue;
+        }
         if (opcion(__argv[i]) && i + 1 < __argc) {
             const char *v = __argv[++i];
             if (strcmp(__argv[i - 1], "--logica") == 0) ruta_logica = v;
@@ -1047,7 +1092,11 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
             else if (strcmp(__argv[i - 1], "--captura") == 0) ruta_bmp = v;
             else if (strcmp(__argv[i - 1], "--volcar") == 0) ruta_volcar = v;
             else if (strcmp(__argv[i - 1], "--traza") == 0) ruta_traza = v;
-            else if (strcmp(__argv[i - 1], "--fotogramas") == 0)
+            else if (strcmp(__argv[i - 1], "--mensaje") == 0) {
+                copiar_texto(g_mensaje_ini, sizeof(g_mensaje_ini), v);
+            } else if (strcmp(__argv[i - 1], "--evento") == 0) {
+                g_evento_duracion = atoi(v);
+            } else if (strcmp(__argv[i - 1], "--fotogramas") == 0)
                 fotogramas = atoi(v);
             else if (strcmp(__argv[i - 1], "--tecla") == 0) {
                 if (strcmp(v, "izquierda") == 0) tecla = MOTOR_ENT_IZQUIERDA;
@@ -1055,11 +1104,15 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
                 else if (strcmp(v, "arriba") == 0) tecla = MOTOR_ENT_ARRIBA;
                 else if (strcmp(v, "abajo") == 0) tecla = MOTOR_ENT_ABAJO;
                 else if (strcmp(v, "saltar") == 0) tecla = MOTOR_ENT_SALTO;
+                else if (strcmp(v, "cerrar") == 0) tecla = MOTOR_ENT_CERRAR;
             }
         }
     }
     if (fotogramas < 1) fotogramas = 1;
     if (fotogramas > 100000) fotogramas = 100000;
+    if (g_evento_duracion < 0) g_evento_duracion = 0;
+    if (g_evento_duracion > 100000) g_evento_duracion = 100000;
+    g_tecla_guion = tecla;
     if (ruta_traza) {
         g_traza = fopen(ruta_traza, "wt"); /* si falla: sin traza */
     }

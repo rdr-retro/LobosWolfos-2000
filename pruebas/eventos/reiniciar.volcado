@@ -1,0 +1,7 @@
+fotogramas 5
+lobo 16 16
+entidades 1 avisos 0 creadas 1
+eventos 2 avisos 0 ejecutados 7
+entidad 2 escena 1 x 10 y 10 w 16 h 16 visible 1 capa 0 vida 1
+  var "n" 2
+  var "inicios" 1

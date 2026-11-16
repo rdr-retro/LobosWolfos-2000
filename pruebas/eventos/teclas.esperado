@@ -1,0 +1,40 @@
+vm: 3 scripts
+vm: script 0 bloque 1 objeto 1 evento 1
+vm: script 1 bloque 2 objeto 1 evento 2
+vm: script 2 bloque 3 objeto 1 evento 3
+entidades: 1 iniciales avisos 0
+evento 1 tecla obj 1 ent 1 script 0 "derecha" pulsar
+evento 1 tecla obj 1 ent 1 script 2 "derecha" mantener
+eventos 1 total 2 cola 0
+1 16 16
+vm 0:2:4:0 1:0:0:0 2:2:4:0
+ent 1 10 10
+evento 2 tecla obj 1 ent 1 script 2 "derecha" mantener
+eventos 2 total 1 cola 0
+2 16 16
+vm 0:2:4:0 1:0:0:0 2:2:4:0
+ent 1 10 10
+evento 3 tecla obj 1 ent 1 script 2 "derecha" mantener
+eventos 3 total 1 cola 0
+3 16 16
+vm 0:2:4:0 1:0:0:0 2:2:4:0
+ent 1 10 10
+evento 4 tecla obj 1 ent 1 script 1 "derecha" soltar
+eventos 4 total 1 cola 0
+4 16 16
+vm 0:2:4:0 1:2:4:0 2:2:4:0
+ent 1 10 10
+eventos 5 total 0 cola 0
+5 16 16
+vm 0:2:4:0 1:2:4:0 2:2:4:0
+ent 1 10 10
+eventos 6 total 0 cola 0
+6 16 16
+vm 0:2:4:0 1:2:4:0 2:2:4:0
+ent 1 10 10
+eventos 7 total 0 cola 0
+7 16 16
+vm 0:2:4:0 1:2:4:0 2:2:4:0
+ent 1 10 10
+entidades final: 1 avisos 0 creadas 1
+eventos final: 3 avisos 0 ejecutados 5

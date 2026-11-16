@@ -1,9 +1,10 @@
 # Pruebas de LobosWolfos 2000
 
-Cinco suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
+Seis suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
 (fase 24), la VM resumible y lobo 3 (fase 25), entidades, escenas y ciclo de
-vida (fase 26) y la interfaz del editor (fase 23). Congelan el comportamiento
-antes de cambiar el runtime en las fases siguientes.
+vida (fase 26), eventos, planificador y mensajes (fase 27) y la interfaz del
+editor (fase 23). Congelan el comportamiento antes de cambiar el runtime en
+las fases siguientes.
 
 Todo es texto: los patrones de las capturas son hashes SHA-256 y
 volcados de estado, no imagenes. `recursos/ascii.png` no se versiona y
@@ -12,11 +13,12 @@ las pruebas no lo necesitan.
 ## Comandos
 
 ```bat
-build.bat prueba              compila y pasa las cinco suites
+build.bat prueba              compila y pasa las seis suites
 build.bat prueba conformidad  solo la suite del lenguaje
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
 build.bat prueba entidades    solo entidades, escenas y ciclo de vida
+build.bat prueba eventos      solo eventos, planificador y mensajes
 build.bat prueba regresion    solo la regresion del editor
 build.bat prueba actualizar   reescribe los patrones con el estado actual
 ```
@@ -29,6 +31,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\ejecutar.ps1 -Repeti
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\logic3.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\vm.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\entidades.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\eventos.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\regresion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\linea_base.ps1
 ```
@@ -135,6 +138,7 @@ Casos:
 | `listas` | `lista`, `anadir`, `ordenar`, `largo`, `elemento` |
 | `detener` | `detener` corta el script y el evento vuelve a empezar |
 | `mensajes` | `mensaje` y `clonar` anotan en la memoria compartida |
+| `alias` | `enviar`, `enviar_a`, `reiniciar_escena` y `detener_*` con y sin parentesis (fase 27) |
 | `pila` | recursion sin fin: el tope de 32 frames corta con error sin colgar el fotograma |
 
 La traza de `--vm-test` es una linea por fotograma:
@@ -201,6 +205,57 @@ Para anadir un caso: crear el `.logic3` y su `.args`, ejecutar
 `pruebas\entidades.ps1 -Filtro <nombre>* -Actualizar`, revisar el
 `.esperado`, el `.volcado` y el BMP a mano, y volver a pasarla sin
 `-Actualizar` y con `-Repetir`.
+
+## Eventos, planificador y mensajes (`eventos.ps1`)
+
+La suite de la fase 27 congela el orden de despacho y la cola de mensajes.
+Los casos viven en `pruebas\eventos` y se ejecutan con
+`--logic3 --eventos --entidades --captura --traza --volcar`:
+
+| Archivo | Que es |
+|---|---|
+| `<nombre>.logic3` | proyecto con varios objetos y sus eventos |
+| `<nombre>.args` | argumentos extra (`--fotogramas`, `--tecla`, `--evento`, `--mensaje`) |
+| `<nombre>.esperado` | traza exacta, con las lineas `evento` y `eventos` |
+| `<nombre>.volcado` | estado final con las variables de cada entidad |
+
+El BMP no se congela: `--captura` solo evita que el motor abra ventana.
+
+Casos:
+
+| Caso | Cubre |
+|---|---|
+| `recibir` | criterio de salida: `recibir` no corre hasta que llega el mensaje; `--mensaje externo` se entrega en el fotograma 1 |
+| `teclas` | `pulsar`, `mantener` y `soltar`: una pulsacion por flanco con la tecla mantenida |
+| `cada` | `cada 10` dispara exactamente en 10, 20 y 30 |
+| `orden` | traza del orden inicio, fotograma, tecla y cada en los mismos fotogramas |
+| `cola` | varios mensajes encolados: el receptor que espera los recibe despues, sin perder ninguno |
+| `tocar` | AABB entre dos entidades con espera de 15 fotogramas |
+| `reiniciar` | `reiniciar_escena()` reinstancia las entidades y repite `inicio` |
+| `detener` | `detener_script` corta un script; `detener_todo` congela el despacho |
+
+Los ids de evento son unicos en todo el proyecto (el editor los valida
+globalmente), y las variables de entidad se remapean a slots globales: los
+fixtures declaran las mismas variables en el mismo orden.
+
+La traza con `--eventos` tiene este formato:
+
+```text
+evento <fotograma> <tipo> obj <id> ent <id> script <n> ["<mensaje>"]
+...
+eventos <fotograma> total <n> cola <q>
+...
+eventos final: N avisos A ejecutados E
+```
+
+La linea `eventos <fotograma> total <n> cola <q>` sale en todos los
+fotogramas, tambien cuando `detener todo` congela el despacho o un mensaje
+queda en espera: es la prueba de que la cola no se pierde. El volcado anade
+`eventos N avisos A ejecutados E`.
+
+Para anadir un caso: crear el `.logic3` y su `.args`, ejecutar
+`pruebas\eventos.ps1 -Filtro <nombre>* -Actualizar`, revisar la traza y el
+volcado a mano, y volver a pasarla sin `-Actualizar` y con `-Repetir`.
 
 ## Regresion del editor (`regresion.ps1`)
 

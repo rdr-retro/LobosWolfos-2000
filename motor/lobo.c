@@ -302,8 +302,9 @@ static int lobo_programa_reservar(LoboPrograma *prog, int necesita) {
     return 1;
 }
 
-/* Anade una instruccion al programa; 0 si ya no cabe. */
-static int lobo_emitir(LoboParser *p, int op, int valor) {
+/* Anade una instruccion al programa con uno o dos operandos; 0 si ya no
+ * cabe. */
+static int lobo_emitir2(LoboParser *p, int op, int valor, int extra) {
     if (p->prog->largo >= p->limite_insts) {
         lobo_error(p, "el programa es demasiado largo");
         return 0;
@@ -314,8 +315,13 @@ static int lobo_emitir(LoboParser *p, int op, int valor) {
     }
     p->prog->insts[p->prog->largo].op = (unsigned char)op;
     p->prog->insts[p->prog->largo].valor = valor;
+    p->prog->insts[p->prog->largo].extra = extra;
     p->prog->largo++;
     return 1;
+}
+
+static int lobo_emitir(LoboParser *p, int op, int valor) {
+    return lobo_emitir2(p, op, valor, 0);
 }
 
 /* Cambia el destino de un salto ya emitido (parcheo de bloques). */
@@ -704,6 +710,51 @@ static int lobo_llamada_borrar(LoboParser *p) {
     return lobo_emitir(p, LOBO_BORRAR_ENTIDAD, 1);
 }
 
+/* enviar("mensaje"): a todos los objetos (fase 27). */
+static int lobo_llamada_enviar(LoboParser *p) {
+    int idx;
+    if (lobo_fin_tokens(p) || p->tokens[p->pos].tipo != TOK_TXT) {
+        lobo_error(p, "enviar necesita un texto entre comillas");
+        return 0;
+    }
+    idx = lobo_agregar_texto(p, p->tokens[p->pos].texto);
+    if (idx < 0) return 0;
+    p->pos++;
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar enviar");
+        return 0;
+    }
+    return lobo_emitir(p, LOBO_ENVIAR, idx);
+}
+
+/* enviar_a("objeto", "mensaje"): al objeto con ese tag. */
+static int lobo_llamada_enviar_a(LoboParser *p) {
+    int destino, texto;
+    if (lobo_fin_tokens(p) || p->tokens[p->pos].tipo != TOK_TXT) {
+        lobo_error(p, "enviar_a necesita el objeto entre comillas");
+        return 0;
+    }
+    destino = lobo_agregar_texto(p, p->tokens[p->pos].texto);
+    if (destino < 0) return 0;
+    p->pos++;
+    if (!lobo_comer_op(p, ",")) {
+        lobo_error(p, "enviar_a necesita objeto y mensaje");
+        return 0;
+    }
+    if (lobo_fin_tokens(p) || p->tokens[p->pos].tipo != TOK_TXT) {
+        lobo_error(p, "enviar_a necesita el mensaje entre comillas");
+        return 0;
+    }
+    texto = lobo_agregar_texto(p, p->tokens[p->pos].texto);
+    if (texto < 0) return 0;
+    p->pos++;
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar enviar_a");
+        return 0;
+    }
+    return lobo_emitir2(p, LOBO_ENVIAR_A, texto, destino);
+}
+
 /* Primario: numero, variable, tecla, texto, lista o llamada. */
 static int lobo_primario(LoboParser *p) {
     if (lobo_fin_tokens(p)) {
@@ -752,6 +803,17 @@ static int lobo_primario(LoboParser *p) {
                 lobo_igual(lobo_mirar_op(p), "(")) {
                 p->pos++;
                 return lobo_llamada_borrar(p);
+            }
+            /* enviar() y enviar_a() (fase 27) */
+            if (lobo_igual(nombre, "enviar") && lobo_mirar_op(p) &&
+                lobo_igual(lobo_mirar_op(p), "(")) {
+                p->pos++;
+                return lobo_llamada_enviar(p);
+            }
+            if (lobo_igual(nombre, "enviar_a") && lobo_mirar_op(p) &&
+                lobo_igual(lobo_mirar_op(p), "(")) {
+                p->pos++;
+                return lobo_llamada_enviar_a(p);
             }
             /* llamar("funcion", ...) */
             if (lobo_igual(nombre, "llamar") && lobo_mirar_op(p) &&
@@ -1097,6 +1159,35 @@ static int lobo_sentencia(LoboParser *p) {
                 }
             }
             return lobo_emitir(p, LOBO_DETENER, todo);
+        }
+        /* Alias de la fase 27: detener_script y detener_todo, con o sin
+         * parentesis, para que el planificador documente las dos acciones. */
+        if (lobo_igual(t->texto, "detener_script") ||
+            lobo_igual(t->texto, "detener_todo")) {
+            int todo = lobo_igual(t->texto, "detener_todo");
+            if (p->num_tokens == 1)
+                return lobo_emitir(p, LOBO_DETENER, todo);
+            if (p->num_tokens == 3 && p->tokens[1].tipo == TOK_OP &&
+                lobo_igual(p->tokens[1].texto, "(") &&
+                p->tokens[2].tipo == TOK_OP &&
+                lobo_igual(p->tokens[2].texto, ")"))
+                return lobo_emitir(p, LOBO_DETENER, todo);
+            lobo_error(p, "detener_script y detener_todo van sin argumentos");
+            return 0;
+        }
+        if (lobo_igual(t->texto, "reiniciar_escena")) {
+            if (p->num_tokens == 1 ||
+                (p->num_tokens == 3 && p->tokens[1].tipo == TOK_OP &&
+                 lobo_igual(p->tokens[1].texto, "(") &&
+                 p->tokens[2].tipo == TOK_OP &&
+                 lobo_igual(p->tokens[2].texto, ")"))) {
+                /* El opcode apila su resultado (como cerrar); como aqui va
+                 * suelto, se descarta para no dejar la pila creciendo. */
+                if (!lobo_emitir(p, LOBO_REINICIAR_ESCENA, 0)) return 0;
+                return lobo_emitir(p, LOBO_POP, 0);
+            }
+            lobo_error(p, "reiniciar_escena va sin argumentos");
+            return 0;
         }
         if (lobo_igual(t->texto, "mensaje")) {
             int idx;
@@ -1993,12 +2084,52 @@ int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
         break;
     }
     case LOBO_MENSAJE:
-        if (estado->memoria) {
-            if (in->valor >= 0 && in->valor < programa->num_textos)
-                lobo_copiar(estado->memoria->mensaje,
-                            programa->textos[in->valor], LOBO_TEXTO_MAX);
-            estado->memoria->mensajes++;
+        if (in->valor >= 0 && in->valor < programa->num_textos) {
+            const char *texto = programa->textos[in->valor];
+            if (estado->enviar)
+                estado->enviar(estado->ctx_eventos, maquina->entidad, NULL,
+                               texto);
+            if (estado->memoria) {
+                lobo_copiar(estado->memoria->mensaje, texto, LOBO_TEXTO_MAX);
+                estado->memoria->mensajes++;
+            }
         }
+        break;
+    /* --- fase 27: mensajes --- */
+    case LOBO_ENVIAR:
+        if (in->valor >= 0 && in->valor < programa->num_textos) {
+            const char *texto = programa->textos[in->valor];
+            if (estado->enviar)
+                estado->enviar(estado->ctx_eventos, maquina->entidad, NULL,
+                               texto);
+            if (estado->memoria) {
+                lobo_copiar(estado->memoria->mensaje, texto, LOBO_TEXTO_MAX);
+                estado->memoria->mensajes++;
+            }
+        }
+        lobo_vm_push(maquina, 0, &ok);
+        break;
+    case LOBO_ENVIAR_A:
+        if (in->valor >= 0 && in->valor < programa->num_textos) {
+            const char *texto = programa->textos[in->valor];
+            const char *destino =
+                (in->extra >= 0 && in->extra < programa->num_textos)
+                    ? programa->textos[in->extra]
+                    : NULL;
+            if (estado->enviar)
+                estado->enviar(estado->ctx_eventos, maquina->entidad, destino,
+                               texto);
+            if (estado->memoria) {
+                lobo_copiar(estado->memoria->mensaje, texto, LOBO_TEXTO_MAX);
+                estado->memoria->mensajes++;
+            }
+        }
+        lobo_vm_push(maquina, 0, &ok);
+        break;
+    case LOBO_REINICIAR_ESCENA:
+        if (estado->reiniciar_escena)
+            estado->reiniciar_escena(estado->ctx_eventos);
+        lobo_vm_push(maquina, 0, &ok);
         break;
     case LOBO_CLONAR: {
         int nuevo = 0;
@@ -2136,6 +2267,50 @@ int lobo_vm_fotograma(const LoboPrograma *programa, LoboEstado *estado,
     }
     maquina->agotado = 1;
     return 0;
+}
+
+/* Corre hasta un evento. Devuelve 1 si llego, 0 si agoto el presupuesto. */
+static int lobo_vm_correr(const LoboPrograma *programa, LoboEstado *estado,
+                          LoboMaquina *maquina) {
+    long pasos = LOBO_PASOS_VM_MAX;
+    while (--pasos >= 0) {
+        int r = lobo_paso(programa, estado, maquina);
+        if (r != LOBO_PASO_SIGUE) return 1;
+    }
+    maquina->agotado = 1;
+    return 0;
+}
+
+int lobo_vm_evento(const LoboPrograma *programa, LoboEstado *estado,
+                   LoboMaquina *maquina) {
+    if (!programa || !maquina) return 0;
+    maquina->cerrar = 0;
+    maquina->agotado = 0;
+    if (maquina->estado == LOBO_VM_ESPERANDO) {
+        /* El disparo llega mientras el script espera: el planificador
+         * decide si lo pospone (mensajes) o lo pierde (teclas). */
+        return 0;
+    }
+    if (maquina->estado == LOBO_VM_TERMINADO) {
+        maquina->pc = 0;
+        maquina->np = 0;
+        maquina->num_frames = 0;
+        maquina->espera = 0;
+        maquina->estado = LOBO_VM_LISTO;
+    }
+    return lobo_vm_correr(programa, estado, maquina);
+}
+
+int lobo_vm_reanudar(const LoboPrograma *programa, LoboEstado *estado,
+                     LoboMaquina *maquina) {
+    if (!programa || !maquina) return 0;
+    if (maquina->estado != LOBO_VM_ESPERANDO) return 0;
+    maquina->cerrar = 0;
+    maquina->agotado = 0;
+    if (maquina->espera > 0) maquina->espera--;
+    if (maquina->espera > 0) return 0;
+    maquina->estado = LOBO_VM_LISTO;
+    return lobo_vm_correr(programa, estado, maquina);
 }
 
 void lobo_maquina_reiniciar(LoboMaquina *maquina) {

@@ -64,11 +64,16 @@ typedef struct Entidad {
     int vida;
     int es_clon;
     int borrar;    /* marcada para eliminacion al final del fotograma */
+    int nueva;     /* creada en este fotograma (evento clonar, fase 27) */
     int vars[ENTIDAD_VARS_MAX];
 } Entidad;
 
 /* Borra todas las entidades y tipos (arranque de proyecto). */
 void entidades_reiniciar(void);
+
+/* Borra solo las entidades (reinicio de escena): conserva los tipos y los
+ * ids monotonos, y deja el contador de creadas a cero. */
+void entidades_vaciar(void);
 
 /* Registra un objeto como tipo de entidad. Devuelve el indice del tipo o
  * -1 si no cabe. Si el id de objeto ya existe, devuelve el tipo actual. */
@@ -89,6 +94,14 @@ int entidades_slot_var(int tipo, const char *nombre);
  * de --volcar --entidades). */
 int entidades_tipo_vars(int tipo);
 const char *entidades_tipo_var_nombre(int tipo, int slot);
+
+/* Id de objeto y nombre (tag) de un tipo; -1 / "" si no existe. */
+int entidades_tipo_objeto(int tipo);
+const char *entidades_tipo_nombre(int tipo);
+
+/* Ids de las entidades vivas de un objeto, en orden de array. Devuelve
+ * cuantas hay y las deja en `salida` (hasta `maximo`). */
+int entidades_de_objeto(int id_objeto, int *salida, int maximo);
 
 /* Crea una instancia en la escena del tipo. Devuelve el id o -1 (sin
  * hueco, limite de altas del fotograma o tipo invalido). */
