@@ -1,0 +1,18 @@
+LOGIC3
+version 3
+proyecto "Entidades dos" 320 200 1 60 3 00112233
+carpetas "tiles" "maps" "trajes" "sonidos"
+escena 1 "Escena 1" "" 320 200 00112233
+objeto 1 "A" escena 1 x 16 y 16 w 24 h 24 visible 1 capa 0
+  variable "paso" 0 2
+  variable "vida" 0 10
+  evento 1 fotograma
+objeto 2 "B" escena 1 x 40 y 16 w 24 h 24 visible 1 capa 0
+  variable "paso" 0 3
+  variable "vida" 0 20
+  evento 2 fotograma
+bloque 1 evento 1 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "mi.x = mi.x + mi.variable(\"paso\")\nmi.variable(\"vida\") = mi.variable(\"vida\") + 1\n"
+bloque 2 evento 2 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "mi.y = mi.y + mi.variable(\"paso\")\nmi.variable(\"vida\") = mi.variable(\"vida\") - 1\n"
+FIN

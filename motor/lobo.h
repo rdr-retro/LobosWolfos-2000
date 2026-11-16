@@ -48,6 +48,11 @@
  *   largo(l) / elemento(l, i) / contiene(l, v)
  *   fijar(l, i, v) / anadir(l, v) / insertar(l, i, v)
  *   borrar(l, i) / limpiar(l) / ordenar(l)
+ *   mi.x / mi.y / mi.vida / mi.visible / mi.traje       (fase 26)
+ *   mi.id / mi.escena / mi.ancho / mi.alto / mi.capa
+ *   mi.variable("nombre")                               (fase 26)
+ *   crear("tag", x, y) / borrar() / borrar(id)          (fase 26)
+ *   mover(id, x, y)                                     (fase 26)
  *
  * Un script puede estar listo, esperando o terminado. `esperar` guarda
  * el contador y el puntero de instruccion, asi que el resto de scripts
@@ -99,6 +104,21 @@
 #define LOBO_ENTIDAD_VARS_MAX 64 /* variables por entidad */
 #define LOBO_LISTAS_MAX    32   /* listas por programa */
 #define LOBO_LISTA_ELEMENTOS_MAX 256 /* elementos por lista */
+#define LOBO_ENTIDAD_NOMBRES_MAX 64 /* nombres de variable de entidad por programa */
+
+/* Campos de `mi` (fase 26). Las variables de la entidad empiezan en
+ * LOBO_MI_VARS para compartir un solo espacio de indices. */
+#define LOBO_MI_X       0
+#define LOBO_MI_Y       1
+#define LOBO_MI_VIDA    2
+#define LOBO_MI_VISIBLE 3
+#define LOBO_MI_TRAJE   4
+#define LOBO_MI_ID      5
+#define LOBO_MI_ESCENA  6
+#define LOBO_MI_ANCHO   7
+#define LOBO_MI_ALTO    8
+#define LOBO_MI_CAPA    9
+#define LOBO_MI_VARS    1000 /* + slot de variable de la entidad */
 
 /* Estados de un script en la VM. */
 #define LOBO_VM_LISTO     0
@@ -172,7 +192,13 @@ enum {
     LOBO_LISTA_LIMPIAR,  /* valor: lista; vacia la lista */
     LOBO_MENSAJE,        /* valor: indice de texto */
     LOBO_DETENER,        /* valor: 0 este script, 1 todo */
-    LOBO_CLONAR          /* pedir un clon (apila 0) */
+    LOBO_CLONAR,         /* pedir un clon (apila 0) */
+    /* --- fase 26: entidades y `mi` --- */
+    LOBO_CARGAR_MI,      /* valor: LOBO_MI_* (campo o VARS + slot) */
+    LOBO_GUARDAR_MI,     /* valor: LOBO_MI_* (campo o VARS + slot) */
+    LOBO_CREAR,          /* valor: indice del tag; x e y del tope */
+    LOBO_BORRAR_ENTIDAD, /* valor: 0 la actual, 1 la del tope de la pila */
+    LOBO_MOVER_ENTIDAD   /* mueve id, x, y (los tres del tope) */
 };
 
 /* Una instruccion del programa compilado. */
@@ -198,6 +224,10 @@ typedef struct LoboPrograma {
     int num_funciones;
     char textos[LOBO_TEXTOS_MAX][LOBO_TEXTO_MAX];
     int num_textos;
+    /* Nombres de variable de entidad compartidos por @nombre y
+     * mi.variable("nombre") (fase 26). */
+    char entidad_nombres[LOBO_ENTIDAD_NOMBRES_MAX][LOBO_TEXTO_MAX];
+    int num_ent_nombres;
 } LoboPrograma;
 
 /* Una lista de enteros con capacidad fija. */
@@ -226,6 +256,16 @@ typedef struct LoboEstado {
     LoboMemoria *memoria; /* compartida; puede ser NULL en modo clasico */
     int (*choca)(void *ctx, int x, int y);
     void *ctx;
+    /* --- entidades (fase 26) ---
+     * Callbacks opcionales: sin ellos (editor y --vm-test) `mi` cae en
+     * x/y y en memoria->entidad_vars, y crear() devuelve -1. */
+    int (*entidad_crear)(void *ctx, const char *tag, int x, int y);
+    int (*entidad_borrar)(void *ctx, int id);
+    int (*entidad_clonar)(void *ctx, int id);
+    int (*entidad_mover)(void *ctx, int id, int x, int y);
+    int (*entidad_leer)(void *ctx, int id, int campo);
+    int (*entidad_escribir)(void *ctx, int id, int campo, int valor);
+    void *ctx_entidades;
 } LoboEstado;
 
 /* Un frame de llamada: donde volver y el estado que hay que restaurar. */
@@ -250,6 +290,7 @@ typedef struct LoboMaquina {
     int estado;      /* LOBO_VM_* */
     int detener_todo;/* 1 si el script pidio detener la escena */
     int clones;      /* clones pedidos por este script */
+    int entidad;     /* id de la entidad actual (0 si no es de una) */
 } LoboMaquina;
 
 /* Prepara un programa para compilar (buffer a cero). */

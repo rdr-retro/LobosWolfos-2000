@@ -1,0 +1,21 @@
+vm: 1 scripts
+vm: script 0 bloque 1 objeto 1 evento 1
+entidades: 1 iniciales avisos 0
+1 16 16
+vm 0:1:17:2
+ent 1 30 30
+ent 2 80 30
+2 16 16
+vm 0:1:17:1
+ent 1 30 30
+ent 2 80 30
+3 16 16
+vm 0:2:19:0
+ent 2 80 30
+4 16 16
+vm 0:2:19:0
+ent 2 80 30
+5 16 16
+vm 0:2:19:0
+ent 2 80 30
+entidades final: 1 avisos 0 creadas 2

@@ -1,0 +1,14 @@
+LOGIC3
+version 3
+proyecto "Entidades crear50" 320 200 1 60 3 00112233
+carpetas "tiles" "maps" "trajes" "sonidos"
+escena 1 "Escena 1" "" 320 200 00112233
+escena 2 "Bolsa" "" 320 200 00112233
+objeto 1 "Fabrica" escena 1 x 8 y 8 w 16 h 16 visible 1 capa 0
+  variable "creadas" 0 0
+  evento 1 fotograma
+objeto 2 "Bola" escena 2 x 0 y 0 w 12 h 12 visible 1 capa 1
+  evento 2 fotograma
+bloque 1 evento 1 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "si hecho == 0\n  hecho = 1\n  lista ids\n  n = 0\n  mientras n < 50\n    anadir(ids, crear(\"Bola\", 10 + n * 2, 20))\n    n = n + 1\n    si n % 5 == 0\n      esperar 1\n    fin\n  fin\n  i = 0\n  mientras i < largo(ids)\n    mover(elemento(ids, i), 60 + i * 3, 80 + i % 10)\n    i = i + 1\n  fin\n  esperar 1\n  mientras largo(ids) > 0\n    borrar(elemento(ids, largo(ids) - 1))\n    borrar(ids, largo(ids) - 1)\n  fin\n  borrar()\nfin\n"
+FIN

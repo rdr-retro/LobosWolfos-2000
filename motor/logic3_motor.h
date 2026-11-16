@@ -1,10 +1,10 @@
-/* logic3_motor.h - lector minimo de LOGIC3 para el motor (fase 25).
+/* logic3_motor.h - lector minimo de LOGIC3 para el motor (fases 25 y 26).
  *
  * El editor tiene el lector completo en src/logic3.c (modelo, validacion,
- * escritor y conversiones). El motor solo necesita una parte para la fase
- * 25: la cabecera del proyecto, el mapa de la primera escena y los scripts
- * `codigo.lobo` de los eventos `fotograma`. Las escenas, entidades y el
- * resto del modelo llegan en la fase 26.
+ * escritor y conversiones). El motor solo necesita la cabecera del
+ * proyecto, las escenas, los objetos con sus variables y trajes, y los
+ * scripts `codigo.lobo` de los eventos `fotograma` (fase 25). Las escenas
+ * y los objetos alimentan el modulo de entidades en la fase 26.
  *
  * El lector es tolerante: las secciones que no entiende las ignora y los
  * errores de sintaxis devuelven 0 con "linea N: motivo" en `error`. El
@@ -17,8 +17,12 @@
 #define MOTOR_L3_SCRIPTS_MAX 64   /* scripts de fotograma por proyecto */
 #define MOTOR_L3_CODIGO_MAX  2048 /* bytes de codigo por bloque */
 #define MOTOR_L3_RUTA_MAX    260  /* ruta o nombre de mapa */
-#define MOTOR_L3_NOMBRE_MAX  64   /* nombre del proyecto */
+#define MOTOR_L3_NOMBRE_MAX  64   /* nombre de proyecto, escena u objeto */
 #define MOTOR_L3_ERROR_MAX   192  /* mensaje de error del lector */
+#define MOTOR_L3_ESCENAS_MAX 64   /* escenas por proyecto */
+#define MOTOR_L3_OBJETOS_MAX 128  /* objetos por proyecto */
+#define MOTOR_L3_VARS_MAX    64   /* variables por objeto */
+#define MOTOR_L3_TRAJES_MAX  32   /* trajes por objeto */
 
 /* Un script del proyecto: el codigo lobo de un bloque codigo.lobo que
  * cuelga de un evento fotograma. */
@@ -31,7 +35,44 @@ typedef struct MotorL3Script {
     char codigo[MOTOR_L3_CODIGO_MAX + 1];
 } MotorL3Script;
 
-/* Proyecto minimo que entiende el motor en la fase 25. */
+/* Una escena del proyecto. */
+typedef struct MotorL3Escena {
+    int id;
+    char nombre[MOTOR_L3_NOMBRE_MAX];
+    char mapa[MOTOR_L3_RUTA_MAX];
+    int ancho, alto;
+    unsigned int fondo;
+} MotorL3Escena;
+
+/* Una variable inicial de un objeto. */
+typedef struct MotorL3Variable {
+    char nombre[MOTOR_L3_NOMBRE_MAX];
+    int valor;
+} MotorL3Variable;
+
+/* Un traje del objeto (en la fase 26 solo se guarda, aun no se pinta). */
+typedef struct MotorL3Traje {
+    int indice;
+    char imagen[MOTOR_L3_RUTA_MAX];
+    int ancho, alto;
+    int pivote_x, pivote_y;
+} MotorL3Traje;
+
+/* Un objeto LOGIC3: el tipo de las entidades que se instancian. */
+typedef struct MotorL3Objeto {
+    int id;
+    char nombre[MOTOR_L3_NOMBRE_MAX];
+    int escena;
+    int x, y, w, h;
+    int visible;
+    int capa;
+    MotorL3Variable variables[MOTOR_L3_VARS_MAX];
+    int num_variables;
+    MotorL3Traje trajes[MOTOR_L3_TRAJES_MAX];
+    int num_trajes;
+} MotorL3Objeto;
+
+/* Proyecto minimo que entiende el motor. */
 typedef struct MotorL3 {
     char nombre[MOTOR_L3_NOMBRE_MAX];
     int ancho, alto;
@@ -40,10 +81,13 @@ typedef struct MotorL3 {
     int velocidad;
     unsigned int fondo;
     char mapa[MOTOR_L3_RUTA_MAX]; /* mapa de la primera escena, "" si no hay */
+    int escena_inicial;           /* id de la escena que arranca (0 si no hay) */
+    MotorL3Escena escenas[MOTOR_L3_ESCENAS_MAX];
+    int num_escenas;
+    MotorL3Objeto objetos[MOTOR_L3_OBJETOS_MAX];
+    int num_objetos;
     MotorL3Script scripts[MOTOR_L3_SCRIPTS_MAX];
     int num_scripts;
-    int num_escenas;
-    int num_objetos;
     int num_bloques; /* bloques vistos, informativo para --volcar */
 } MotorL3;
 

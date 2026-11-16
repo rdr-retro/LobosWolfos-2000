@@ -1,0 +1,9 @@
+fotogramas 8
+lobo 16 16
+entidades 2 avisos 0 creadas 2
+entidad 1 escena 1 x 32 y 16 w 24 h 24 visible 1 capa 0 vida 1
+  var "paso" 2
+  var "vida" 18
+entidad 2 escena 1 x 40 y 40 w 24 h 24 visible 1 capa 0 vida 1
+  var "paso" 3
+  var "vida" 12

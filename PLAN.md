@@ -741,6 +741,23 @@ el motor ya compila.
   8/8) y el criterio de salida queda congelado en
   `pruebas/vm/esperar_dos.logic3` (dos scripts, uno espera y el otro avanza).
 
+- **16-11-2026 (fase 26, entidades, escenas y ciclo de vida)** - Nace
+  `motor/entidades.c` y `motor/entidades.h`: un array fijo de 256 entidades
+  (tabla 3.2) con ids monotonos que no se reutilizan, borrado diferido al final
+  del fotograma y un tope de 32 altas por fotograma con avisos acumulados. Cada
+  entidad es una instancia de un objeto LOGIC3 (posicion, tamano, capa,
+  visibilidad, traje y hasta 64 variables). `motor/logic3_motor.c` lee escenas,
+  objetos, variables y trajes, y `motor/juego.c` instancia los objetos de la
+  primera escena al arrancar. `lobo` gana el modo VM con `mi.x`, `mi.y`,
+  `mi.vida`, `mi.visible`, `mi.traje`, `mi.variable("nombre")`, `crear`,
+  `clonar`, `borrar` y `mover`; las variables de entidad comparten tabla con
+  `@nombre` y se remapean a slots globales tras compilar. El render provisional
+  dibuja cada entidad como un rectangulo de color con su id, incluso sin mapa.
+  `game.exe` añade `--entidades` (detalle en traza y volcado) y `--volcar`
+  (estado final sin ventana con variables). La suite `pruebas/entidades.ps1`
+  cubre cuatro casos (`dos`, `crear50`, `limite`, `clonar`) y `build.bat prueba`
+  pasa las cinco suites.
+
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,

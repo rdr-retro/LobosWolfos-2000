@@ -187,7 +187,8 @@ static int lobo_tokenizar(const char *linea, int largo, LoboToken *tokens,
         }
         if (c == '=' || c == '!' || c == '<' || c == '>' || c == '+' ||
             c == '-' || c == '*' || c == '/' || c == '%' || c == '&' ||
-            c == '|' || c == '(' || c == ')' || c == ',') {
+            c == '|' || c == '(' || c == ')' || c == ',' ||
+            (vm && c == '.')) {
             tokens[n].tipo = TOK_OP;
             tokens[n].texto[0] = c;
             tokens[n].texto[1] = 0;
@@ -238,8 +239,6 @@ typedef struct {
     int num_locales;
     char globales[LOBO_GLOBALES_MAX][LOBO_NOMBRE_MAX];
     int num_globales;
-    char entidades[LOBO_ENTIDAD_VARS_MAX][LOBO_NOMBRE_MAX];
-    int num_entidades;
     char listas[LOBO_LISTAS_MAX][LOBO_NOMBRE_MAX];
     int num_listas;
 } LoboParser;
@@ -388,23 +387,28 @@ static int lobo_nueva_global(LoboParser *p, const char *nombre) {
     return p->num_globales++;
 }
 
-/* Indice de la variable de entidad con ese nombre completo (con @). */
+/* Indice de la variable de entidad con ese nombre. @nombre y
+ * mi.variable("nombre") comparten la tabla del programa; el @ del
+ * tokenizador no forma parte del nombre guardado. */
 static int lobo_buscar_entidad(LoboParser *p, const char *nombre) {
     int i;
-    for (i = 0; i < p->num_entidades; i++)
-        if (lobo_igual(p->entidades[i], nombre)) return i;
+    if (nombre[0] == '@') nombre++;
+    for (i = 0; i < p->prog->num_ent_nombres; i++)
+        if (lobo_igual(p->prog->entidad_nombres[i], nombre)) return i;
     return -1;
 }
 
 static int lobo_nueva_entidad(LoboParser *p, const char *nombre) {
     int i = lobo_buscar_entidad(p, nombre);
     if (i >= 0) return i;
-    if (p->num_entidades >= LOBO_ENTIDAD_VARS_MAX) {
+    if (p->prog->num_ent_nombres >= LOBO_ENTIDAD_NOMBRES_MAX) {
         lobo_error(p, "demasiadas variables de entidad (maximo 64)");
         return -1;
     }
-    lobo_copiar(p->entidades[p->num_entidades], nombre, LOBO_NOMBRE_MAX);
-    return p->num_entidades++;
+    if (nombre[0] == '@') nombre++;
+    lobo_copiar(p->prog->entidad_nombres[p->prog->num_ent_nombres],
+                nombre, LOBO_TEXTO_MAX);
+    return p->prog->num_ent_nombres++;
 }
 
 /* Indice de la lista con ese nombre. */
@@ -581,6 +585,125 @@ static int lobo_llamada_usuario(LoboParser *p) {
     return lobo_emitir(p, LOBO_LLAMAR, fi);
 }
 
+/* Campo de `mi` por nombre; -1 si no es un campo conocido. */
+static int lobo_campo_mi(const char *nombre) {
+    if (lobo_igual(nombre, "x")) return LOBO_MI_X;
+    if (lobo_igual(nombre, "y")) return LOBO_MI_Y;
+    if (lobo_igual(nombre, "vida")) return LOBO_MI_VIDA;
+    if (lobo_igual(nombre, "visible")) return LOBO_MI_VISIBLE;
+    if (lobo_igual(nombre, "traje")) return LOBO_MI_TRAJE;
+    if (lobo_igual(nombre, "id")) return LOBO_MI_ID;
+    if (lobo_igual(nombre, "escena")) return LOBO_MI_ESCENA;
+    if (lobo_igual(nombre, "ancho")) return LOBO_MI_ANCHO;
+    if (lobo_igual(nombre, "alto")) return LOBO_MI_ALTO;
+    if (lobo_igual(nombre, "capa")) return LOBO_MI_CAPA;
+    return -1;
+}
+
+/* Primario detras de "mi." (el punto ya comido). */
+static int lobo_primario_mi(LoboParser *p) {
+    char nombre[LOBO_NOMBRE_MAX];
+    int campo;
+
+    if (lobo_fin_tokens(p) || p->tokens[p->pos].tipo != TOK_ID) {
+        lobo_error(p, "se esperaba un campo de mi");
+        return 0;
+    }
+    lobo_copiar(nombre, p->tokens[p->pos].texto, LOBO_NOMBRE_MAX);
+    p->pos++;
+    if (lobo_igual(nombre, "variable")) {
+        int slot;
+        if (!lobo_comer_op(p, "(")) {
+            lobo_error(p, "mi.variable necesita parentesis");
+            return 0;
+        }
+        if (lobo_fin_tokens(p) || p->tokens[p->pos].tipo != TOK_TXT) {
+            lobo_error(p, "mi.variable necesita el nombre entre comillas");
+            return 0;
+        }
+        slot = lobo_buscar_entidad(p, p->tokens[p->pos].texto);
+        if (slot < 0) {
+            lobo_error(p, "variable de entidad desconocida");
+            return 0;
+        }
+        p->pos++;
+        if (!lobo_comer_op(p, ")")) {
+            lobo_error(p, "falta ) tras mi.variable");
+            return 0;
+        }
+        return lobo_emitir(p, LOBO_CARGAR_MI, LOBO_MI_VARS + slot);
+    }
+    campo = lobo_campo_mi(nombre);
+    if (campo < 0) {
+        lobo_error(p, "campo de mi desconocido");
+        return 0;
+    }
+    return lobo_emitir(p, LOBO_CARGAR_MI, campo);
+}
+
+/* crear("tag", x, y): deja el id de la entidad nueva (o -1) en la pila. */
+static int lobo_llamada_crear(LoboParser *p) {
+    int idx;
+    if (lobo_fin_tokens(p) || p->tokens[p->pos].tipo != TOK_TXT) {
+        lobo_error(p, "crear necesita el nombre del objeto entre comillas");
+        return 0;
+    }
+    idx = lobo_agregar_texto(p, p->tokens[p->pos].texto);
+    if (idx < 0) return 0;
+    p->pos++;
+    if (!lobo_comer_op(p, ",")) {
+        lobo_error(p, "crear necesita x e y");
+        return 0;
+    }
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ",")) {
+        lobo_error(p, "crear necesita x e y");
+        return 0;
+    }
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar crear");
+        return 0;
+    }
+    return lobo_emitir(p, LOBO_CREAR, idx);
+}
+
+/* mover(id, x, y). */
+static int lobo_llamada_mover(LoboParser *p) {
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ",")) {
+        lobo_error(p, "mover necesita id, x e y");
+        return 0;
+    }
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ",")) {
+        lobo_error(p, "mover necesita id, x e y");
+        return 0;
+    }
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar mover");
+        return 0;
+    }
+    return lobo_emitir(p, LOBO_MOVER_ENTIDAD, 0);
+}
+
+/* borrar(): la entidad actual; borrar(id): esa entidad; y
+ * borrar(lista, i) sigue siendo la funcion de lista de la fase 25. */
+static int lobo_llamada_borrar(LoboParser *p) {
+    if (lobo_comer_op(p, ")"))
+        return lobo_emitir(p, LOBO_BORRAR_ENTIDAD, 0);
+    if (!lobo_fin_tokens(p) && p->tokens[p->pos].tipo == TOK_ID &&
+        lobo_buscar_lista(p, p->tokens[p->pos].texto) >= 0)
+        return lobo_lista_builtin(p, "borrar");
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar borrar");
+        return 0;
+    }
+    return lobo_emitir(p, LOBO_BORRAR_ENTIDAD, 1);
+}
+
 /* Primario: numero, variable, tecla, texto, lista o llamada. */
 static int lobo_primario(LoboParser *p) {
     if (lobo_fin_tokens(p)) {
@@ -607,6 +730,28 @@ static int lobo_primario(LoboParser *p) {
                 int g = lobo_buscar_entidad(p, nombre);
                 if (g < 0) { lobo_error(p, "variable de entidad desconocida"); return 0; }
                 return lobo_emitir(p, LOBO_CARGAR_ENTIDAD, g);
+            }
+            /* mi.campo y mi.variable("nombre") */
+            if (lobo_igual(nombre, "mi") && lobo_mirar_op(p) &&
+                lobo_igual(lobo_mirar_op(p), ".")) {
+                p->pos++;
+                return lobo_primario_mi(p);
+            }
+            /* crear(), mover() y borrar() (fase 26) */
+            if (lobo_igual(nombre, "crear") && lobo_mirar_op(p) &&
+                lobo_igual(lobo_mirar_op(p), "(")) {
+                p->pos++;
+                return lobo_llamada_crear(p);
+            }
+            if (lobo_igual(nombre, "mover") && lobo_mirar_op(p) &&
+                lobo_igual(lobo_mirar_op(p), "(")) {
+                p->pos++;
+                return lobo_llamada_mover(p);
+            }
+            if (lobo_igual(nombre, "borrar") && lobo_mirar_op(p) &&
+                lobo_igual(lobo_mirar_op(p), "(")) {
+                p->pos++;
+                return lobo_llamada_borrar(p);
             }
             /* llamar("funcion", ...) */
             if (lobo_igual(nombre, "llamar") && lobo_mirar_op(p) &&
@@ -863,6 +1008,19 @@ static int lobo_preescanear(LoboParser *p, const char *texto) {
                 if (lobo_nueva_entidad(p, tokens[i].texto) < 0) return 0;
             }
         }
+        /* mi.variable("nombre"): comparte la tabla con @nombre. */
+        for (i = 0; i + 4 < n; i++) {
+            if (tokens[i].tipo == TOK_ID && lobo_igual(tokens[i].texto, "mi") &&
+                tokens[i + 1].tipo == TOK_OP &&
+                lobo_igual(tokens[i + 1].texto, ".") &&
+                tokens[i + 2].tipo == TOK_ID &&
+                lobo_igual(tokens[i + 2].texto, "variable") &&
+                tokens[i + 3].tipo == TOK_OP &&
+                lobo_igual(tokens[i + 3].texto, "(") &&
+                tokens[i + 4].tipo == TOK_TXT) {
+                if (lobo_nueva_entidad(p, tokens[i + 4].texto) < 0) return 0;
+            }
+        }
         for (i = 0; i + 1 < n; i++) {
             if (tokens[i].tipo == TOK_ID && tokens[i + 1].tipo == TOK_OP &&
                 tokens[i + 1].texto[0] == '=' && tokens[i + 1].texto[1] == 0) {
@@ -1113,6 +1271,56 @@ static int lobo_sentencia(LoboParser *p) {
             b->salto_falso = p->prog->largo;
             return lobo_emitir(p, LOBO_SALTO_FALSO, 0);
         }
+        /* Asignacion a mi (fase 26): mi.x = ... o mi.variable("n") = ... */
+        if (vm && p->num_tokens >= 4 && lobo_igual(t->texto, "mi") &&
+            p->tokens[1].tipo == TOK_OP &&
+            lobo_igual(p->tokens[1].texto, ".")) {
+            int campo = -1, desde;
+            if (p->tokens[2].tipo != TOK_ID) {
+                lobo_error(p, "se esperaba un campo de mi");
+                return 0;
+            }
+            if (lobo_igual(p->tokens[2].texto, "variable")) {
+                int slot;
+                if (p->num_tokens < 7 ||
+                    p->tokens[3].tipo != TOK_OP ||
+                    !lobo_igual(p->tokens[3].texto, "(") ||
+                    p->tokens[4].tipo != TOK_TXT ||
+                    p->tokens[5].tipo != TOK_OP ||
+                    !lobo_igual(p->tokens[5].texto, ")") ||
+                    p->tokens[6].tipo != TOK_OP ||
+                    !lobo_igual(p->tokens[6].texto, "=")) {
+                    lobo_error(p, "asignacion invalida a mi.variable");
+                    return 0;
+                }
+                slot = lobo_buscar_entidad(p, p->tokens[4].texto);
+                if (slot < 0) {
+                    lobo_error(p, "variable de entidad desconocida");
+                    return 0;
+                }
+                campo = LOBO_MI_VARS + slot;
+                desde = 7;
+            } else {
+                if (p->tokens[3].tipo != TOK_OP ||
+                    !lobo_igual(p->tokens[3].texto, "=")) {
+                    lobo_error(p, "asignacion invalida a mi");
+                    return 0;
+                }
+                campo = lobo_campo_mi(p->tokens[2].texto);
+                if (campo < 0) {
+                    lobo_error(p, "campo de mi desconocido");
+                    return 0;
+                }
+                desde = 4;
+            }
+            p->pos = desde;
+            if (!lobo_expresion(p)) return 0;
+            if (!lobo_fin_tokens(p)) {
+                lobo_error(p, "sobran datos tras la asignacion");
+                return 0;
+            }
+            return lobo_emitir(p, LOBO_GUARDAR_MI, campo);
+        }
         /* Asignacion: nombre = expresion. */
         if (p->num_tokens >= 2 && p->tokens[1].tipo == TOK_OP &&
             p->tokens[1].texto[0] == '=' && p->tokens[1].texto[1] == 0) {
@@ -1188,6 +1396,7 @@ void lobo_programa_iniciar(LoboPrograma *programa) {
     programa->capacidad = 0;
     programa->num_funciones = 0;
     programa->num_textos = 0;
+    programa->num_ent_nombres = 0;
 }
 
 void lobo_programa_liberar(LoboPrograma *programa) {
@@ -1212,6 +1421,7 @@ int lobo_compilar(const char *texto, LoboPrograma *programa, int modo,
     programa->largo = 0;
     programa->num_funciones = 0;
     programa->num_textos = 0;
+    programa->num_ent_nombres = 0;
     if (!lobo_programa_reservar(programa, 1)) {
         if (error && tam_error > 0)
             lobo_copiar(error, "sin memoria para el programa", tam_error);
@@ -1232,13 +1442,14 @@ int lobo_compilar(const char *texto, LoboPrograma *programa, int modo,
     p.funcion_actual = -1;
     p.num_locales = 0;
     p.num_globales = 0;
-    p.num_entidades = 0;
     p.num_listas = 0;
+    programa->num_ent_nombres = 0;
     {
         int i;
         for (i = 0; i < LOBO_LOCALES_MAX; i++) p.locales[i][0] = 0;
         for (i = 0; i < LOBO_GLOBALES_MAX; i++) p.globales[i][0] = 0;
-        for (i = 0; i < LOBO_ENTIDAD_VARS_MAX; i++) p.entidades[i][0] = 0;
+        for (i = 0; i < LOBO_ENTIDAD_NOMBRES_MAX; i++)
+            programa->entidad_nombres[i][0] = 0;
         for (i = 0; i < LOBO_LISTAS_MAX; i++) p.listas[i][0] = 0;
     }
 
@@ -1670,17 +1881,27 @@ int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
             estado->memoria->globales[in->valor] = a;
         break;
     case LOBO_CARGAR_ENTIDAD:
-        lobo_vm_push(maquina,
-                     (estado->memoria && in->valor >= 0 &&
-                      in->valor < LOBO_ENTIDAD_VARS_MAX)
-                         ? estado->memoria->entidad_vars[in->valor]
-                         : 0,
-                     &ok);
+        if (maquina->entidad > 0 && estado->entidad_leer)
+            lobo_vm_push(maquina,
+                         estado->entidad_leer(estado->ctx_entidades,
+                                              maquina->entidad,
+                                              LOBO_MI_VARS + in->valor),
+                         &ok);
+        else
+            lobo_vm_push(maquina,
+                         (estado->memoria && in->valor >= 0 &&
+                          in->valor < LOBO_ENTIDAD_VARS_MAX)
+                             ? estado->memoria->entidad_vars[in->valor]
+                             : 0,
+                         &ok);
         break;
     case LOBO_GUARDAR_ENTIDAD:
         a = lobo_vm_pop(maquina, &ok);
-        if (ok && estado->memoria && in->valor >= 0 &&
-            in->valor < LOBO_ENTIDAD_VARS_MAX)
+        if (ok && maquina->entidad > 0 && estado->entidad_escribir)
+            estado->entidad_escribir(estado->ctx_entidades, maquina->entidad,
+                                     LOBO_MI_VARS + in->valor, a);
+        else if (ok && estado->memoria && in->valor >= 0 &&
+                 in->valor < LOBO_ENTIDAD_VARS_MAX)
             estado->memoria->entidad_vars[in->valor] = a;
         break;
     case LOBO_LISTA_LARGO: {
@@ -1779,11 +2000,99 @@ int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
             estado->memoria->mensajes++;
         }
         break;
-    case LOBO_CLONAR:
+    case LOBO_CLONAR: {
+        int nuevo = 0;
         if (estado->memoria) estado->memoria->clones++;
         maquina->clones++;
-        lobo_vm_push(maquina, 0, &ok);
+        if (maquina->entidad > 0 && estado->entidad_clonar)
+            nuevo = estado->entidad_clonar(estado->ctx_entidades,
+                                           maquina->entidad);
+        lobo_vm_push(maquina, nuevo < 0 ? 0 : nuevo, &ok);
         break;
+    }
+    /* --- fase 26: mi y entidades --- */
+    case LOBO_CARGAR_MI: {
+        int campo = in->valor;
+        int valor = 0;
+        if (campo >= LOBO_MI_VARS) {
+            int slot = campo - LOBO_MI_VARS;
+            if (maquina->entidad > 0 && estado->entidad_leer)
+                valor = estado->entidad_leer(estado->ctx_entidades,
+                                             maquina->entidad, campo);
+            else if (estado->memoria && slot >= 0 &&
+                     slot < LOBO_ENTIDAD_VARS_MAX)
+                valor = estado->memoria->entidad_vars[slot];
+        } else if (maquina->entidad > 0 && estado->entidad_leer) {
+            valor = estado->entidad_leer(estado->ctx_entidades,
+                                         maquina->entidad, campo);
+        } else {
+            /* Sin entidad, `mi` cae en el sprite del juego. */
+            switch (campo) {
+            case LOBO_MI_X: valor = estado->x; break;
+            case LOBO_MI_Y: valor = estado->y; break;
+            case LOBO_MI_VISIBLE: valor = 1; break;
+            default: valor = 0; break;
+            }
+        }
+        lobo_vm_push(maquina, valor, &ok);
+        break;
+    }
+    case LOBO_GUARDAR_MI: {
+        int campo = in->valor;
+        a = lobo_vm_pop(maquina, &ok);
+        if (!ok) break;
+        if (campo >= LOBO_MI_VARS) {
+            int slot = campo - LOBO_MI_VARS;
+            if (maquina->entidad > 0 && estado->entidad_escribir)
+                estado->entidad_escribir(estado->ctx_entidades,
+                                         maquina->entidad, campo, a);
+            else if (estado->memoria && slot >= 0 &&
+                     slot < LOBO_ENTIDAD_VARS_MAX)
+                estado->memoria->entidad_vars[slot] = a;
+        } else if (maquina->entidad > 0 && estado->entidad_escribir) {
+            estado->entidad_escribir(estado->ctx_entidades, maquina->entidad,
+                                     campo, a);
+        } else {
+            switch (campo) {
+            case LOBO_MI_X: estado->x = a; break;
+            case LOBO_MI_Y: estado->y = a; break;
+            default: break; /* sin entidad no hay mas estado que mover */
+            }
+        }
+        break;
+    }
+    case LOBO_CREAR: {
+        int idx = in->valor;
+        b = lobo_vm_pop(maquina, &ok); /* y */
+        a = lobo_vm_pop(maquina, &ok); /* x */
+        if (ok) {
+            int id = -1;
+            if (estado->entidad_crear && idx >= 0 &&
+                idx < programa->num_textos)
+                id = estado->entidad_crear(estado->ctx_entidades,
+                                           programa->textos[idx], a, b);
+            lobo_vm_push(maquina, id < 0 ? -1 : id, &ok);
+        }
+        break;
+    }
+    case LOBO_BORRAR_ENTIDAD: {
+        int id = in->valor == 1 ? lobo_vm_pop(maquina, &ok)
+                                : maquina->entidad;
+        if (ok && id > 0 && estado->entidad_borrar)
+            estado->entidad_borrar(estado->ctx_entidades, id);
+        if (ok) lobo_vm_push(maquina, 0, &ok);
+        break;
+    }
+    case LOBO_MOVER_ENTIDAD: {
+        int id, x, y;
+        y = lobo_vm_pop(maquina, &ok);
+        x = lobo_vm_pop(maquina, &ok);
+        id = lobo_vm_pop(maquina, &ok);
+        if (ok && id > 0 && estado->entidad_mover)
+            estado->entidad_mover(estado->ctx_entidades, id, x, y);
+        if (ok) lobo_vm_push(maquina, 0, &ok);
+        break;
+    }
     default:
         ok = 0;
         break;
@@ -1841,4 +2150,5 @@ void lobo_maquina_reiniciar(LoboMaquina *maquina) {
     maquina->estado = LOBO_VM_LISTO;
     maquina->detener_todo = 0;
     maquina->clones = 0;
+    maquina->entidad = 0;
 }

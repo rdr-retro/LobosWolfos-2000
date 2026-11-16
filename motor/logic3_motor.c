@@ -123,6 +123,16 @@ static int entero(const char *salida, const L3Tok *tokens, int i) {
     return (int)strtol(texto(salida, tokens, i), NULL, 10);
 }
 
+/* Copia el texto del token i a un buffer con tope. */
+static void copiar_token(char *dst, int tam, const char *salida,
+                         const L3Tok *tokens, int i) {
+    const char *src = texto(salida, tokens, i);
+    int j;
+    if (tam <= 0) return;
+    for (j = 0; j < tam - 1 && src[j]; j++) dst[j] = src[j];
+    for (; j < tam; j++) dst[j] = 0;
+}
+
 /* ------------------------------------------------------------------ */
 /* Tabla de eventos vistos                                            */
 /* ------------------------------------------------------------------ */
@@ -150,8 +160,9 @@ typedef struct {
     char bloque_codigo[MOTOR_L3_CODIGO_MAX + 1];
     int bloque_tiene_codigo;
 
-    /* objeto en curso: los eventos cuelgan de el */
+    /* objeto en curso: sus trajes, variables y eventos cuelgan de el */
     int objeto;
+    int objeto_indice; /* indice en proy->objetos, -1 si no hay */
     int capa;
     int dentro_funcion;
 } L3Lector;
@@ -259,6 +270,102 @@ static void ordenar_scripts(MotorL3 *p) {
     }
 }
 
+/* Guarda una escena; la primera del archivo es la que arranca. */
+static void agregar_escena(MotorL3 *p, const char *salida,
+                           const L3Tok *tokens, int nt) {
+    MotorL3Escena *e;
+    if (p->num_escenas >= MOTOR_L3_ESCENAS_MAX) return;
+    e = &p->escenas[p->num_escenas++];
+    memset(e, 0, sizeof(*e));
+    e->id = entero(salida, tokens, 1);
+    if (nt >= 3) copiar_token(e->nombre, sizeof(e->nombre), salida, tokens, 2);
+    if (nt >= 4) copiar_token(e->mapa, sizeof(e->mapa), salida, tokens, 3);
+    if (nt >= 5) e->ancho = entero(salida, tokens, 4);
+    if (nt >= 6) e->alto = entero(salida, tokens, 5);
+    if (nt >= 7) e->fondo = (unsigned int)strtoul(
+        texto(salida, tokens, 6), NULL, 16);
+    if (p->num_escenas == 1) p->escena_inicial = e->id;
+    if (!p->mapa[0] && e->mapa[0])
+        memcpy(p->mapa, e->mapa, strlen(e->mapa) + 1);
+}
+
+/* Guarda un objeto con sus campos clave-valor. Devuelve su indice o -1. */
+static int agregar_objeto(MotorL3 *p, const char *salida,
+                          const L3Tok *tokens, int nt) {
+    MotorL3Objeto *o;
+    int i;
+    if (p->num_objetos >= MOTOR_L3_OBJETOS_MAX) return -1;
+    o = &p->objetos[p->num_objetos];
+    memset(o, 0, sizeof(*o));
+    o->id = entero(salida, tokens, 1);
+    if (nt >= 3) copiar_token(o->nombre, sizeof(o->nombre), salida, tokens, 2);
+    o->visible = 1;
+    /* Los siguientes tokens son pares clave valor; las claves que no se
+     * conocen se saltan para que el formato pueda crecer. */
+    for (i = 3; i + 1 < nt; i += 2) {
+        if (es(salida, tokens, i, "escena"))
+            o->escena = entero(salida, tokens, i + 1);
+        else if (es(salida, tokens, i, "x"))
+            o->x = entero(salida, tokens, i + 1);
+        else if (es(salida, tokens, i, "y"))
+            o->y = entero(salida, tokens, i + 1);
+        else if (es(salida, tokens, i, "w"))
+            o->w = entero(salida, tokens, i + 1);
+        else if (es(salida, tokens, i, "h"))
+            o->h = entero(salida, tokens, i + 1);
+        else if (es(salida, tokens, i, "visible"))
+            o->visible = entero(salida, tokens, i + 1) ? 1 : 0;
+        else if (es(salida, tokens, i, "capa"))
+            o->capa = entero(salida, tokens, i + 1);
+    }
+    if (o->w <= 0) o->w = 16;
+    if (o->h <= 0) o->h = 16;
+    return p->num_objetos++;
+}
+
+/* Adjunta una variable al objeto en curso. */
+static void agregar_variable_objeto(L3Lector *l, const char *salida,
+                                    const L3Tok *tokens, int nt) {
+    MotorL3Objeto *o;
+    MotorL3Variable *v;
+    int tipo;
+
+    if (l->objeto_indice < 0 || l->objeto_indice >= l->proy->num_objetos)
+        return;
+    if (nt >= 2 && es(salida, tokens, 1, "global")) return; /* otra seccion */
+    if (nt < 3) return;
+    o = &l->proy->objetos[l->objeto_indice];
+    if (o->num_variables >= MOTOR_L3_VARS_MAX) return;
+    /* Solo interesan los valores enteros; el tipo se acepta y se ignora
+     * (las variables de texto llegan con el modelo completo del editor). */
+    tipo = 0;
+    (void)tipo;
+    v = &o->variables[o->num_variables++];
+    memset(v, 0, sizeof(*v));
+    copiar_token(v->nombre, sizeof(v->nombre), salida, tokens, 1);
+    if (nt >= 4) v->valor = entero(salida, tokens, 3);
+}
+
+/* Adjunta un traje al objeto en curso. */
+static void agregar_traje_objeto(L3Lector *l, const char *salida,
+                                 const L3Tok *tokens, int nt) {
+    MotorL3Objeto *o;
+    MotorL3Traje *t;
+    if (l->objeto_indice < 0 || l->objeto_indice >= l->proy->num_objetos)
+        return;
+    if (nt < 7) return;
+    o = &l->proy->objetos[l->objeto_indice];
+    if (o->num_trajes >= MOTOR_L3_TRAJES_MAX) return;
+    t = &o->trajes[o->num_trajes++];
+    memset(t, 0, sizeof(*t));
+    t->indice = entero(salida, tokens, 1);
+    copiar_token(t->imagen, sizeof(t->imagen), salida, tokens, 2);
+    t->ancho = entero(salida, tokens, 3);
+    t->alto = entero(salida, tokens, 4);
+    t->pivote_x = entero(salida, tokens, 5);
+    t->pivote_y = entero(salida, tokens, 6);
+}
+
 int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
     char *datos;
     int largo = 0, linea = 0;
@@ -279,6 +386,7 @@ int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
     memset(&l, 0, sizeof(l));
     l.proy = p;
     l.objeto = 0;
+    l.objeto_indice = -1;
 
     datos = leer_todo(ruta, &largo);
     if (!datos) {
@@ -336,35 +444,35 @@ int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
             }
             goto siguiente;
         }
-        /* --- escenas: se queda el mapa de la primera con mapa --- */
+        /* --- escenas: la primera es la que arranca --- */
         if (es(salida, tokens, 0, "escena") && nt >= 3) {
-            p->num_escenas++;
-            if (!p->mapa[0] && nt >= 4 && tokens[3].comillas &&
-                texto(salida, tokens, 3)[0]) {
-                strncpy(p->mapa, texto(salida, tokens, 3),
-                        sizeof(p->mapa) - 1);
-                p->mapa[sizeof(p->mapa) - 1] = '\0';
-            }
+            agregar_escena(p, salida, tokens, nt);
             goto siguiente;
         }
-        /* --- objetos: id, capa y eventos hijos --- */
+        /* --- objetos: tipo de entidad y dueno de los eventos hijos --- */
         if (es(salida, tokens, 0, "objeto") && nt >= 2) {
-            int i;
             if (!cerrar_bloque(&l, linea)) { free(datos); if (error && tam_error > 0) { strncpy(error, g_error, (size_t)tam_error - 1); error[tam_error - 1] = 0; } return 0; }
-            p->num_objetos++;
             l.objeto = entero(salida, tokens, 1);
+            l.objeto_indice = agregar_objeto(p, salida, tokens, nt);
             l.capa = 0;
             l.dentro_funcion = 0;
-            for (i = 2; i + 1 < nt; i++) {
-                if (es(salida, tokens, i, "capa"))
-                    l.capa = entero(salida, tokens, i + 1);
-            }
+            if (l.objeto_indice >= 0) l.capa = p->objetos[l.objeto_indice].capa;
+            goto siguiente;
+        }
+        /* --- variables y trajes del objeto en curso --- */
+        if (es(salida, tokens, 0, "variable") && nt >= 3) {
+            agregar_variable_objeto(&l, salida, tokens, nt);
+            goto siguiente;
+        }
+        if (es(salida, tokens, 0, "traje") && nt >= 7) {
+            agregar_traje_objeto(&l, salida, tokens, nt);
             goto siguiente;
         }
         /* --- funciones: sus eventos no son scripts de fotograma --- */
         if (es(salida, tokens, 0, "funcion") && nt >= 2) {
             if (!cerrar_bloque(&l, linea)) { free(datos); if (error && tam_error > 0) { strncpy(error, g_error, (size_t)tam_error - 1); error[tam_error - 1] = 0; } return 0; }
             l.objeto = 0;
+            l.objeto_indice = -1;
             l.capa = 0;
             l.dentro_funcion = 1;
             goto siguiente;

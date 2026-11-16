@@ -1,9 +1,9 @@
 # Pruebas de LobosWolfos 2000
 
-Cuatro suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
-(fase 24), la VM resumible y lobo 3 (fase 25) y la interfaz del editor
-(fase 23). Congelan el comportamiento antes de cambiar el runtime en las
-fases siguientes.
+Cinco suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
+(fase 24), la VM resumible y lobo 3 (fase 25), entidades, escenas y ciclo de
+vida (fase 26) y la interfaz del editor (fase 23). Congelan el comportamiento
+antes de cambiar el runtime en las fases siguientes.
 
 Todo es texto: los patrones de las capturas son hashes SHA-256 y
 volcados de estado, no imagenes. `recursos/ascii.png` no se versiona y
@@ -12,10 +12,11 @@ las pruebas no lo necesitan.
 ## Comandos
 
 ```bat
-build.bat prueba              compila y pasa las cuatro suites
+build.bat prueba              compila y pasa las cinco suites
 build.bat prueba conformidad  solo la suite del lenguaje
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
+build.bat prueba entidades    solo entidades, escenas y ciclo de vida
 build.bat prueba regresion    solo la regresion del editor
 build.bat prueba actualizar   reescribe los patrones con el estado actual
 ```
@@ -27,6 +28,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\ejecutar.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\ejecutar.ps1 -Repetir
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\logic3.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\vm.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\entidades.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\regresion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\linea_base.ps1
 ```
@@ -153,6 +155,52 @@ conformidad que en clasico dan `lobo: 1 scripts` se ejecutan tambien con
 Para anadir un caso: crear el `.lobo` o `.logic3`, ejecutar
 `pruebas\vm.ps1 -Filtro <nombre>* -Actualizar`, revisar el `.esperado` a
 mano y volver a pasarla sin `-Actualizar` y con `-Repetir`.
+
+## Entidades, escenas y ciclo de vida (`entidades.ps1`)
+
+La suite de la fase 26 congela las entidades y sus limites. Los casos viven
+en `pruebas\entidades` y se ejecutan con
+`--logic3 --entidades --captura --traza --volcar`:
+
+| Archivo | Que es |
+|---|---|
+| `<nombre>.logic3` | proyecto con escenas, objetos y scripts de evento |
+| `<nombre>.args` | argumentos extra; si no hay `--fotogramas` se usan 8 |
+| `<nombre>.esperado` | traza exacta (incluye `ent <id> <x> <y>` por fotograma) |
+| `<nombre>.volcado` | estado final con las variables de cada entidad |
+| `<nombre>.bmp.sha256` | hash del BMP final del caso |
+
+Casos:
+
+| Caso | Cubre |
+|---|---|
+| `dos` | criterio de salida: dos entidades con posicion y variables independientes |
+| `crear50` | 51 altas, movimiento por lista y borrado sin fugas ni avisos |
+| `limite` | el tope de 32 altas por fotograma avisa y no rompe el bucle |
+| `clonar` | `clonar` copia la instancia actual y el original se puede borrar |
+
+Los scripts de evento `fotograma` se reinician al terminar, asi que los
+fixtures usan una local `hecho` para ejecutar su cuerpo una sola vez.
+
+La traza con `--entidades` tiene este formato:
+
+```text
+entidades: N iniciales avisos A
+<fotograma> <x> <y>
+ent <id> <x> <y>
+...
+entidades final: N avisos A creadas C
+```
+
+El volcado (`--volcar`) escribe `fotogramas`, `lobo`, `entidades N avisos A
+creadas C` y, con `--entidades`, una linea `entidad <id> ...` seguida de
+`  var "<nombre>" <valor>` por variable. `creadas` cuenta todas las altas
+desde el arranque, incluidas las instancias iniciales de la escena.
+
+Para anadir un caso: crear el `.logic3` y su `.args`, ejecutar
+`pruebas\entidades.ps1 -Filtro <nombre>* -Actualizar`, revisar el
+`.esperado`, el `.volcado` y el BMP a mano, y volver a pasarla sin
+`-Actualizar` y con `-Repetir`.
 
 ## Regresion del editor (`regresion.ps1`)
 

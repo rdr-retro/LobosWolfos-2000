@@ -1,0 +1,5 @@
+fotogramas 5
+lobo 16 16
+entidades 1 avisos 0 creadas 2
+entidad 2 escena 1 x 80 y 30 w 20 h 20 visible 1 capa 0 vida 1
+  var "vida" 10

@@ -103,11 +103,11 @@ La experiencia objetivo:
 | Pintura, tiles, mapas | `src/pintura.c`, `src/tiles.c`, `src/mapa.c` | Completo para el alcance actual |
 | Gestor de logica | `src/app.c` (modelo), `src/ui.c` (dibujo) | Lista plana de tarjetas, sin grafo |
 | Editor de codigo lobo | `src/app.c` (`funciones_codigo_*`) | 10 lineas visibles, sin undo ni seleccion |
-| Lenguaje lobo | `motor/lobo.c`, `loboswolfos/kernel/src/lobo.rs` | Enteros, `si`/`mientras`, 6 teclas |
-| Runtime Windows | `motor/juego.c`, `motor/activo.c`, `motor/nucleo32.s` | Un sprite, un mapa, 60 FPS |
+| Lenguaje lobo | `motor/lobo.c`, `loboswolfos/kernel/src/lobo.rs` | Enteros, `si`/`mientras`, 6 teclas; VM con `esperar`, funciones, listas, `mi` y entidades (fases 25-26) |
+| Runtime Windows | `motor/juego.c`, `motor/activo.c`, `motor/nucleo32.s`, `motor/entidades.c` | Un lobo, un mapa, 256 entidades y 60 FPS |
 | Runtime BIOS | `loboswolfos/kernel/src/*.rs` | Reimplementacion paralela en Rust |
 | Vista previa | `src/juego_ventana.c` | Usa el mismo blob y motor que `game.exe` |
-| Proyecto LOGIC3 | `src/logic3.c`, `src/logic3.h` | Modelo, lector, escritor y migrador (fase 24); runtime aun LOGIC2 |
+| Proyecto LOGIC3 | `src/logic3.c`, `src/logic3.h`, `motor/logic3_motor.c` | Modelo, lector, escritor y migrador (fase 24); el runtime lee escenas, objetos y scripts (fases 25-26) |
 | Paquete | `src/compilar.c` | Blob `LGB1`, `.wolfo`, BIOS |
 
 ### 2.2 Modelo de datos actual
@@ -147,22 +147,22 @@ scripts con `funcion >= 1`.
 
 | Limite | Valor actual | Necesidad tipo Scratch |
 |---|---:|---|
-| Sprites/entidades | 1 | 64-256 |
-| Mapas/escenas | 1 | 64 |
-| Objetos con script | 32 funciones | 128 objetos x 64 scripts |
-| Instrucciones por script | 256 | 4096 |
+| Sprites/entidades | 1 lobo + 256 entidades | 64-256 |
+| Mapas/escenas | 1 en pantalla | 64 |
+| Objetos con script | 32 funciones clasicas; 64 en la VM | 128 objetos x 64 scripts |
+| Instrucciones por script | 256 clasicas; 4096 en la VM | 4096 |
 | Codigo por funcion | 2048 bytes | 64 KB por objeto |
-| Variables locales | 16 por tarjeta | 64 por objeto |
-| Variables globales | 0 (solo x,y,vel,fotograma) | 128 |
-| Listas | 0 | 32 x 256 |
+| Variables locales | 16 por tarjeta; 64 por entidad en la VM | 64 por objeto |
+| Variables globales | `$globales` (128 en la VM) | 128 |
+| Listas | 32 listas x 256 elementos en la VM | 32 x 256 |
 | Tipos | entero | entero, booleano, texto |
-| Eventos | ninguno (todo cada fotograma) | 8 clases |
-| Temporizadores/espera | no | si |
-| Funciones de usuario | no | si, con parametros y retorno |
+| Eventos | `fotograma` en la VM | 8 clases |
+| Temporizadores/espera | `esperar` resumible en la VM | si |
+| Funciones de usuario | `funcion`/`retornar` (32 frames) | si, con parametros y retorno |
 | Colision objeto-objeto | no | si, por caja y por grupo |
 | Tiles con flags | no (todo solido) | solido, hueco, trigger, one-way |
 | Animacion | no | trajes, frames, tics |
-| Capas Z | no | 16 capas |
+| Capas Z | orden por capa en las entidades | 16 capas |
 | Camara | centrada fija | objetivo, limites, zoom entero |
 | Raton/teclas | 6 bits | 32 teclas + raton + flancos |
 | HUD/texto | no | si |
@@ -862,6 +862,29 @@ mueven y se borran sin fugas; el limite avisa.
 
 **Criterio de salida:** dos entidades distintas tienen posiciones y variables
 independientes en la misma captura.
+
+**Entregado:** `motor/entidades.c` y `motor/entidades.h` con un array fijo de
+256 entidades (`ENTIDADES_MAX`), ids monotonos que no se reutilizan, borrado
+diferido al final del fotograma y un tope de 32 altas por fotograma con avisos
+acumulados. La API cubre `entidad_crear`, `entidad_borrar`, `entidad_buscar`,
+`entidad_por_tag`, `entidad_mover`, `entidad_cambiar_escena`, `entidad_clonar`,
+lectura/escritura de campos y variables, orden por capa e id y contador de
+altas. Cada entidad guarda posicion, tamano, capa, visibilidad, traje, vida y
+hasta 64 variables. `motor/logic3_motor.c` lee escenas, objetos, variables y
+trajes del LOGIC3, y `motor/juego.c` instancia los objetos de la primera escena
+al arrancar (sin gastar el cupo de altas del fotograma 1). `motor/lobo.c` gana
+`mi.x`, `mi.y`, `mi.vida`, `mi.visible`, `mi.traje`, `mi.variable("nombre")`,
+`crear`, `clonar`, `borrar` y `mover`; las variables de entidad comparten tabla
+con `@nombre` y se remapean a slots globales tras compilar. El render
+provisional pinta cada entidad como un rectangulo de color con su id, tambien
+sin mapa. `game.exe` añade `--entidades` (cabecera `entidades: N iniciales
+avisos A`, lineas `ent <id> <x> <y>` y resumen con `creadas`) y `--volcar`
+(estado final sin ventana, con las variables de cada entidad). La suite
+`pruebas/entidades.ps1` cubre cuatro casos: `dos` (dos objetos con posicion y
+variables independientes), `crear50` (51 altas, movimiento y borrado sin
+fugas), `limite` (32 altas por fotograma y aviso al superarlas) y `clonar`. `build.bat prueba` pasa
+las cinco suites y `build.bat prueba entidades` ejecuta solo la nueva; el
+criterio de salida queda congelado en `pruebas/entidades/dos.bmp.sha256`.
 
 ### Fase 27 - Eventos, planificador y mensajes
 

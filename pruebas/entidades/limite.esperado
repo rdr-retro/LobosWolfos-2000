@@ -1,0 +1,74 @@
+vm: 1 scripts
+vm: script 0 bloque 1 objeto 1 evento 1
+entidades: 1 iniciales avisos 0
+1 16 16
+vm 0:2:25:0
+ent 1 8 8
+ent 2 10 30
+ent 3 17 30
+ent 4 24 30
+ent 5 31 30
+ent 6 38 30
+ent 7 45 30
+ent 8 52 30
+ent 9 59 30
+ent 10 66 30
+ent 11 73 30
+ent 12 80 30
+ent 13 87 30
+ent 14 94 30
+ent 15 101 30
+ent 16 108 30
+ent 17 115 30
+ent 18 122 30
+ent 19 129 30
+ent 20 136 30
+ent 21 143 30
+ent 22 150 30
+ent 23 157 30
+ent 24 164 30
+ent 25 171 30
+ent 26 178 30
+ent 27 185 30
+ent 28 192 30
+ent 29 199 30
+ent 30 206 30
+ent 31 213 30
+ent 32 220 30
+ent 33 227 30
+2 16 16
+vm 0:2:25:0
+ent 1 8 8
+ent 2 10 30
+ent 3 17 30
+ent 4 24 30
+ent 5 31 30
+ent 6 38 30
+ent 7 45 30
+ent 8 52 30
+ent 9 59 30
+ent 10 66 30
+ent 11 73 30
+ent 12 80 30
+ent 13 87 30
+ent 14 94 30
+ent 15 101 30
+ent 16 108 30
+ent 17 115 30
+ent 18 122 30
+ent 19 129 30
+ent 20 136 30
+ent 21 143 30
+ent 22 150 30
+ent 23 157 30
+ent 24 164 30
+ent 25 171 30
+ent 26 178 30
+ent 27 185 30
+ent 28 192 30
+ent 29 199 30
+ent 30 206 30
+ent 31 213 30
+ent 32 220 30
+ent 33 227 30
+entidades final: 33 avisos 8 creadas 33

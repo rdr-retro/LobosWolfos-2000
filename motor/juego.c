@@ -29,6 +29,7 @@
 #include "motor.h"
 #include "lobo.h"
 #include "logic3_motor.h"
+#include "entidades.h"
 
 #define VENTANA_ANCHO 640
 #define VENTANA_ALTO  480
@@ -258,6 +259,11 @@ static int g_num_vm;
 static int g_modo_vm;
 static LoboMemoria g_memoria; /* globales, listas y mensajes compartidos */
 
+/* --- entidades (fase 26) --- */
+static int g_entidades; /* --entidades: detalle en traza y volcado */
+static char g_ent_nombres[LOBO_ENTIDAD_NOMBRES_MAX][LOBO_TEXTO_MAX];
+static int g_num_ent_nombres;
+
 /* Callback de choca() del lenguaje: la caja del sprite contra el
  * mapa solido. */
 static int lobo_choca(void *ctx, int x, int y) {
@@ -309,6 +315,178 @@ static void scripts_preparar(int con_ventana) {
     if (g_traza) fprintf(g_traza, "lobo: %d scripts\n", g_num_scripts);
 }
 
+/* ------------------------------------------------------------------ */
+/* Entidades (fase 26)                                                */
+/* ------------------------------------------------------------------ */
+
+/* Slot global del nombre de una variable de entidad (lo crea si hace
+ * falta). Todos los programas del proyecto comparten estos slots. */
+static int ent_nombre_slot(const char *nombre) {
+    int i;
+    if (!nombre) return -1;
+    for (i = 0; i < g_num_ent_nombres; i++)
+        if (strcmp(g_ent_nombres[i], nombre) == 0) return i;
+    if (g_num_ent_nombres >= LOBO_ENTIDAD_NOMBRES_MAX) {
+        entidades_aviso();
+        return -1;
+    }
+    copiar_texto(g_ent_nombres[g_num_ent_nombres], LOBO_TEXTO_MAX, nombre);
+    return g_num_ent_nombres++;
+}
+
+/* Traduce un campo de lobo (LOBO_MI_*) al campo del modulo de entidades. */
+static int campo_entidad_lobo(int campo) {
+    switch (campo) {
+    case LOBO_MI_X: return ENTIDAD_CAMPO_X;
+    case LOBO_MI_Y: return ENTIDAD_CAMPO_Y;
+    case LOBO_MI_VIDA: return ENTIDAD_CAMPO_VIDA;
+    case LOBO_MI_VISIBLE: return ENTIDAD_CAMPO_VISIBLE;
+    case LOBO_MI_TRAJE: return ENTIDAD_CAMPO_TRAJE;
+    case LOBO_MI_ID: return ENTIDAD_CAMPO_ID;
+    case LOBO_MI_ESCENA: return ENTIDAD_CAMPO_ESCENA;
+    case LOBO_MI_ANCHO: return ENTIDAD_CAMPO_W;
+    case LOBO_MI_ALTO: return ENTIDAD_CAMPO_H;
+    case LOBO_MI_CAPA: return ENTIDAD_CAMPO_CAPA;
+    default: return -1;
+    }
+}
+
+static int ent_leer(void *ctx, int id, int campo) {
+    (void)ctx;
+    if (campo >= LOBO_MI_VARS)
+        return entidades_leer_var(id, campo - LOBO_MI_VARS);
+    campo = campo_entidad_lobo(campo);
+    return campo < 0 ? 0 : entidades_leer_campo(id, campo);
+}
+
+static int ent_escribir(void *ctx, int id, int campo, int valor) {
+    (void)ctx;
+    if (campo >= LOBO_MI_VARS)
+        return entidades_escribir_var(id, campo - LOBO_MI_VARS, valor);
+    campo = campo_entidad_lobo(campo);
+    if (campo < 0 || campo == ENTIDAD_CAMPO_ID ||
+        campo == ENTIDAD_CAMPO_TIPO)
+        return 0;
+    return entidades_escribir_campo(id, campo, valor);
+}
+
+static int ent_crear(void *ctx, const char *tag, int x, int y) {
+    int tipo;
+    (void)ctx;
+    tipo = entidades_tipo_por_tag(tag);
+    if (tipo < 0) {
+        /* Tag desconocido: se avisa y la llamada devuelve -1. */
+        entidades_aviso();
+        return -1;
+    }
+    return entidad_crear(tipo, x, y);
+}
+
+static int ent_borrar(void *ctx, int id) {
+    (void)ctx;
+    return entidad_borrar(id);
+}
+
+static int ent_clonar(void *ctx, int id) {
+    (void)ctx;
+    return entidades_clonar(id);
+}
+
+static int ent_mover(void *ctx, int id, int x, int y) {
+    (void)ctx;
+    return entidad_mover(id, x, y);
+}
+
+/* Primera entidad viva del tipo de ese objeto (0 si no hay). */
+static int entidad_de_objeto(int id_objeto) {
+    int tipo = entidades_tipo_por_objeto(id_objeto);
+    int i;
+    if (tipo < 0) return 0;
+    for (i = 0; i < ENTIDADES_MAX; i++) {
+        Entidad *e = entidad_indice(i);
+        if (e && e->usada && e->tipo == tipo) return e->id;
+    }
+    return 0;
+}
+
+/* Registra tipos y variables del LOGIC3 e instancia los objetos de la
+ * escena inicial. Los objetos creados al arrancar no gastan el cupo de
+ * altas por fotograma. */
+static void entidades_preparar(void) {
+    int i, j;
+    entidades_reiniciar();
+    g_num_ent_nombres = 0;
+    memset(g_ent_nombres, 0, sizeof(g_ent_nombres));
+
+    for (i = 0; i < g_l3.num_objetos; i++) {
+        MotorL3Objeto *o = &g_l3.objetos[i];
+        int tipo = entidades_tipo_agregar(o->id, o->nombre, o->escena,
+                                          o->x, o->y, o->w, o->h,
+                                          o->visible, o->capa);
+        if (tipo < 0) continue;
+        for (j = 0; j < o->num_variables; j++) {
+            int slot = ent_nombre_slot(o->variables[j].nombre);
+            if (slot >= 0)
+                entidades_tipo_var(tipo, slot, o->variables[j].nombre,
+                                   o->variables[j].valor);
+        }
+    }
+    for (i = 0; i < g_l3.num_objetos; i++) {
+        MotorL3Objeto *o = &g_l3.objetos[i];
+        int tipo;
+        if (o->escena != g_l3.escena_inicial) continue;
+        tipo = entidades_tipo_por_objeto(o->id);
+        if (tipo >= 0) entidad_crear(tipo, o->x, o->y);
+    }
+    /* El cupo de altas por fotograma empieza limpio en el fotograma 1. */
+    entidades_fin_fotograma();
+}
+
+/* Remapea los indices locales de variables de entidad de un programa a
+ * los slots globales del proyecto (los de @nombre y mi.variable). */
+static void lobo_remap_programa(LoboPrograma *p) {
+    int mapa[LOBO_ENTIDAD_NOMBRES_MAX];
+    int i;
+    for (i = 0; i < p->num_ent_nombres; i++)
+        mapa[i] = ent_nombre_slot(p->entidad_nombres[i]);
+    for (i = 0; i < p->largo; i++) {
+        LoboInst *in = &p->insts[i];
+        if (in->op == LOBO_CARGAR_ENTIDAD || in->op == LOBO_GUARDAR_ENTIDAD) {
+            if (in->valor >= 0 && in->valor < p->num_ent_nombres &&
+                mapa[in->valor] >= 0)
+                in->valor = mapa[in->valor];
+        } else if (in->op == LOBO_CARGAR_MI || in->op == LOBO_GUARDAR_MI) {
+            if (in->valor >= LOBO_MI_VARS) {
+                int slot = in->valor - LOBO_MI_VARS;
+                if (slot >= 0 && slot < p->num_ent_nombres &&
+                    mapa[slot] >= 0)
+                    in->valor = LOBO_MI_VARS + mapa[slot];
+            }
+        }
+    }
+}
+
+/* Estado compartido por los scripts de un fotograma: posicion del lobo,
+ * teclas, memoria de la VM y callbacks de entidades. */
+static void estado_preparar(LoboEstado *st) {
+    memset(st, 0, sizeof(*st));
+    st->x = juego.x;
+    st->y = juego.y;
+    st->vel = g_velocidad;
+    st->fotograma = juego.fotograma;
+    st->entrada = juego.entrada; /* LOBO_TECLA_* == MOTOR_ENT_* */
+    st->memoria = &g_memoria;
+    st->choca = lobo_choca;
+    st->ctx = NULL;
+    st->entidad_crear = ent_crear;
+    st->entidad_borrar = ent_borrar;
+    st->entidad_clonar = ent_clonar;
+    st->entidad_mover = ent_mover;
+    st->entidad_leer = ent_leer;
+    st->entidad_escribir = ent_escribir;
+    st->ctx_entidades = NULL;
+}
+
 /* Compila los scripts de un LOGIC3: cada bloque codigo.lobo trae su
  * propio texto y su propia maquina, todos contra la misma memoria
  * compartida (globales, listas y mensajes de la fase 25). */
@@ -337,6 +515,8 @@ static void scripts_preparar_l3(int con_ventana) {
             continue;
         }
         lobo_maquina_reiniciar(&g_vm_maquinas[g_num_vm]);
+        lobo_remap_programa(&g_vm_programas[g_num_vm]);
+        g_vm_maquinas[g_num_vm].entidad = entidad_de_objeto(s->objeto);
         g_vm_origen[g_num_vm] = i;
         g_num_vm++;
     }
@@ -347,6 +527,22 @@ static void scripts_preparar_l3(int con_ventana) {
             fprintf(g_traza, "vm: script %d bloque %d objeto %d evento %d\n", i,
                     s->bloque, s->objeto, s->evento);
         }
+        if (g_entidades)
+            fprintf(g_traza, "entidades: %d iniciales avisos %d\n",
+                    entidades_num(), entidades_avisos());
+    }
+}
+
+/* Detalle de entidades de un fotograma (--entidades): id, x e y, en el
+ * orden de dibujo (capa y luego id). */
+static void traza_entidades(void) {
+    int orden[ENTIDADES_MAX];
+    int n, i;
+    if (!g_traza || !g_entidades) return;
+    n = entidades_orden(orden, ENTIDADES_MAX);
+    for (i = 0; i < n; i++) {
+        Entidad *e = entidad_indice(orden[i]);
+        if (e) fprintf(g_traza, "ent %d %d %d\n", e->id, e->x, e->y);
     }
 }
 
@@ -364,6 +560,7 @@ static void traza_fotograma(void) {
         fprintf(g_traza, " %d:%d:%d:%d", i, g_vm_maquinas[i].estado,
                 g_vm_maquinas[i].pc, g_vm_maquinas[i].espera);
     fprintf(g_traza, "\n");
+    traza_entidades();
 }
 
 /* ------------------------------------------------------------------ */
@@ -383,19 +580,15 @@ static void actualizar(void) {
          * espera; un script esperando no frena a los demas. */
         LoboEstado st;
         int i;
-        st.x = juego.x;
-        st.y = juego.y;
-        st.vel = g_velocidad;
-        st.fotograma = juego.fotograma;
-        st.entrada = juego.entrada;
-        st.memoria = &g_memoria;
-        st.choca = lobo_choca;
-        st.ctx = NULL;
+        estado_preparar(&st);
         for (i = 0; i < g_num_vm; i++) {
             lobo_vm_fotograma(&g_vm_programas[i], &st, &g_vm_maquinas[i]);
             if (g_vm_maquinas[i].cerrar || g_vm_maquinas[i].detener_todo)
                 juego.corriendo = 0;
         }
+        /* Las bajas se aplican cuando ya no queda ningun script del
+         * fotograma mirando la entidad. */
+        entidades_fin_fotograma();
         juego.x = st.x;
         juego.y = st.y;
         return;
@@ -406,13 +599,7 @@ static void actualizar(void) {
          * FUNCIONES manda y el movimiento por defecto queda fuera. */
         LoboEstado st;
         int i;
-        st.x = juego.x;
-        st.y = juego.y;
-        st.vel = g_velocidad;
-        st.fotograma = juego.fotograma;
-        st.entrada = juego.entrada; /* LOBO_TECLA_* == MOTOR_ENT_* */
-        st.choca = lobo_choca;
-        st.ctx = NULL;
+        estado_preparar(&st);
         for (i = 0; i < g_num_scripts; i++) {
             lobo_ejecutar(&g_programas[g_scripts[i].prog], &st,
                           &g_scripts[i].maquina);
@@ -443,20 +630,96 @@ static void actualizar(void) {
     }
 }
 
+/* ------------------------------------------------------------------ */
+/* Render provisional de entidades (rectangulo de color con su id)    */
+/* ------------------------------------------------------------------ */
+
+/* Fuente 3x5 de digitos (una fila por byte, 3 bits de ancho). */
+static const unsigned char g_digitos[10][5] = {
+    {7, 5, 5, 5, 7}, {2, 6, 2, 2, 7}, {7, 1, 7, 4, 7}, {7, 1, 7, 1, 7},
+    {5, 5, 7, 1, 1}, {7, 4, 7, 1, 7}, {7, 4, 7, 5, 7}, {7, 1, 1, 2, 2},
+    {7, 5, 7, 5, 7}, {7, 5, 7, 1, 7}
+};
+
+/* Rellena un rectangulo con recorte por los bordes del framebuffer. */
+static void rellenar_rect(int x, int y, int w, int h, u32 color) {
+    int i, j;
+    for (j = 0; j < h; j++) {
+        int py = y + j;
+        if (py < 0 || py >= juego.fb_alto) continue;
+        for (i = 0; i < w; i++) {
+            int px = x + i;
+            if (px < 0 || px >= juego.fb_ancho) continue;
+            juego.fb[py * juego.fb_ancho + px] = color;
+        }
+    }
+}
+
+/* Digito de 3x5 a escala 2 (6x10 pixeles). */
+static void dibujar_digito(int x, int y, int d) {
+    int fy, fx;
+    if (d < 0 || d > 9) return;
+    for (fy = 0; fy < 5; fy++)
+        for (fx = 0; fx < 3; fx++)
+            if (g_digitos[d][fy] & (1 << (2 - fx)))
+                rellenar_rect(x + fx * 2, y + fy * 2, 2, 2, 0xFFFFFFFFu);
+}
+
+/* Id de la entidad encima del rectangulo (digitos en blanco). */
+static void dibujar_id(int x, int y, int id) {
+    char num[12];
+    int n = 0, i;
+    if (id < 0) return;
+    do {
+        num[n++] = (char)('0' + id % 10);
+        id /= 10;
+    } while (id && n < (int)sizeof(num));
+    for (i = 0; i < n; i++)
+        dibujar_digito(x + i * 8, y, num[n - 1 - i] - '0');
+}
+
+/* Dibuja las entidades vivas en el orden de capa e id. */
+static void dibujar_entidades(int cam_x, int cam_y) {
+    static const u32 colores[8] = {
+        0xFFC84A4Au, 0xFF4AA85Au, 0xFF4A72C8u, 0xFFC89A3Au,
+        0xFF9A4AC8u, 0xFF3AA8A8u, 0xFFC85A9Au, 0xFF7A8A3Au
+    };
+    int orden[ENTIDADES_MAX];
+    int n = entidades_orden(orden, ENTIDADES_MAX);
+    int i;
+    for (i = 0; i < n; i++) {
+        Entidad *e = entidad_indice(orden[i]);
+        int sx, sy, w, h;
+        if (!e || !e->visible) continue;
+        sx = e->x - cam_x;
+        sy = e->y - cam_y;
+        w = e->w > 0 ? e->w : 16;
+        h = e->h > 0 ? e->h : 16;
+        rellenar_rect(sx, sy, w, h, colores[(e->id - 1) & 7]);
+        /* borde oscuro para separar entidades contiguas */
+        rellenar_rect(sx, sy, w, 1, 0xFF101010u);
+        rellenar_rect(sx, sy + h - 1, w, 1, 0xFF101010u);
+        rellenar_rect(sx, sy, 1, h, 0xFF101010u);
+        rellenar_rect(sx + w - 1, sy, 1, h, 0xFF101010u);
+        dibujar_id(sx + 2, sy + 2, e->id);
+    }
+}
+
 static void renderizar(void) {
     MotorMapa *m = &juego.mapa;
     int cam_x, cam_y;
 
-    /* Sin mapa el proyecto corre igual, pero no se pinta nada: la
-     * ventana queda con el color de fondo del proyecto. */
-    if (!juego.mapa_usado[0]) {
-        motor_limpiar(juego.fb, juego.fb_ancho, juego.fb_alto, g_fondo);
-        return;
-    }
-
     /* camara centrada en el sprite */
     cam_x = juego.x + SPRITE_LADO / 2 - juego.fb_ancho / 2;
     cam_y = juego.y + SPRITE_LADO / 2 - juego.fb_alto / 2;
+
+    /* Sin mapa el proyecto corre igual: se pinta el fondo y las
+     * entidades (fase 26), que no necesitan tiles. */
+    if (!juego.mapa_usado[0]) {
+        motor_limpiar(juego.fb, juego.fb_ancho, juego.fb_alto, g_fondo);
+        dibujar_entidades(cam_x, cam_y);
+        return;
+    }
 
     motor_limpiar(juego.fb, juego.fb_ancho, juego.fb_alto, 0x00101826u);
     motor_mapa_render(juego.fb, juego.fb_ancho, juego.fb_alto,
@@ -465,6 +728,7 @@ static void renderizar(void) {
     motor_blit_alpha(juego.fb, juego.fb_ancho, juego.fb_alto,
                      juego.x - cam_x, juego.y - cam_y,
                      juego.sprite, SPRITE_LADO, SPRITE_LADO);
+    dibujar_entidades(cam_x, cam_y);
 }
 
 /* ------------------------------------------------------------------ */
@@ -607,11 +871,60 @@ static int correr_captura(const char *ruta_bmp, int fotogramas) {
         traza_fotograma();
         renderizar();
     }
+    if (g_entidades && g_traza)
+        fprintf(g_traza, "entidades final: %d avisos %d creadas %d\n",
+                entidades_num(), entidades_avisos(), entidades_creadas());
     if (!activo_guardar_bmp(ruta_bmp, juego.fb, juego.fb_ancho, juego.fb_alto))
         return 1;
     free(juego.fb);
     juego.fb = NULL;
     return 0;
+}
+
+/* Volcado de estado final sin ventana (--volcar). Con --entidades
+ * detalla cada entidad viva. */
+static int volcar_estado(const char *ruta) {
+    FILE *f = fopen(ruta, "wt");
+    int orden[ENTIDADES_MAX];
+    int n, i;
+    if (!f) return 1;
+    fprintf(f, "fotogramas %d\n", juego.fotograma);
+    fprintf(f, "lobo %d %d\n", juego.x, juego.y);
+    fprintf(f, "entidades %d avisos %d creadas %d\n", entidades_num(),
+            entidades_avisos(), entidades_creadas());
+    if (g_entidades) {
+        n = entidades_orden(orden, ENTIDADES_MAX);
+        for (i = 0; i < n; i++) {
+            Entidad *e = entidad_indice(orden[i]);
+            int j, vars;
+            if (!e) continue;
+            fprintf(f,
+                    "entidad %d escena %d x %d y %d w %d h %d visible %d "
+                    "capa %d vida %d\n",
+                    e->id, e->escena, e->x, e->y, e->w, e->h, e->visible,
+                    e->capa, e->vida);
+            vars = entidades_tipo_vars(e->tipo);
+            for (j = 0; j < vars; j++)
+                fprintf(f, "  var \"%s\" %d\n",
+                        entidades_tipo_var_nombre(e->tipo, j), e->vars[j]);
+        }
+    }
+    fclose(f);
+    return 0;
+}
+
+/* Corre N fotogramas sin ventana y volca el estado final (--volcar sin
+ * --captura). */
+static int correr_volcar(const char *ruta, int fotogramas) {
+    int i;
+    for (i = 0; i < fotogramas && juego.corriendo; i++) {
+        actualizar();
+        traza_fotograma();
+    }
+    if (g_entidades && g_traza)
+        fprintf(g_traza, "entidades final: %d avisos %d creadas %d\n",
+                entidades_num(), entidades_avisos(), entidades_creadas());
+    return volcar_estado(ruta);
 }
 
 /* ------------------------------------------------------------------ */
@@ -705,6 +1018,7 @@ static int opcion(const char *nombre) {
     return strcmp(nombre, "--logica") == 0 || strcmp(nombre, "--mapa") == 0 ||
            strcmp(nombre, "--logic3") == 0 || strcmp(nombre, "--vm-test") == 0 ||
            strcmp(nombre, "--captura") == 0 ||
+           strcmp(nombre, "--volcar") == 0 ||
            strcmp(nombre, "--fotogramas") == 0 ||
            strcmp(nombre, "--tecla") == 0 || strcmp(nombre, "--traza") == 0;
 }
@@ -712,7 +1026,7 @@ static int opcion(const char *nombre) {
 int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show) {
     const char *ruta_logica = NULL, *ruta_mapa = NULL, *ruta_bmp = NULL;
     const char *ruta_logic3 = NULL, *ruta_vm_test = NULL;
-    const char *ruta_traza = NULL;
+    const char *ruta_traza = NULL, *ruta_volcar = NULL;
     int fotogramas = 60;
     unsigned tecla = 0;
     int i;
@@ -720,6 +1034,10 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     (void)prev; (void)cmdline; (void)show;
 
     for (i = 1; i < __argc; i++) {
+        if (strcmp(__argv[i], "--entidades") == 0) {
+            g_entidades = 1;
+            continue;
+        }
         if (opcion(__argv[i]) && i + 1 < __argc) {
             const char *v = __argv[++i];
             if (strcmp(__argv[i - 1], "--logica") == 0) ruta_logica = v;
@@ -727,6 +1045,7 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
             else if (strcmp(__argv[i - 1], "--vm-test") == 0) ruta_vm_test = v;
             else if (strcmp(__argv[i - 1], "--mapa") == 0) ruta_mapa = v;
             else if (strcmp(__argv[i - 1], "--captura") == 0) ruta_bmp = v;
+            else if (strcmp(__argv[i - 1], "--volcar") == 0) ruta_volcar = v;
             else if (strcmp(__argv[i - 1], "--traza") == 0) ruta_traza = v;
             else if (strcmp(__argv[i - 1], "--fotogramas") == 0)
                 fotogramas = atoi(v);
@@ -806,9 +1125,10 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
             copiar_texto(juego.mapa_usado, sizeof(juego.mapa_usado),
                          ruta_mapa_l3);
         }
-        /* bloques codigo.lobo de los eventos fotograma: un script cada
-         * uno, con la VM resumible */
-        scripts_preparar_l3(ruta_bmp == NULL);
+        /* entidades de la escena inicial y scripts codigo.lobo de los
+         * eventos fotograma: un script cada uno, con la VM resumible */
+        entidades_preparar();
+        scripts_preparar_l3(ruta_bmp == NULL && ruta_volcar == NULL);
     } else if (ruta_mapa) {
         if (!activo_cargar_mapa(ruta_mapa, &juego.mapa)) {
             char msg[512];
@@ -842,6 +1162,10 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     if (ruta_bmp) {
         buscar_spawn();
         resultado = correr_captura(ruta_bmp, fotogramas);
+        if (resultado == 0 && ruta_volcar) resultado = volcar_estado(ruta_volcar);
+    } else if (ruta_volcar) {
+        buscar_spawn();
+        resultado = correr_volcar(ruta_volcar, fotogramas);
     } else {
         buscar_spawn();
         resultado = correr_ventana(instancia);
