@@ -15,6 +15,7 @@
 #   version     una version futura se rechaza
 #   sin_fin     un archivo sin FIN se rechaza
 #   extension   secciones desconocidas se ignoran y el CRC es opcional
+#   tipos       variables tipadas y listas con elementos: ida y vuelta
 #
 # Uso:
 #   pruebas\logic3.ps1                 pasa la suite
@@ -162,6 +163,40 @@ Ejecutar-Caso "ida_vuelta" {
     }
     if ((Get-TextoNormalizado $salida) -ne (Get-TextoNormalizado $entrada)) {
         [void]$problemas.Add("abrir y guardar cambia el proyecto")
+    }
+}
+
+# Fase 28: valores tipados y listas con elementos sobreviven al guardado.
+# La entrada no canonica (007, variable antes que traje) debe producir el
+# fixture canonico; abrir ese fixture y guardarlo debe ser estable.
+Ejecutar-Caso "tipos" {
+    param($dir, $problemas)
+    $entrada = Join-Path $dir "entrada.logic3"
+    $canon = Join-Path $dir "canon.logic3"
+    $salida = Join-Path $dir "salida.logic3"
+    $bmp = Join-Path $dir "tipos.bmp"
+    $dump = Join-Path $dir "tipos.txt"
+    Copy-Item -LiteralPath (Join-Path $carpeta "tipos_entrada.logic3") -Destination $entrada -Force
+    $cod = Ejecutar-Editor $dir @("--abrir-logic3", $entrada, "--guardar-logic3", $canon,
+                                  "--captura", $bmp, "--volcar", $dump)
+    if ($cod -ne 0) { [void]$problemas.Add("el editor devolvio el codigo $cod") }
+    $patron = Get-TextoNormalizado (Join-Path $carpeta "tipos.logic3")
+    if (-not (Test-Path -LiteralPath $canon)) {
+        [void]$problemas.Add("no se guardo el LOGIC3 canonico")
+        return
+    }
+    if ((Get-TextoNormalizado $canon) -ne $patron) {
+        [void]$problemas.Add("la serializacion tipada no coincide con tipos.logic3")
+        Mostrar-Diferencia ($patron -split "`n") ((Get-TextoNormalizado $canon) -split "`n")
+    }
+    $reabrir = Join-Path $dir "reabrir.logic3"
+    Copy-Item -LiteralPath (Join-Path $carpeta "tipos.logic3") -Destination $reabrir -Force
+    $cod = Ejecutar-Editor $dir @("--abrir-logic3", $reabrir,
+                                  "--guardar-logic3", $salida,
+                                  "--captura", $bmp, "--volcar", $dump)
+    if ($cod -ne 0) { [void]$problemas.Add("el editor devolvio el codigo $cod al reabrir") }
+    if ((Get-TextoNormalizado $salida) -ne $patron) {
+        [void]$problemas.Add("abrir y guardar tipos.logic3 no es estable")
     }
 }
 

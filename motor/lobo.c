@@ -159,8 +159,9 @@ static int lobo_tokenizar(const char *linea, int largo, LoboToken *tokens,
                 } else {
                     i++;
                 }
-                if (j >= LOBO_TEXTO_MAX - 1) return TOK_ERR_TEXTO;
-                tokens[n].texto[j++] = ch;
+                /* Los textos se cortan a 64 bytes (63 + el cero final)
+                 * en vez de fallar: es el toque de la fase 28. */
+                if (j < LOBO_TEXTO_MAX - 1) tokens[n].texto[j++] = ch;
             }
             if (i >= largo) return TOK_ERR_COMILLAS;
             i++; /* comilla de cierre */
@@ -206,11 +207,17 @@ static int lobo_tokenizar(const char *linea, int largo, LoboToken *tokens,
 /* Parser                                                             */
 /* ------------------------------------------------------------------ */
 
-/* Tipos de bloque abierto (si/sino, mientras y funcion). */
-#define BLOQUE_SI       0 /* si ... (sin sino todavia) */
-#define BLOQUE_SINO     1 /* si ... sino ... */
-#define BLOQUE_MIENTRAS 2
-#define BLOQUE_FUNCION  3
+/* Tipos de bloque abierto (si/sino, mientras, funcion y bucles de la
+ * fase 28). */
+#define BLOQUE_SI         0 /* si ... (sin sino todavia) */
+#define BLOQUE_SINO       1 /* si ... sino ... */
+#define BLOQUE_MIENTRAS   2
+#define BLOQUE_FUNCION    3
+#define BLOQUE_REPETIR    4
+#define BLOQUE_PARA_CADA  5
+
+#define LOBO_ROMPER_MAX    8 /* romper/continuar por bucle */
+#define LOBO_CONTINUAR_MAX 8
 
 typedef struct {
     int tipo;
@@ -218,7 +225,17 @@ typedef struct {
     int salto_falso;     /* instruccion SALTO_FALSO a parchear al fin */
     int salto_sino;      /* SALTO del sino a parchear al fin (-1 si no) */
     int mientras_inicio; /* instruccion donde empieza la condicion */
-    int salto_funcion;   /* SALTO que salta el cuerpo al definir (-1 si no) */
+    int salto_funcion;   /* SALTO que saltaba el cuerpo al definir (-1 si no) */
+    int continuar_inicio;/* donde sigue un continuar del bucle */
+    int contador;        /* local oculto del repetir */
+    int indice;          /* local oculto del para cada */
+    int lista;           /* lista recorrida por el para cada */
+    int variable;        /* local que recibe el elemento del para cada */
+    int encadenado;      /* 1 si este si viene de un "sino si" */
+    int salto_romper[LOBO_ROMPER_MAX];
+    int n_romper;
+    int salto_continuar[LOBO_CONTINUAR_MAX];
+    int n_continuar;
 } LoboBloque;
 
 typedef struct {
@@ -241,6 +258,12 @@ typedef struct {
     int num_globales;
     char listas[LOBO_LISTAS_MAX][LOBO_NOMBRE_MAX];
     int num_listas;
+    /* Tipos declarados (fase 28) y contador de locales ocultos. */
+    char tipos_locales[LOBO_LOCALES_MAX];
+    char tipos_globales[LOBO_GLOBALES_MAX];
+    char tipos_entidad[LOBO_ENTIDAD_VARS_MAX];
+    char tipos_listas[LOBO_LISTAS_MAX];
+    int num_temporales;
 } LoboParser;
 
 /* Deja el mensaje de error con el numero de linea (el primero gana). */
@@ -283,6 +306,74 @@ static void lobo_error_locales(LoboParser *p) {
         lobo_error(p, "demasiadas variables locales (maximo 16)");
     else
         lobo_error(p, "demasiadas variables locales (maximo 64)");
+}
+
+/* Declaraciones adelantadas: los ayudantes de tipos los usan antes de
+ * que llegue su definicion en el bloque de simbolos. */
+static int lobo_nueva_local(LoboParser *p, const char *nombre);
+static int lobo_buscar_local(LoboParser *p, const char *nombre);
+static int lobo_buscar_global(LoboParser *p, const char *nombre);
+static int lobo_buscar_entidad(LoboParser *p, const char *nombre);
+
+/* Codigo de tipo de una palabra de la fase 28; -1 si no es un tipo. */
+static int lobo_tipo_codigo(const char *nombre) {
+    if (lobo_igual(nombre, "entero")) return LOBO_TIPO_ENTERO;
+    if (lobo_igual(nombre, "booleano")) return LOBO_TIPO_BOOLEANO;
+    if (lobo_igual(nombre, "texto")) return LOBO_TIPO_TEXTO;
+    if (lobo_igual(nombre, "lista")) return LOBO_TIPO_LISTA;
+    return -1;
+}
+
+/* Deja un bloque nuevo a cero. Todos los campos de salto empiezan en -1
+ * salvo los que cada sentencia rellena a continuacion. */
+static void lobo_bloque_iniciar(LoboBloque *b, int tipo, int linea) {
+    int i;
+    b->tipo = tipo;
+    b->linea = linea;
+    b->salto_falso = -1;
+    b->salto_sino = -1;
+    b->mientras_inicio = -1;
+    b->salto_funcion = -1;
+    b->continuar_inicio = -1;
+    b->contador = -1;
+    b->indice = -1;
+    b->lista = -1;
+    b->variable = -1;
+    b->encadenado = 0;
+    b->n_romper = 0;
+    b->n_continuar = 0;
+    for (i = 0; i < LOBO_ROMPER_MAX; i++) b->salto_romper[i] = -1;
+    for (i = 0; i < LOBO_CONTINUAR_MAX; i++) b->salto_continuar[i] = -1;
+}
+
+/* Local oculto para los contadores de repetir y para cada. El nombre
+ * `__tN` no puede chocar con una variable escrita a mano porque se
+ * comprueba contra la tabla de locales antes de usarlo. */
+static int lobo_local_temporal(LoboParser *p) {
+    char nombre[LOBO_NOMBRE_MAX];
+    char num[12];
+    int i, n = 0, v = p->num_temporales++;
+    do { num[n++] = (char)('0' + v % 10); v /= 10; } while (v);
+    for (i = 0; i < 2; i++) nombre[i] = '_';
+    for (i = 0; n > 0 && i < 8; i++, n--) nombre[2 + i] = num[n - 1];
+    nombre[2 + i] = 0;
+    return lobo_nueva_local(p, nombre);
+}
+
+/* Marca el tipo de una variable ya registrada. */
+static void lobo_marcar_tipo(LoboParser *p, const char *nombre, int tipo) {
+    char codigo = (char)tipo;
+    int i;
+    if (nombre[0] == '$') {
+        i = lobo_buscar_global(p, nombre);
+        if (i >= 0) p->tipos_globales[i] = codigo;
+    } else if (nombre[0] == '@') {
+        i = lobo_buscar_entidad(p, nombre);
+        if (i >= 0) p->tipos_entidad[i] = codigo;
+    } else {
+        i = lobo_buscar_local(p, nombre);
+        if (i >= 0) p->tipos_locales[i] = codigo;
+    }
 }
 
 /* Reserva capacidad en el programa para `necesita` instrucciones sin
@@ -497,10 +588,11 @@ static int lobo_agregar_texto(LoboParser *p, const char *texto) {
 /* Nombres de las funciones de lista que se llaman como una funcion. */
 static int lobo_es_lista_funcion(const char *nombre) {
     return lobo_igual(nombre, "largo") || lobo_igual(nombre, "elemento") ||
-           lobo_igual(nombre, "contiene") || lobo_igual(nombre, "fijar") ||
-           lobo_igual(nombre, "anadir") || lobo_igual(nombre, "insertar") ||
+           lobo_igual(nombre, "contiene") || lobo_igual(nombre, "tiene") ||
+           lobo_igual(nombre, "fijar") || lobo_igual(nombre, "anadir") ||
+           lobo_igual(nombre, "agregar") || lobo_igual(nombre, "insertar") ||
            lobo_igual(nombre, "borrar") || lobo_igual(nombre, "limpiar") ||
-           lobo_igual(nombre, "ordenar");
+           lobo_igual(nombre, "vaciar") || lobo_igual(nombre, "ordenar");
 }
 
 /* Compila una llamada a las funciones de lista. El nombre ya se comio y
@@ -514,11 +606,14 @@ static int lobo_lista_builtin(LoboParser *p, const char *nombre) {
         { "largo", LOBO_LISTA_LARGO, 0 },
         { "elemento", LOBO_LISTA_ELEMENTO, 1 },
         { "contiene", LOBO_LISTA_TIENE, 1 },
+        { "tiene", LOBO_LISTA_TIENE, 1 },
         { "fijar", LOBO_LISTA_FIJAR, 2 },
         { "anadir", LOBO_LISTA_ANADIR, 1 },
+        { "agregar", LOBO_LISTA_ANADIR, 1 },
         { "insertar", LOBO_LISTA_INSERTAR, 2 },
         { "borrar", LOBO_LISTA_BORRAR, 1 },
         { "limpiar", LOBO_LISTA_LIMPIAR, 0 },
+        { "vaciar", LOBO_LISTA_LIMPIAR, 0 },
         { "ordenar", LOBO_LISTA_ORDENAR, 0 }
     };
     int i, lista = -1, args = 0, op = 0, esperados = 0;
@@ -555,11 +650,43 @@ static int lobo_lista_builtin(LoboParser *p, const char *nombre) {
     return lobo_emitir(p, op, lista);
 }
 
-/* Compila una llamada a una funcion de usuario: llamar("nombre", ...). */
+/* Compila los argumentos de una llamada. El parentesis de apertura ya
+ * esta comido; lo comparten llamar("nombre", ...) y nombre(...). */
+static int lobo_llamada_usuario_args(LoboParser *p, int fi) {
+    int dados = 0;
+    LoboFuncion *f = &p->prog->funciones[fi];
+    /* Con llamar("f", x) el cursor esta en la coma que sigue al nombre;
+     * con f(x) esta en el primer argumento. Se come esa coma si existe y
+     * luego se leen todos los argumentos hasta cerrar el parentesis. */
+    if (!lobo_fin_tokens(p) && p->tokens[p->pos].tipo == TOK_OP &&
+        lobo_igual(p->tokens[p->pos].texto, ","))
+        p->pos++;
+    while (!lobo_fin_tokens(p) &&
+           !(p->tokens[p->pos].tipo == TOK_OP &&
+             lobo_igual(p->tokens[p->pos].texto, ")"))) {
+        if (dados >= LOBO_PARAMS_MAX) {
+            lobo_error(p, "demasiados argumentos en la llamada");
+            return 0;
+        }
+        if (!lobo_expresion(p)) return 0;
+        dados++;
+        if (!lobo_comer_op(p, ",")) break;
+    }
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar la llamada");
+        return 0;
+    }
+    if (dados != f->params) {
+        lobo_error(p, "numero de argumentos distinto de los parametros");
+        return 0;
+    }
+    return lobo_emitir(p, LOBO_LLAMAR, fi);
+}
+
+/* llamar("nombre", ...). */
 static int lobo_llamada_usuario(LoboParser *p) {
-    int fi, dados = 0;
+    int fi;
     char nombre[LOBO_NOMBRE_MAX];
-    LoboFuncion *f;
     if (lobo_fin_tokens(p) || p->tokens[p->pos].tipo != TOK_TXT) {
         lobo_error(p, "llamar necesita el nombre de la funcion entre comillas");
         return 0;
@@ -571,24 +698,7 @@ static int lobo_llamada_usuario(LoboParser *p) {
         lobo_error(p, "funcion desconocida");
         return 0;
     }
-    f = &p->prog->funciones[fi];
-    while (lobo_comer_op(p, ",")) {
-        if (dados >= LOBO_PARAMS_MAX) {
-            lobo_error(p, "demasiados argumentos en la llamada");
-            return 0;
-        }
-        if (!lobo_expresion(p)) return 0;
-        dados++;
-    }
-    if (!lobo_comer_op(p, ")")) {
-        lobo_error(p, "se esperaba ) para cerrar la llamada");
-        return 0;
-    }
-    if (dados != f->params) {
-        lobo_error(p, "numero de argumentos distinto de los parametros");
-        return 0;
-    }
-    return lobo_emitir(p, LOBO_LLAMAR, fi);
+    return lobo_llamada_usuario_args(p, fi);
 }
 
 /* Campo de `mi` por nombre; -1 si no es un campo conocido. */
@@ -755,6 +865,118 @@ static int lobo_llamada_enviar_a(LoboParser *p) {
     return lobo_emitir2(p, LOBO_ENVIAR_A, texto, destino);
 }
 
+/* Built-ins numericos y de texto de la fase 28. Todos toman expresiones
+ * (no solo literales) para poder trabajar con variables y parametros. */
+static int lobo_llamada_abs(LoboParser *p) {
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar abs");
+        return 0;
+    }
+    return lobo_emitir(p, LOBO_ABS, 0);
+}
+
+/* min(a, b) / max(a, b). */
+static int lobo_llamada_min_max(LoboParser *p, int op) {
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ",")) {
+        lobo_error(p, "se esperaba , entre los argumentos");
+        return 0;
+    }
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar la funcion");
+        return 0;
+    }
+    return lobo_emitir(p, op, 0);
+}
+
+/* limitar(v, lo, hi). */
+static int lobo_llamada_limitar(LoboParser *p) {
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ",")) {
+        lobo_error(p, "limitar necesita v, lo e hi");
+        return 0;
+    }
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ",")) {
+        lobo_error(p, "limitar necesita v, lo e hi");
+        return 0;
+    }
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar limitar");
+        return 0;
+    }
+    return lobo_emitir(p, LOBO_LIMITAR, 0);
+}
+
+/* redondear(v). Con enteros el valor ya esta redondeado: la operacion
+ * existe para que el codigo escrito para decimales siga siendo valido. */
+static int lobo_llamada_redondear(LoboParser *p) {
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar redondear");
+        return 0;
+    }
+    return lobo_emitir(p, LOBO_REDONDEAR, 0);
+}
+
+/* aleatorio(a, b): extremos incluidos, semilla por maquina. */
+static int lobo_llamada_aleatorio(LoboParser *p) {
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ",")) {
+        lobo_error(p, "aleatorio necesita dos argumentos");
+        return 0;
+    }
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar aleatorio");
+        return 0;
+    }
+    return lobo_emitir(p, LOBO_ALEATORIO, 0);
+}
+
+/* longitud(texto): un argumento que puede ser un handle de texto. */
+static int lobo_llamada_texto_uno(LoboParser *p, int op) {
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar la funcion de texto");
+        return 0;
+    }
+    return lobo_emitir(p, op, 0);
+}
+
+/* letra(texto, i): el caracter i devuelve su codigo (0 si no existe). */
+static int lobo_llamada_letra(LoboParser *p) {
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ",")) {
+        lobo_error(p, "letra necesita un texto y un indice");
+        return 0;
+    }
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar letra");
+        return 0;
+    }
+    return lobo_emitir(p, LOBO_LETRA, 0);
+}
+
+/* unir(a, b): concatena dos textos y recorta el resultado a 64 bytes. */
+static int lobo_llamada_unir(LoboParser *p) {
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ",")) {
+        lobo_error(p, "unir necesita dos textos");
+        return 0;
+    }
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar unir");
+        return 0;
+    }
+    return lobo_emitir(p, LOBO_UNIR, 0);
+}
+
 /* Primario: numero, variable, tecla, texto, lista o llamada. */
 static int lobo_primario(LoboParser *p) {
     if (lobo_fin_tokens(p)) {
@@ -765,6 +987,13 @@ static int lobo_primario(LoboParser *p) {
         int v = p->tokens[p->pos].numero;
         p->pos++;
         return lobo_emitir(p, LOBO_NUM, v);
+    }
+    /* Un texto en una expresion es un handle con marca alta (fase 28). */
+    if (p->tokens[p->pos].tipo == TOK_TXT) {
+        int idx = lobo_agregar_texto(p, p->tokens[p->pos].texto);
+        if (idx < 0) return 0;
+        p->pos++;
+        return lobo_emitir(p, LOBO_TEXTO, idx);
     }
     if (p->tokens[p->pos].tipo == TOK_ID) {
         char nombre[LOBO_NOMBRE_MAX];
@@ -787,6 +1016,57 @@ static int lobo_primario(LoboParser *p) {
                 lobo_igual(lobo_mirar_op(p), ".")) {
                 p->pos++;
                 return lobo_primario_mi(p);
+            }
+            /* Built-ins numericos y de texto (fase 28). */
+            if (lobo_igual(nombre, "abs") && lobo_mirar_op(p) &&
+                lobo_igual(lobo_mirar_op(p), "(")) {
+                p->pos++;
+                return lobo_llamada_abs(p);
+            }
+            if ((lobo_igual(nombre, "min") || lobo_igual(nombre, "max")) &&
+                lobo_mirar_op(p) && lobo_igual(lobo_mirar_op(p), "(")) {
+                int op = lobo_igual(nombre, "min") ? LOBO_MIN : LOBO_MAX;
+                p->pos++;
+                return lobo_llamada_min_max(p, op);
+            }
+            if (lobo_igual(nombre, "limitar") && lobo_mirar_op(p) &&
+                lobo_igual(lobo_mirar_op(p), "(")) {
+                p->pos++;
+                return lobo_llamada_limitar(p);
+            }
+            if (lobo_igual(nombre, "redondear") && lobo_mirar_op(p) &&
+                lobo_igual(lobo_mirar_op(p), "(")) {
+                p->pos++;
+                return lobo_llamada_redondear(p);
+            }
+            if (lobo_igual(nombre, "aleatorio") && lobo_mirar_op(p) &&
+                lobo_igual(lobo_mirar_op(p), "(")) {
+                p->pos++;
+                return lobo_llamada_aleatorio(p);
+            }
+            if (lobo_igual(nombre, "longitud") && lobo_mirar_op(p) &&
+                lobo_igual(lobo_mirar_op(p), "(")) {
+                p->pos++;
+                return lobo_llamada_texto_uno(p, LOBO_LONGITUD);
+            }
+            if (lobo_igual(nombre, "letra") && lobo_mirar_op(p) &&
+                lobo_igual(lobo_mirar_op(p), "(")) {
+                p->pos++;
+                return lobo_llamada_letra(p);
+            }
+            if (lobo_igual(nombre, "unir") && lobo_mirar_op(p) &&
+                lobo_igual(lobo_mirar_op(p), "(")) {
+                p->pos++;
+                return lobo_llamada_unir(p);
+            }
+            /* Llamada directa: danar(5) equivale a llamar("danar", 5). */
+            {
+                int fi = lobo_buscar_funcion(p, nombre);
+                if (fi >= 0 && lobo_mirar_op(p) &&
+                    lobo_igual(lobo_mirar_op(p), "(")) {
+                    p->pos++;
+                    return lobo_llamada_usuario_args(p, fi);
+                }
             }
             /* crear(), mover() y borrar() (fase 26) */
             if (lobo_igual(nombre, "crear") && lobo_mirar_op(p) &&
@@ -1059,9 +1339,52 @@ static int lobo_preescanear(LoboParser *p, const char *texto) {
             goto siguiente;
         }
         if (vm && n >= 2 && tokens[0].tipo == TOK_ID &&
-            lobo_igual(tokens[0].texto, "lista") &&
-            tokens[1].tipo == TOK_ID) {
-            if (lobo_nueva_lista(p, tokens[1].texto) < 0) return 0;
+            lobo_igual(tokens[0].texto, "lista")) {
+            int li = -1, tipo = LOBO_TIPO_ENTERO, nombre_en = 1;
+            if (n >= 3 && tokens[1].tipo == TOK_ID &&
+                lobo_tipo_codigo(tokens[1].texto) >= 0 &&
+                tokens[2].tipo == TOK_ID) {
+                tipo = lobo_tipo_codigo(tokens[1].texto);
+                nombre_en = 2;
+            }
+            if (tokens[nombre_en].tipo == TOK_ID) {
+                li = lobo_nueva_lista(p, tokens[nombre_en].texto);
+                if (li < 0) return 0;
+                p->tipos_listas[li] = (char)tipo;
+            }
+        }
+        /* Declaraciones con tipo: entero x, booleano $listo,
+         * texto @nombre. El tipo por defecto sigue siendo entero. */
+        if (vm && n >= 2 && tokens[0].tipo == TOK_ID) {
+            int tipo = lobo_tipo_codigo(tokens[0].texto);
+            if (tipo >= 0 && tipo != LOBO_TIPO_LISTA &&
+                tokens[1].tipo == TOK_ID) {
+                const char *nombre = tokens[1].texto;
+                if (nombre[0] == '$') {
+                    int g = lobo_nueva_global(p, nombre);
+                    if (g < 0) return 0;
+                    p->tipos_globales[g] = (char)tipo;
+                } else if (nombre[0] == '@') {
+                    int e = lobo_nueva_entidad(p, nombre);
+                    if (e < 0) return 0;
+                    p->tipos_entidad[e] = (char)tipo;
+                } else {
+                    int l = lobo_nueva_local(p, nombre);
+                    if (l < 0) return 0;
+                    p->tipos_locales[l] = (char)tipo;
+                }
+            }
+        }
+        /* para cada x en lista: x es una local aunque no haya `=`. */
+        if (vm && n >= 4 && tokens[0].tipo == TOK_ID &&
+            lobo_igual(tokens[0].texto, "para") &&
+            tokens[1].tipo == TOK_ID &&
+            lobo_igual(tokens[1].texto, "cada") &&
+            tokens[2].tipo == TOK_ID) {
+            if (lobo_nueva_local(p, tokens[2].texto) < 0) {
+                p->linea = linea;
+                return 0;
+            }
         }
         for (i = 0; i < n; i++) {
             if (tokens[i].tipo == TOK_ID && tokens[i].texto[0] == '$') {
@@ -1128,6 +1451,55 @@ static int lobo_cerrar_funcion(LoboParser *p, LoboBloque *b) {
     lobo_parchear(p->prog, b->salto_funcion, p->prog->largo);
     p->funcion_actual = -1;
     return 1;
+}
+
+/* Resuelve el destino de una asignacion o declaracion. Comparte las
+ * comprobaciones de nombres reservados entre ambos caminos. */
+static int lobo_resolver_destino(LoboParser *p, const char *nombre,
+                                 int *es_global, int *es_entidad) {
+    int es_tecla, es_funcion, conocido, destino = -1;
+    *es_global = 0;
+    *es_entidad = 0;
+    if (p->modo == LOBO_MODO_VM && nombre[0] == '$') {
+        *es_global = 1;
+        destino = lobo_buscar_global(p, nombre);
+        if (destino < 0) lobo_error(p, "global desconocida");
+        return destino;
+    }
+    if (p->modo == LOBO_MODO_VM && nombre[0] == '@') {
+        *es_entidad = 1;
+        destino = lobo_buscar_entidad(p, nombre);
+        if (destino < 0) lobo_error(p, "variable de entidad desconocida");
+        return destino;
+    }
+    conocido = lobo_nombre_conocido(nombre, &es_tecla, &es_funcion);
+    if (es_tecla) {
+        lobo_error(p, "las teclas no se pueden asignar");
+        return -1;
+    }
+    if (es_funcion) {
+        lobo_error(p, "no se puede asignar a una funcion");
+        return -1;
+    }
+    if (conocido >= 0) return conocido;
+    destino = lobo_buscar_local(p, nombre);
+    if (destino < 0) {
+        lobo_error(p, "nombre desconocido");
+        return -1;
+    }
+    return LOBO_VAR_LOCALES + destino;
+}
+
+/* Busca el bucle mas interno abierto para romper/continuar. */
+static int lobo_bloque_bucle(LoboParser *p) {
+    int i;
+    for (i = p->num_bloques - 1; i >= 0; i--) {
+        int tipo = p->bloques[i].tipo;
+        if (tipo == BLOQUE_MIENTRAS || tipo == BLOQUE_REPETIR ||
+            tipo == BLOQUE_PARA_CADA)
+            return i;
+    }
+    return -1;
 }
 
 /* Compila la linea actual de p->tokens como sentencia. */
@@ -1232,11 +1604,7 @@ static int lobo_sentencia(LoboParser *p) {
                 return 0;
             }
             b = &p->bloques[p->num_bloques++];
-            b->tipo = BLOQUE_FUNCION;
-            b->linea = p->linea;
-            b->salto_falso = -1;
-            b->salto_sino = -1;
-            b->mientras_inicio = -1;
+            lobo_bloque_iniciar(b, BLOQUE_FUNCION, p->linea);
             b->salto_funcion = p->prog->largo;
             if (!lobo_emitir(p, LOBO_SALTO, 0)) return 0;
             p->prog->funciones[fi].inicio = p->prog->largo;
@@ -1260,16 +1628,177 @@ static int lobo_sentencia(LoboParser *p) {
             }
             return lobo_emitir(p, LOBO_RETORNAR, 0);
         }
-        if (lobo_igual(t->texto, "lista")) {
-            if (p->num_tokens != 2 || p->tokens[1].tipo != TOK_ID) {
-                lobo_error(p, "lista necesita un nombre");
+        /* Declaraciones con tipo (fase 28). */
+        {
+            int tipo = lobo_tipo_codigo(t->texto);
+            if (tipo >= 0) {
+                int nombre_en = 1;
+                if (tipo == LOBO_TIPO_LISTA && p->num_tokens >= 3 &&
+                    p->tokens[1].tipo == TOK_ID &&
+                    lobo_tipo_codigo(p->tokens[1].texto) >= 0 &&
+                    p->tokens[2].tipo == TOK_ID)
+                    nombre_en = 2;
+                if (p->num_tokens < nombre_en + 1 ||
+                    p->tokens[nombre_en].tipo != TOK_ID) {
+                    lobo_error(p, "la declaracion necesita un nombre");
+                    return 0;
+                }
+                if (tipo == LOBO_TIPO_LISTA) {
+                    int li = lobo_buscar_lista(p, p->tokens[nombre_en].texto);
+                    if (li < 0) {
+                        lobo_error(p, "lista no preescaneada");
+                        return 0;
+                    }
+                    /* El subtipo lo guardo el preescaneo. */
+                    return 1; /* declaracion: no emite nada */
+                }
+                {
+                    const char *nombre = p->tokens[nombre_en].texto;
+                    int es_global = 0, es_entidad = 0;
+                    int destino = lobo_resolver_destino(p, nombre, &es_global,
+                                                         &es_entidad);
+                    if (destino < 0) return 0;
+                    lobo_marcar_tipo(p, nombre, tipo);
+                    if (p->num_tokens == nombre_en + 1) {
+                        /* Sin valor: 0 o texto vacio. */
+                        if (tipo == LOBO_TIPO_TEXTO) {
+                            int idx = lobo_agregar_texto(p, "");
+                            if (idx < 0) return 0;
+                            if (!lobo_emitir(p, LOBO_TEXTO, idx)) return 0;
+                        } else if (!lobo_emitir(p, LOBO_NUM, 0)) {
+                            return 0;
+                        }
+                        if (es_global)
+                            return lobo_emitir(p, LOBO_GUARDAR_GLOBAL, destino);
+                        if (es_entidad)
+                            return lobo_emitir(p, LOBO_GUARDAR_ENTIDAD, destino);
+                        return lobo_emitir(p, LOBO_ASIGNA, destino);
+                    }
+                    if (p->num_tokens < nombre_en + 2 ||
+                        p->tokens[nombre_en + 1].tipo != TOK_OP ||
+                        !lobo_igual(p->tokens[nombre_en + 1].texto, "=")) {
+                        lobo_error(p, "se esperaba = en la declaracion");
+                        return 0;
+                    }
+                    p->pos = nombre_en + 2;
+                    if (!lobo_expresion(p)) return 0;
+                    if (!lobo_fin_tokens(p)) {
+                        lobo_error(p, "sobran datos tras la declaracion");
+                        return 0;
+                    }
+                    if (es_global)
+                        return lobo_emitir(p, LOBO_GUARDAR_GLOBAL, destino);
+                    if (es_entidad)
+                        return lobo_emitir(p, LOBO_GUARDAR_ENTIDAD, destino);
+                    return lobo_emitir(p, LOBO_ASIGNA, destino);
+                }
+            }
+        }
+        if (lobo_igual(t->texto, "repetir")) {
+            LoboBloque *b;
+            int temp;
+            if (p->num_tokens < 2) {
+                lobo_error(p, "repetir necesita un numero");
                 return 0;
             }
-            if (lobo_buscar_lista(p, p->tokens[1].texto) < 0) {
-                lobo_error(p, "lista no preescaneada");
+            if (p->num_bloques >= 16) {
+                lobo_error(p, "demasiados bloques anidados");
                 return 0;
             }
-            return 1; /* declaracion: no emite nada */
+            temp = lobo_local_temporal(p);
+            if (temp < 0) return 0;
+            b = &p->bloques[p->num_bloques++];
+            lobo_bloque_iniciar(b, BLOQUE_REPETIR, p->linea);
+            b->contador = temp;
+            p->pos = 1;
+            if (!lobo_expresion(p)) return 0;
+            if (!lobo_fin_tokens(p)) {
+                lobo_error(p, "sobran datos tras repetir");
+                return 0;
+            }
+            if (!lobo_emitir(p, LOBO_ASIGNA, LOBO_VAR_LOCALES + temp)) return 0;
+            b->mientras_inicio = p->prog->largo;
+            if (!lobo_emitir(p, LOBO_VAR, LOBO_VAR_LOCALES + temp)) return 0;
+            if (!lobo_emitir(p, LOBO_NUM, 0)) return 0;
+            if (!lobo_emitir(p, LOBO_MAYOR, 0)) return 0;
+            b->salto_falso = p->prog->largo;
+            return lobo_emitir(p, LOBO_SALTO_FALSO, 0);
+        }
+        if (lobo_igual(t->texto, "para")) {
+            LoboBloque *b;
+            int li, variable, idx;
+            if (p->num_tokens < 5 || p->tokens[1].tipo != TOK_ID ||
+                !lobo_igual(p->tokens[1].texto, "cada") ||
+                p->tokens[2].tipo != TOK_ID || p->tokens[3].tipo != TOK_ID ||
+                p->tokens[4].tipo != TOK_ID ||
+                (!lobo_igual(p->tokens[3].texto, "en") &&
+                 !lobo_igual(p->tokens[3].texto, "de"))) {
+                lobo_error(p, "para cada variable en lista");
+                return 0;
+            }
+            li = lobo_buscar_lista(p, p->tokens[4].texto);
+            if (li < 0) {
+                lobo_error(p, "lista desconocida en para cada");
+                return 0;
+            }
+            variable = lobo_buscar_local(p, p->tokens[2].texto);
+            if (variable < 0) {
+                lobo_error(p, "variable de para cada desconocida");
+                return 0;
+            }
+            idx = lobo_local_temporal(p);
+            if (idx < 0) return 0;
+            if (p->num_bloques >= 16) {
+                lobo_error(p, "demasiados bloques anidados");
+                return 0;
+            }
+            b = &p->bloques[p->num_bloques++];
+            lobo_bloque_iniciar(b, BLOQUE_PARA_CADA, p->linea);
+            b->lista = li;
+            b->variable = variable;
+            b->indice = idx;
+            if (!lobo_emitir(p, LOBO_NUM, 0)) return 0;
+            if (!lobo_emitir(p, LOBO_ASIGNA, LOBO_VAR_LOCALES + idx)) return 0;
+            b->mientras_inicio = p->prog->largo;
+            if (!lobo_emitir(p, LOBO_VAR, LOBO_VAR_LOCALES + idx)) return 0;
+            if (!lobo_emitir(p, LOBO_LISTA_LARGO, li)) return 0;
+            if (!lobo_emitir(p, LOBO_MENOR, 0)) return 0;
+            b->salto_falso = p->prog->largo;
+            if (!lobo_emitir(p, LOBO_SALTO_FALSO, 0)) return 0;
+            if (!lobo_emitir(p, LOBO_VAR, LOBO_VAR_LOCALES + idx)) return 0;
+            if (!lobo_emitir(p, LOBO_LISTA_ELEMENTO, li)) return 0;
+            return lobo_emitir(p, LOBO_ASIGNA, LOBO_VAR_LOCALES + variable);
+        }
+        if (lobo_igual(t->texto, "romper") ||
+            lobo_igual(t->texto, "continuar")) {
+            int bi = lobo_bloque_bucle(p);
+            LoboBloque *b;
+            int salto;
+            if (bi < 0) {
+                lobo_error(p, "romper y continuar van dentro de un bucle");
+                return 0;
+            }
+            if (p->num_tokens != 1) {
+                lobo_error(p, "romper y continuar van solos en la linea");
+                return 0;
+            }
+            b = &p->bloques[bi];
+            salto = p->prog->largo;
+            if (!lobo_emitir(p, LOBO_SALTO, 0)) return 0;
+            if (lobo_igual(t->texto, "romper")) {
+                if (b->n_romper >= LOBO_ROMPER_MAX) {
+                    lobo_error(p, "demasiados romper en este bucle");
+                    return 0;
+                }
+                b->salto_romper[b->n_romper++] = salto;
+            } else {
+                if (b->n_continuar >= LOBO_CONTINUAR_MAX) {
+                    lobo_error(p, "demasiados continuar en este bucle");
+                    return 0;
+                }
+                b->salto_continuar[b->n_continuar++] = salto;
+            }
+            return 1;
         }
     }
 
@@ -1288,11 +1817,7 @@ static int lobo_sentencia(LoboParser *p) {
                 return 0;
             }
             b = &p->bloques[p->num_bloques++];
-            b->tipo = BLOQUE_SI;
-            b->linea = p->linea;
-            b->salto_sino = -1;
-            b->mientras_inicio = -1;
-            b->salto_funcion = -1;
+            lobo_bloque_iniciar(b, BLOQUE_SI, p->linea);
             b->salto_falso = p->prog->largo;
             return lobo_emitir(p, LOBO_SALTO_FALSO, 0);
         }
@@ -1302,11 +1827,41 @@ static int lobo_sentencia(LoboParser *p) {
                 lobo_error(p, "sino sin un si abierto");
                 return 0;
             }
+            b = &p->bloques[p->num_bloques - 1];
+            /* `sino si cond` se compila como un sino que salta al final
+             * de la cadena y un si anidado en la rama falsa. Un solo fin
+             * cierra toda la cadena (campo encadenado). */
+            if (p->num_tokens >= 2 && p->tokens[1].tipo == TOK_ID &&
+                lobo_igual(p->tokens[1].texto, "si")) {
+                LoboBloque *nuevo;
+                if (p->num_tokens < 3) {
+                    lobo_error(p, "sino si necesita una condicion");
+                    return 0;
+                }
+                if (p->num_bloques >= 16) {
+                    lobo_error(p, "demasiados bloques anidados");
+                    return 0;
+                }
+                b->salto_sino = p->prog->largo;
+                if (!lobo_emitir(p, LOBO_SALTO, 0)) return 0;
+                lobo_parchear(p->prog, b->salto_falso, p->prog->largo);
+                b->tipo = BLOQUE_SINO;
+                nuevo = &p->bloques[p->num_bloques++];
+                lobo_bloque_iniciar(nuevo, BLOQUE_SI, p->linea);
+                nuevo->encadenado = 1;
+                p->pos = 2;
+                if (!lobo_expresion(p)) return 0;
+                if (!lobo_fin_tokens(p)) {
+                    lobo_error(p, "sobran datos tras la condicion del si");
+                    return 0;
+                }
+                nuevo->salto_falso = p->prog->largo;
+                return lobo_emitir(p, LOBO_SALTO_FALSO, 0);
+            }
             if (p->num_tokens != 1) {
                 lobo_error(p, "sino va solo en la linea");
                 return 0;
             }
-            b = &p->bloques[p->num_bloques - 1];
             b->salto_sino = p->prog->largo;
             if (!lobo_emitir(p, LOBO_SALTO, 0)) return 0;
             /* el cuerpo del si salta aqui (al principio del sino) */
@@ -1316,6 +1871,7 @@ static int lobo_sentencia(LoboParser *p) {
         }
         if (lobo_igual(t->texto, "fin")) {
             LoboBloque *b;
+            int fin, i;
             if (p->num_bloques == 0) {
                 lobo_error(p, "fin sin bloque abierto");
                 return 0;
@@ -1327,16 +1883,65 @@ static int lobo_sentencia(LoboParser *p) {
             b = &p->bloques[p->num_bloques - 1];
             if (b->tipo == BLOQUE_MIENTRAS) {
                 if (!lobo_emitir(p, LOBO_SALTO, b->mientras_inicio)) return 0;
-                lobo_parchear(p->prog, b->salto_falso, p->prog->largo);
+                fin = p->prog->largo;
+                lobo_parchear(p->prog, b->salto_falso, fin);
+                for (i = 0; i < b->n_romper; i++)
+                    lobo_parchear(p->prog, b->salto_romper[i], fin);
+                for (i = 0; i < b->n_continuar; i++)
+                    lobo_parchear(p->prog, b->salto_continuar[i],
+                                  b->mientras_inicio);
+            } else if (b->tipo == BLOQUE_REPETIR ||
+                       b->tipo == BLOQUE_PARA_CADA) {
+                b->continuar_inicio = p->prog->largo;
+                if (b->tipo == BLOQUE_REPETIR) {
+                    if (!lobo_emitir(p, LOBO_VAR,
+                                     LOBO_VAR_LOCALES + b->contador)) return 0;
+                    if (!lobo_emitir(p, LOBO_NUM, 1)) return 0;
+                    if (!lobo_emitir(p, LOBO_RESTA, 0)) return 0;
+                    if (!lobo_emitir(p, LOBO_ASIGNA,
+                                     LOBO_VAR_LOCALES + b->contador)) return 0;
+                } else {
+                    if (!lobo_emitir(p, LOBO_VAR,
+                                     LOBO_VAR_LOCALES + b->indice)) return 0;
+                    if (!lobo_emitir(p, LOBO_NUM, 1)) return 0;
+                    if (!lobo_emitir(p, LOBO_SUMA, 0)) return 0;
+                    if (!lobo_emitir(p, LOBO_ASIGNA,
+                                     LOBO_VAR_LOCALES + b->indice)) return 0;
+                }
+                if (!lobo_emitir(p, LOBO_SALTO, b->mientras_inicio)) return 0;
+                fin = p->prog->largo;
+                lobo_parchear(p->prog, b->salto_falso, fin);
+                for (i = 0; i < b->n_romper; i++)
+                    lobo_parchear(p->prog, b->salto_romper[i], fin);
+                for (i = 0; i < b->n_continuar; i++)
+                    lobo_parchear(p->prog, b->salto_continuar[i],
+                                  b->continuar_inicio);
             } else if (b->tipo == BLOQUE_FUNCION) {
                 if (!lobo_cerrar_funcion(p, b)) return 0;
+                p->num_bloques--;
+                return 1;
             } else {
                 /* si a pelo: el falso salta aqui; con sino: el salto
                  * del sino apunta aqui. */
+                fin = p->prog->largo;
                 if (b->salto_sino >= 0)
-                    lobo_parchear(p->prog, b->salto_sino, p->prog->largo);
+                    lobo_parchear(p->prog, b->salto_sino, fin);
                 else
-                    lobo_parchear(p->prog, b->salto_falso, p->prog->largo);
+                    lobo_parchear(p->prog, b->salto_falso, fin);
+                /* Una cadena de "sino si" se cierra con un solo fin. */
+                for (;;) {
+                    int encadenado = b->encadenado;
+                    p->num_bloques--;
+                    if (!encadenado) break;
+                    if (p->num_bloques <= 0) {
+                        lobo_error(p, "falta el fin del si encadenado");
+                        return 0;
+                    }
+                    b = &p->bloques[p->num_bloques - 1];
+                    if (b->salto_sino >= 0)
+                        lobo_parchear(p->prog, b->salto_sino, fin);
+                }
+                return 1;
             }
             p->num_bloques--;
             return 1;
@@ -1349,10 +1954,7 @@ static int lobo_sentencia(LoboParser *p) {
                 return 0;
             }
             b = &p->bloques[p->num_bloques++];
-            b->tipo = BLOQUE_MIENTRAS;
-            b->linea = p->linea;
-            b->salto_sino = -1;
-            b->salto_funcion = -1;
+            lobo_bloque_iniciar(b, BLOQUE_MIENTRAS, p->linea);
             b->mientras_inicio = p->prog->largo;
             if (!lobo_expresion(p)) return 0;
             if (!lobo_fin_tokens(p)) {
@@ -1415,45 +2017,10 @@ static int lobo_sentencia(LoboParser *p) {
         /* Asignacion: nombre = expresion. */
         if (p->num_tokens >= 2 && p->tokens[1].tipo == TOK_OP &&
             p->tokens[1].texto[0] == '=' && p->tokens[1].texto[1] == 0) {
-            int es_tecla, es_funcion;
-            int conocido;
-            int destino = -1;
             int es_global = 0, es_entidad = 0;
-            if (vm && t->texto[0] == '$') {
-                es_global = 1;
-                destino = lobo_buscar_global(p, t->texto);
-                if (destino < 0) {
-                    lobo_error(p, "global desconocida");
-                    return 0;
-                }
-            } else if (vm && t->texto[0] == '@') {
-                es_entidad = 1;
-                destino = lobo_buscar_entidad(p, t->texto);
-                if (destino < 0) {
-                    lobo_error(p, "variable de entidad desconocida");
-                    return 0;
-                }
-            } else {
-                conocido =
-                    lobo_nombre_conocido(t->texto, &es_tecla, &es_funcion);
-                if (es_tecla) {
-                    lobo_error(p, "las teclas no se pueden asignar");
-                    return 0;
-                }
-                if (es_funcion) {
-                    lobo_error(p, "no se puede asignar a una funcion");
-                    return 0;
-                }
-                if (conocido >= 0) destino = conocido;
-                else {
-                    int local = lobo_buscar_local(p, t->texto);
-                    if (local < 0) {
-                        lobo_error(p, "nombre desconocido");
-                        return 0;
-                    }
-                    destino = LOBO_VAR_LOCALES + local;
-                }
-            }
+            int destino = lobo_resolver_destino(p, t->texto, &es_global,
+                                                 &es_entidad);
+            if (destino < 0) return 0;
             p->pos = 2;
             if (!lobo_expresion(p)) return 0;
             if (!lobo_fin_tokens(p)) {
@@ -1488,6 +2055,13 @@ void lobo_programa_iniciar(LoboPrograma *programa) {
     programa->num_funciones = 0;
     programa->num_textos = 0;
     programa->num_ent_nombres = 0;
+    {
+        int i;
+        for (i = 0; i < LOBO_LOCALES_MAX; i++) programa->tipos_locales[i] = 0;
+        for (i = 0; i < LOBO_GLOBALES_MAX; i++) programa->tipos_globales[i] = 0;
+        for (i = 0; i < LOBO_ENTIDAD_VARS_MAX; i++) programa->tipos_entidad[i] = 0;
+        for (i = 0; i < LOBO_LISTAS_MAX; i++) programa->tipos_listas[i] = 0;
+    }
 }
 
 void lobo_programa_liberar(LoboPrograma *programa) {
@@ -1534,14 +2108,31 @@ int lobo_compilar(const char *texto, LoboPrograma *programa, int modo,
     p.num_locales = 0;
     p.num_globales = 0;
     p.num_listas = 0;
+    p.num_temporales = 0;
     programa->num_ent_nombres = 0;
     {
         int i;
-        for (i = 0; i < LOBO_LOCALES_MAX; i++) p.locales[i][0] = 0;
-        for (i = 0; i < LOBO_GLOBALES_MAX; i++) p.globales[i][0] = 0;
+        for (i = 0; i < LOBO_LOCALES_MAX; i++) {
+            p.locales[i][0] = 0;
+            p.tipos_locales[i] = 0;
+            programa->tipos_locales[i] = 0;
+        }
+        for (i = 0; i < LOBO_GLOBALES_MAX; i++) {
+            p.globales[i][0] = 0;
+            p.tipos_globales[i] = 0;
+            programa->tipos_globales[i] = 0;
+        }
         for (i = 0; i < LOBO_ENTIDAD_NOMBRES_MAX; i++)
             programa->entidad_nombres[i][0] = 0;
-        for (i = 0; i < LOBO_LISTAS_MAX; i++) p.listas[i][0] = 0;
+        for (i = 0; i < LOBO_ENTIDAD_VARS_MAX; i++) {
+            p.tipos_entidad[i] = 0;
+            programa->tipos_entidad[i] = 0;
+        }
+        for (i = 0; i < LOBO_LISTAS_MAX; i++) {
+            p.listas[i][0] = 0;
+            p.tipos_listas[i] = 0;
+            programa->tipos_listas[i] = 0;
+        }
     }
 
     /* 1. Preescaneo de locales, globales, listas y funciones. */
@@ -1581,6 +2172,19 @@ int lobo_compilar(const char *texto, LoboPrograma *programa, int modo,
         p.linea = linea_bloque;
         lobo_error(&p, "falta el fin del bloque");
         return 0;
+    }
+    /* Los tipos declarados viajan con el programa para que el editor y
+     * la serializacion LOGIC3 sepan que guarda cada variable. */
+    {
+        int i;
+        for (i = 0; i < LOBO_LOCALES_MAX; i++)
+            programa->tipos_locales[i] = p.tipos_locales[i];
+        for (i = 0; i < LOBO_GLOBALES_MAX; i++)
+            programa->tipos_globales[i] = p.tipos_globales[i];
+        for (i = 0; i < LOBO_ENTIDAD_VARS_MAX; i++)
+            programa->tipos_entidad[i] = p.tipos_entidad[i];
+        for (i = 0; i < LOBO_LISTAS_MAX; i++)
+            programa->tipos_listas[i] = p.tipos_listas[i];
     }
     return 1;
 }
@@ -1774,6 +2378,98 @@ static LoboLista *lobo_vm_lista(LoboMemoria *mem, int indice) {
     return &mem->listas[indice];
 }
 
+/* --- textos por valor (fase 28) ------------------------------------- */
+
+/* Un valor de la pila es texto si tiene la marca alta. */
+static int lobo_es_texto(int valor) {
+    return ((unsigned)valor & (unsigned)LOBO_TEXTO_MARCA) != 0;
+}
+
+/* Handle de un texto del programa o del runtime. */
+static int lobo_texto_handle(int indice) {
+    return (int)((unsigned)LOBO_TEXTO_MARCA | (unsigned)indice);
+}
+
+/* Resuelve un handle a una cadena C. Los textos del programa van primero
+ * y los creados por unir() despues, compartiendo la memoria del juego. */
+static const char *lobo_texto_resolver(const LoboPrograma *programa,
+                                       LoboMemoria *memoria, int valor) {
+    int idx;
+    if (!lobo_es_texto(valor)) return NULL;
+    idx = (int)((unsigned)valor & 0x3fffffffu);
+    if (idx < LOBO_TEXTOS_MAX) {
+        if (idx >= 0 && idx < programa->num_textos)
+            return programa->textos[idx];
+        return NULL;
+    }
+    idx -= LOBO_TEXTOS_MAX;
+    if (memoria && idx >= 0 && idx < LOBO_TEXTOS_RUNTIME_MAX &&
+        idx < memoria->num_textos)
+        return memoria->textos[idx];
+    return NULL;
+}
+
+/* Largo de un texto, sin pasar de los 64 bytes. */
+static int lobo_texto_largo(const char *texto) {
+    int n = 0;
+    while (texto[n] && n < LOBO_TEXTO_MAX - 1) n++;
+    return n;
+}
+
+/* Concatena dos textos en la tabla runtime y devuelve su handle. Si no
+ * hay memoria (caso de un --vm-test sin LoboMemoria) devuelve un handle
+ * vacio estable para no romper el determinismo. */
+static int lobo_texto_unir(LoboMemoria *memoria, const char *a,
+                           const char *b) {
+    char resultado[LOBO_TEXTO_MAX];
+    int i = 0, j, idx;
+    for (j = 0; a && a[j] && i < LOBO_TEXTO_MAX - 1; j++)
+        resultado[i++] = a[j];
+    for (j = 0; b && b[j] && i < LOBO_TEXTO_MAX - 1; j++)
+        resultado[i++] = b[j];
+    resultado[i] = 0;
+    if (!memoria) return lobo_texto_handle(0);
+    if (memoria->num_textos < LOBO_TEXTOS_RUNTIME_MAX)
+        idx = memoria->num_textos++;
+    else
+        idx = LOBO_TEXTOS_RUNTIME_MAX - 1; /* recicla el ultimo slot */
+    lobo_copiar(memoria->textos[idx], resultado, LOBO_TEXTO_MAX);
+    return lobo_texto_handle(LOBO_TEXTOS_MAX + idx);
+}
+
+/* Comparacion con textos: si ambos lados son texto se comparan byte a
+ * byte; si no, se mantiene la comparacion entera de siempre. */
+static int lobo_comparar(const LoboPrograma *programa, LoboMemoria *memoria,
+                         int op, int a, int b) {
+    const char *ta = lobo_texto_resolver(programa, memoria, a);
+    const char *tb = lobo_texto_resolver(programa, memoria, b);
+    int c = 0;
+    if (ta && tb) {
+        while (ta[c] && ta[c] == tb[c]) c++;
+        c = ta[c] - tb[c];
+    } else {
+        c = a - b;
+    }
+    if (op == LOBO_IGUAL) return c == 0;
+    if (op == LOBO_DISTINTO) return c != 0;
+    if (op == LOBO_MENOR) return c < 0;
+    if (op == LOBO_MAYOR) return c > 0;
+    if (op == LOBO_MENOR_IG) return c <= 0;
+    return c >= 0; /* LOBO_MAYOR_IG */
+}
+
+/* Generador lineal congruencial, propio de cada maquina y por tanto
+ * reproducible con --vm-test y con -Repetir. */
+static int lobo_aleatorio(LoboMaquina *maquina, int a, int b) {
+    unsigned semilla;
+    unsigned rango;
+    if (a > b) { int t = a; a = b; b = t; }
+    rango = (unsigned)(b - a) + 1u;
+    semilla = (unsigned)maquina->semilla * 1103515245u + 12345u;
+    maquina->semilla = (int)(semilla & 0x7fffffffu);
+    return a + (int)((semilla >> 16) % rango);
+}
+
 /* Ejecuta una instruccion. */
 int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
               LoboMaquina *maquina) {
@@ -1850,18 +2546,10 @@ int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
     case LOBO_MAYOR_IG:
         b = lobo_vm_pop(maquina, &ok);
         a = lobo_vm_pop(maquina, &ok);
-        if (ok) {
-            int r = 0;
-            switch (in->op) {
-            case LOBO_IGUAL: r = a == b; break;
-            case LOBO_DISTINTO: r = a != b; break;
-            case LOBO_MENOR: r = a < b; break;
-            case LOBO_MAYOR: r = a > b; break;
-            case LOBO_MENOR_IG: r = a <= b; break;
-            default: r = a >= b; break;
-            }
-            lobo_vm_push(maquina, r, &ok);
-        }
+        if (ok)
+            lobo_vm_push(maquina,
+                         lobo_comparar(programa, estado->memoria, in->op,
+                                       a, b), &ok);
         break;
     case LOBO_Y:
     case LOBO_O:
@@ -2224,6 +2912,76 @@ int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
         if (ok) lobo_vm_push(maquina, 0, &ok);
         break;
     }
+    /* --- fase 28: built-ins numericos y de texto --- */
+    case LOBO_TEXTO:
+        lobo_vm_push(maquina, lobo_texto_handle(in->valor), &ok);
+        break;
+    case LOBO_ABS:
+        a = lobo_vm_pop(maquina, &ok);
+        if (ok)
+            lobo_vm_push(maquina,
+                         a == LOBO_INT_MIN ? 0 : (a < 0 ? -a : a), &ok);
+        break;
+    case LOBO_MIN:
+    case LOBO_MAX:
+        b = lobo_vm_pop(maquina, &ok);
+        a = lobo_vm_pop(maquina, &ok);
+        if (ok)
+            lobo_vm_push(maquina,
+                         (in->op == LOBO_MIN) ? (a < b ? a : b)
+                                              : (a > b ? a : b), &ok);
+        break;
+    case LOBO_LIMITAR: {
+        int valor;
+        b = lobo_vm_pop(maquina, &ok); /* hi */
+        a = lobo_vm_pop(maquina, &ok); /* lo */
+        valor = lobo_vm_pop(maquina, &ok);
+        if (a > b) { int t = a; a = b; b = t; }
+        if (ok)
+            lobo_vm_push(maquina, valor < a ? a : (valor > b ? b : valor),
+                         &ok);
+        break;
+    }
+    case LOBO_REDONDEAR:
+        a = lobo_vm_pop(maquina, &ok);
+        if (ok) lobo_vm_push(maquina, a, &ok);
+        break;
+    case LOBO_ALEATORIO:
+        b = lobo_vm_pop(maquina, &ok);
+        a = lobo_vm_pop(maquina, &ok);
+        if (ok) lobo_vm_push(maquina, lobo_aleatorio(maquina, a, b), &ok);
+        break;
+    case LOBO_LONGITUD: {
+        const char *texto;
+        a = lobo_vm_pop(maquina, &ok);
+        texto = lobo_texto_resolver(programa, estado->memoria, a);
+        if (ok) lobo_vm_push(maquina, texto ? lobo_texto_largo(texto) : 0,
+                             &ok);
+        break;
+    }
+    case LOBO_LETRA: {
+        const char *texto;
+        b = lobo_vm_pop(maquina, &ok); /* indice */
+        a = lobo_vm_pop(maquina, &ok); /* texto */
+        texto = lobo_texto_resolver(programa, estado->memoria, a);
+        if (ok)
+            lobo_vm_push(maquina,
+                         (texto && b >= 0 && b < lobo_texto_largo(texto))
+                             ? (unsigned char)texto[b]
+                             : 0, &ok);
+        break;
+    }
+    case LOBO_UNIR: {
+        const char *ta, *tb;
+        b = lobo_vm_pop(maquina, &ok);
+        a = lobo_vm_pop(maquina, &ok);
+        ta = lobo_texto_resolver(programa, estado->memoria, a);
+        tb = lobo_texto_resolver(programa, estado->memoria, b);
+        if (ok)
+            lobo_vm_push(maquina,
+                         lobo_texto_unir(estado->memoria, ta, tb), &ok);
+        break;
+    }
     default:
         ok = 0;
         break;
@@ -2326,4 +3084,5 @@ void lobo_maquina_reiniciar(LoboMaquina *maquina) {
     maquina->detener_todo = 0;
     maquina->clones = 0;
     maquina->entidad = 0;
+    maquina->semilla = 12345; /* aleatorio() reproducible */
 }

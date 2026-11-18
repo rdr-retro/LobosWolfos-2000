@@ -22,6 +22,11 @@
 #define MOTOR_L3_ESCENAS_MAX 64   /* escenas por proyecto */
 #define MOTOR_L3_OBJETOS_MAX 128  /* objetos por proyecto */
 #define MOTOR_L3_VARS_MAX    64   /* variables por objeto */
+#define MOTOR_L3_GLOBALES_MAX 128  /* variables globales */
+#define MOTOR_L3_LISTAS_MAX   32   /* listas globales */
+#define MOTOR_L3_LISTA_ELEMS_MAX 256 /* elementos por lista */
+#define MOTOR_L3_TEXTOS_MAX   32   /* textos globales compartidos */
+#define MOTOR_L3_TEXTO_MAX    64   /* bytes por texto */
 #define MOTOR_L3_TRAJES_MAX  32   /* trajes por objeto */
 
 /* Un script del proyecto: el codigo lobo de un bloque codigo.lobo que
@@ -53,11 +58,25 @@ typedef struct MotorL3Escena {
     unsigned int fondo;
 } MotorL3Escena;
 
-/* Una variable inicial de un objeto. */
+/* Una variable inicial, de objeto o global. `tipo` usa los mismos
+ * codigos que LOGIC3 (0 entero, 1 booleano, 2 texto). En las variables de
+ * texto `valor` es el indice en MotorL3.textos y la cadena tambien se
+ * conserva en `texto` para depuracion. */
 typedef struct MotorL3Variable {
     char nombre[MOTOR_L3_NOMBRE_MAX];
+    int tipo;
     int valor;
+    char texto[MOTOR_L3_TEXTO_MAX];
 } MotorL3Variable;
+
+/* Lista global con sus valores iniciales ya convertidos. */
+typedef struct MotorL3Lista {
+    char nombre[MOTOR_L3_NOMBRE_MAX];
+    int capacidad;
+    int tipo;
+    int num_elementos;
+    int elementos[MOTOR_L3_LISTA_ELEMS_MAX];
+} MotorL3Lista;
 
 /* Un traje del objeto (en la fase 26 solo se guarda, aun no se pinta). */
 typedef struct MotorL3Traje {
@@ -95,6 +114,13 @@ typedef struct MotorL3 {
     int num_escenas;
     MotorL3Objeto objetos[MOTOR_L3_OBJETOS_MAX];
     int num_objetos;
+    /* Fase 28: variables y listas globales del LOGIC3. */
+    MotorL3Variable variables[MOTOR_L3_GLOBALES_MAX];
+    int num_variables;
+    MotorL3Lista listas[MOTOR_L3_LISTAS_MAX];
+    int num_listas;
+    char textos[MOTOR_L3_TEXTOS_MAX][MOTOR_L3_TEXTO_MAX];
+    int num_textos;
     MotorL3Script scripts[MOTOR_L3_SCRIPTS_MAX];
     int num_scripts;
     int num_bloques; /* bloques vistos, informativo para --volcar */

@@ -1,0 +1,14 @@
+LOGIC3
+version 3
+proyecto "Fase 28" 320 240 1 60 4 00112233
+carpetas "tiles" "maps" "trajes" "sonidos"
+variable global "vidas" entero 3
+variable global "puntuacion" entero 0
+lista global "inventario" 8 entero 9 3 7
+escena 1 "Escena" "mapa.mav" 320 240 00112233
+objeto 1 "Escena" escena 1 x 0 y 0 w 320 h 240 visible 1 capa 0
+  traje 0 "" 0 0 0 0
+  evento 1 fotograma
+bloque 1 evento 1 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "lista inventario\nordenar(inventario)\nentero total = 0\npara cada obj en inventario\n total = total + obj\nfin\nx = total\ny = largo(inventario)\n"
+FIN

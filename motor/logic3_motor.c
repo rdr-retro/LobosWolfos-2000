@@ -48,7 +48,9 @@ static int fallo_en(char *error, int tam_error, int linea, const char *motivo) {
 /* Tokenizador de una linea                                           */
 /* ------------------------------------------------------------------ */
 
-#define L3_TOKENS_MAX 24
+/* Una lista de 256 elementos ocupa 4 tokens de cabecera, el tipo y los
+ * 256 valores: el toque de la fase 28 obliga a ampliar el tokenizador. */
+#define L3_TOKENS_MAX 288
 
 typedef struct {
     int comillas; /* 1 si venia entre comillas */
@@ -63,8 +65,8 @@ static int poner(char *salida, int tam, int *usado, char c) {
 }
 
 /* Parte una linea en tokens. Las comillas agrupan espacios y admiten los
- * escapes \" \\ y \n; el resto de escapes se conservan tal cual (lector
- * tolerante). Devuelve el numero de tokens o -1 si algo no cabe. */
+ * escapes \" \\ \n \r y \t, los mismos que escribe el editor (fase 28).
+ * Devuelve el numero de tokens o -1 si algo no cabe. */
 static int tokenizar(const char *linea, int largo, char *salida, int tam_salida,
                      L3Tok *tokens, int max_tokens, int *usado_total) {
     int i = 0, n = 0, usado = 0;
@@ -84,6 +86,8 @@ static int tokenizar(const char *linea, int largo, char *salida, int tam_salida,
                     if (e == '"') ch = '"';
                     else if (e == '\\') ch = '\\';
                     else if (e == 'n') ch = '\n';
+                    else if (e == 'r') ch = '\r';
+                    else if (e == 't') ch = '\t';
                     else ch = e;
                     i += 2;
                 } else {
@@ -337,27 +341,109 @@ static int agregar_objeto(MotorL3 *p, const char *salida,
     return p->num_objetos++;
 }
 
+/* Codigos de tipo de LOGIC3 (los mismos que en el editor). */
+static int tipo_valor(const char *nombre) {
+    if (strcmp(nombre, "entero") == 0 || strcmp(nombre, "0") == 0) return 0;
+    if (strcmp(nombre, "booleano") == 0 || strcmp(nombre, "1") == 0) return 1;
+    if (strcmp(nombre, "texto") == 0 || strcmp(nombre, "2") == 0) return 2;
+    return -1;
+}
+
+/* Registra un texto en la tabla compartida del proyecto. La tabla es
+ * pequena (32 entradas, como los textos runtime de lobo) y se deduplica
+ * para que dos variables con el mismo valor no gasten dos huecos. */
+static int registrar_texto(MotorL3 *p, const char *cadena) {
+    int i;
+    for (i = 0; i < p->num_textos; i++)
+        if (strcmp(p->textos[i], cadena) == 0) return i;
+    if (p->num_textos >= MOTOR_L3_TEXTOS_MAX)
+        return MOTOR_L3_TEXTOS_MAX - 1;
+    strncpy(p->textos[i], cadena, MOTOR_L3_TEXTO_MAX - 1);
+    p->textos[i][MOTOR_L3_TEXTO_MAX - 1] = 0;
+    return p->num_textos++;
+}
+
+/* Convierte el token i segun el tipo. Los textos se guardan en la tabla
+ * compartida y su valor es el indice; ademas se copian a `texto_dst` si
+ * se pide (para las variables, que conservan la cadena). */
+static int valor_tipado(MotorL3 *p, const char *salida, const L3Tok *tokens,
+                        int i, int tipo, char *texto_dst, int tam_texto) {
+    const char *src = (i >= 0 && tokens) ? texto(salida, tokens, i) : "";
+    if (texto_dst && tam_texto > 0) {
+        strncpy(texto_dst, src, (size_t)tam_texto - 1);
+        texto_dst[tam_texto - 1] = 0;
+    }
+    if (i < 0 || !tokens) return 0;
+    if (tipo == 2) return registrar_texto(p, src);
+    if (tipo == 1) return entero(salida, tokens, i) ? 1 : 0;
+    return entero(salida, tokens, i);
+}
+
 /* Adjunta una variable al objeto en curso. */
 static void agregar_variable_objeto(L3Lector *l, const char *salida,
                                     const L3Tok *tokens, int nt) {
     MotorL3Objeto *o;
     MotorL3Variable *v;
-    int tipo;
-
+    int tipo = 0;
     if (l->objeto_indice < 0 || l->objeto_indice >= l->proy->num_objetos)
         return;
     if (nt >= 2 && es(salida, tokens, 1, "global")) return; /* otra seccion */
     if (nt < 3) return;
+    if (nt >= 4) {
+        int t = tipo_valor(texto(salida, tokens, 2));
+        if (t >= 0) tipo = t;
+    }
     o = &l->proy->objetos[l->objeto_indice];
     if (o->num_variables >= MOTOR_L3_VARS_MAX) return;
-    /* Solo interesan los valores enteros; el tipo se acepta y se ignora
-     * (las variables de texto llegan con el modelo completo del editor). */
-    tipo = 0;
-    (void)tipo;
     v = &o->variables[o->num_variables++];
     memset(v, 0, sizeof(*v));
     copiar_token(v->nombre, sizeof(v->nombre), salida, tokens, 1);
-    if (nt >= 4) v->valor = entero(salida, tokens, 3);
+    v->tipo = tipo;
+    v->valor = valor_tipado(l->proy, salida, tokens, nt >= 4 ? 3 : -1,
+                            tipo, v->texto, sizeof(v->texto));
+}
+
+/* Adjunta una variable global (fase 28). Antes se descartaba. */
+static void agregar_variable_global(L3Lector *l, const char *salida,
+                                    const L3Tok *tokens, int nt) {
+    MotorL3 *p = l->proy;
+    MotorL3Variable *v;
+    int tipo = 0;
+    if (nt < 4 || p->num_variables >= MOTOR_L3_GLOBALES_MAX) return;
+    {
+        int t = tipo_valor(texto(salida, tokens, 2));
+        if (t >= 0) tipo = t;
+    }
+    v = &p->variables[p->num_variables++];
+    memset(v, 0, sizeof(*v));
+    copiar_token(v->nombre, sizeof(v->nombre), salida, tokens, 1);
+    v->tipo = tipo;
+    v->valor = valor_tipado(p, salida, tokens, 3, tipo,
+                            v->texto, sizeof(v->texto));
+}
+
+/* Adjunta una lista global y sus valores iniciales (fase 28). */
+static void agregar_lista_global(L3Lector *l, const char *salida,
+                                 const L3Tok *tokens, int nt) {
+    MotorL3 *p = l->proy;
+    MotorL3Lista *li;
+    int tipo = 0, primero = 4, k;
+    if (nt < 4 || p->num_listas >= MOTOR_L3_LISTAS_MAX) return;
+    if (nt >= 5) {
+        int t = tipo_valor(texto(salida, tokens, 4));
+        if (t >= 0) { tipo = t; primero = 5; }
+    }
+    li = &p->listas[p->num_listas++];
+    memset(li, 0, sizeof(*li));
+    copiar_token(li->nombre, sizeof(li->nombre), salida, tokens, 2);
+    li->capacidad = entero(salida, tokens, 3);
+    li->tipo = tipo;
+    /* valor_tipado registra los textos y devuelve su indice, asi que el
+     * mismo array sirve para enteros, booleanos y textos. */
+    for (k = primero; k < nt && li->num_elementos < MOTOR_L3_LISTA_ELEMS_MAX;
+         k++)
+        li->elementos[li->num_elementos++] =
+            valor_tipado(p, salida, tokens, k, tipo, NULL, 0);
 }
 
 /* Adjunta un traje al objeto en curso. */
@@ -385,7 +471,7 @@ int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
     int largo = 0, linea = 0;
     const char *q;
     L3Lector l;
-    char salida[MOTOR_L3_CODIGO_MAX * 4 + 1024];
+    char salida[MOTOR_L3_CODIGO_MAX * 4 + 32768];
     L3Tok tokens[L3_TOKENS_MAX];
 
     if (error && tam_error > 0) error[0] = 0;
@@ -473,9 +559,16 @@ int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
             if (l.objeto_indice >= 0) l.capa = p->objetos[l.objeto_indice].capa;
             goto siguiente;
         }
-        /* --- variables y trajes del objeto en curso --- */
+        /* --- variables globales y de objeto, y listas globales --- */
         if (es(salida, tokens, 0, "variable") && nt >= 3) {
-            agregar_variable_objeto(&l, salida, tokens, nt);
+            if (nt >= 2 && es(salida, tokens, 1, "global"))
+                agregar_variable_global(&l, salida, tokens, nt);
+            else
+                agregar_variable_objeto(&l, salida, tokens, nt);
+            goto siguiente;
+        }
+        if (es(salida, tokens, 0, "lista") && nt >= 4) {
+            agregar_lista_global(&l, salida, tokens, nt);
             goto siguiente;
         }
         if (es(salida, tokens, 0, "traje") && nt >= 7) {

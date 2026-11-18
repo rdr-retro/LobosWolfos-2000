@@ -1,0 +1,14 @@
+# Fase 28: lista de 100 elementos que se ordena y se recorre.
+lista nums
+entero i = 100
+mientras i > 0
+    anadir(nums, i)
+    i = i - 1
+fin
+ordenar(nums)
+entero total = 0
+para cada n en nums
+    total = total + n
+fin
+x = total
+y = elemento(nums, 0) + largo(nums) * 1000

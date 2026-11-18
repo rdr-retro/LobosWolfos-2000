@@ -1,0 +1,13 @@
+# Fase 28: textos por valor, comparacion y corte a 64 bytes.
+texto saludo = "hola"
+texto completo = unir(saludo, " mundo")
+x = longitud(completo)
+y = letra(completo, 0)
+si completo == "hola mundo"
+    x = x + 100
+fin
+si completo != "adios"
+    y = y + 1
+fin
+texto largo = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+x = x + longitud(largo)

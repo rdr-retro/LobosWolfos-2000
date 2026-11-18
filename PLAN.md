@@ -782,6 +782,30 @@ el motor ya compila.
   (12/12, 10/10, 10/10, 4/4, 8/8 y 8/8) y el criterio de salida queda
   congelado en las trazas de `pruebas/eventos/`.
 
+- **18-11-2026 (fase 28, variables, listas, funciones y expresiones)** -
+   `motor/lobo.c` y `motor/lobo.h` amplían el compilador y la VM con los tipos
+   `entero`, `booleano`, `texto` y `lista`, los ámbitos global (`$`), de entidad
+   (`@`), local y de parámetro, funciones de usuario con llamada directa
+   `f(args)` además de `llamar("f", args)`, `retornar`, `sino si`, `romper`,
+   `continuar`, `repetir`, `para cada` y los built-ins `aleatorio`, `abs`,
+   `min`, `max`, `limitar`, `redondear`, `longitud`, `unir` y `letra`. Los textos
+   viajan en la pila como handles con marca alta `0x40000000` (0..63 del
+   programa y 64..95 del runtime, 64 bytes como máximo); `aleatorio` es
+   determinista con LCG semilla 12345 por máquina y `redondear` es identidad
+   porque no hay coma flotante. Las listas ganan `agregar`/`anadir`,
+   `insertar`, `borrar`, `fijar`, `elemento`, `largo`, `contiene`/`tiene`,
+   `vaciar`/`limpiar` y `ordenar`. `src/logic3.c` y `src/logic3.h` serializan
+   variables tipadas y listas con valores iniciales (canonicalizando `007` a
+   `7`) y amplían el tokenizador a 288 tokens por línea; `motor/logic3_motor.c`
+   lee esos registros y `motor/juego.c` siembra `g_memoria` con globales,
+   listas y textos antes de compilar los scripts. Las pruebas nuevas cubren
+   builtins, textos comparados y cortados, lista de 100 elementos ordenada y
+   recorrida, bucles, `sino si`, funciones, el juego con inventario/vidas/
+   puntuación/`danar(cantidad)` y la siembra desde LOGIC3; la recursión infinita
+   sigue cortándose a 32 frames (`pruebas/vm/pila`). `build.bat prueba` pasa las
+   seis suites (12/12, 11/11, 18/18, 4/4, 8/8 y 8/8) y la gramática completa
+   queda documentada en `README.md`.
+
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,

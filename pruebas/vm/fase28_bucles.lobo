@@ -1,0 +1,26 @@
+# Fase 28: romper, continuar, repetir y para cada.
+lista nums
+anadir(nums, 1)
+anadir(nums, 2)
+anadir(nums, 3)
+anadir(nums, 4)
+entero cuenta = 0
+para cada n en nums
+    si n == 3
+        romper
+    fin
+    cuenta = cuenta + 1
+fin
+entero salta = 0
+para cada n en nums
+    si n == 2
+        continuar
+    fin
+    salta = salta + 1
+fin
+entero diez = 0
+repetir 10
+    diez = diez + 1
+fin
+x = cuenta
+y = salta * 100 + diez

@@ -13,7 +13,7 @@
 #include "logic3.h"
 
 #define L3_ARCHIVO_MAX (16 * 1024 * 1024)
-#define L3_TOKENS_MAX  64
+#define L3_TOKENS_MAX  288 /* 4 de cabecera + 256 elementos de lista */
 
 /* Contexto del lector: donde caen los registros indentados. */
 enum {
@@ -139,15 +139,28 @@ void logic3_iniciar(Proyecto3 *p) {
 }
 
 void logic3_liberar(Proyecto3 *p) {
+    int i;
     if (!p) return;
+    for (i = 0; i < p->num_listas; i++) free(p->listas[i].elementos);
     free(p->objetos);
     free(p->bloques);
+    for (i = 0; i < L3_LISTAS_MAX; i++) p->listas[i].elementos = NULL;
     p->objetos = NULL;
     p->bloques = NULL;
     p->num_objetos = 0;
     p->cap_objetos = 0;
     p->num_bloques = 0;
     p->cap_bloques = 0;
+}
+
+/* Reserva el array de elementos de una lista la primera vez que aparece
+ * un valor. El tope es fijo para que la serializacion sea determinista. */
+static int lista_elementos_reservar(Lista3 *li) {
+    if (!li) return 0;
+    if (li->elementos) return 1;
+    li->elementos = (char (*)[L3_TEXTO_MAX])
+        calloc(L3_LISTA_ELEMENTOS_MAX, L3_TEXTO_MAX);
+    return li->elementos != NULL;
 }
 
 static int objetos_reservar(Proyecto3 *p) {
@@ -765,7 +778,7 @@ int logic3_cargar(Proyecto3 *p, const char *ruta, char *error, int tam_error) {
 
         if (strcmp(tok[0], "lista") == 0) {
             Lista3 *li;
-            int capacidad;
+            int capacidad, tipo = L3_TIPO_ENTERO, primero = 4, k;
             if (l.n < 2 || strcmp(tok[1], "global") != 0) {
                 fallo3(error, tam_error, num_linea, "solo se admiten listas globales");
                 goto error_lectura;
@@ -782,11 +795,33 @@ int logic3_cargar(Proyecto3 *p, const char *ruta, char *error, int tam_error) {
                 fallo3(error, tam_error, num_linea, "capacidad de lista invalida");
                 goto error_lectura;
             }
+            /* Quinto token opcional: tipo del elemento. Si no es un tipo
+             * conocido se interpretan como valores con tipo entero, para
+             * seguir leyendo listas del formato anterior. */
+            if (l.n >= 5) {
+                int t = logic3_tipo_desde_texto(tok[4]);
+                if (t >= 0) {
+                    tipo = t;
+                    primero = 5;
+                }
+            }
             li = &tmp.listas[tmp.num_listas++];
             memset(li, 0, sizeof(*li));
             copiar_texto(li->nombre, sizeof(li->nombre), tok[2]);
             li->capacidad = capacidad;
+            li->tipo = tipo;
             li->linea = num_linea;
+            if (l.n > primero) {
+                if (!lista_elementos_reservar(li)) {
+                    fallo3(error, tam_error, num_linea,
+                           "sin memoria para los elementos de la lista");
+                    goto error_lectura;
+                }
+                for (k = primero; k < l.n &&
+                     li->num_elementos < L3_LISTA_ELEMENTOS_MAX; k++)
+                    copiar_texto(li->elementos[li->num_elementos++],
+                                 L3_TEXTO_MAX, tok[k]);
+            }
             continue;
         }
 
@@ -1201,6 +1236,24 @@ static int validar_tipo(int tipo, int linea, const char *que,
     return 1;
 }
 
+/* Comprueba que el valor escrito encaja con el tipo declarado. Los textos
+ * se leen tal cual; el tope de 64 bytes es el mismo que usa lobo. */
+static int validar_valor_tipo(int tipo, const char *valor, int linea,
+                              const char *que, char *error, int tam) {
+    int n;
+    if (!valor) return 1;
+    if ((int)strlen(valor) >= L3_TEXTO_MAX)
+        return fallo3(error, tam, linea, "%s demasiado largo", que);
+    if (tipo == L3_TIPO_ENTERO) {
+        if (!a_entero(valor, &n))
+            return fallo3(error, tam, linea, "%s entero invalido: %s", que, valor);
+    } else if (tipo == L3_TIPO_BOOLEANO) {
+        if (!a_entero(valor, &n) || (n != 0 && n != 1))
+            return fallo3(error, tam, linea, "%s booleano invalido: %s", que, valor);
+    }
+    return 1;
+}
+
 static int validar_expresion(const char *valor, int linea, const char *que,
                              char *error, int tam) {
     LoboPrograma programa;
@@ -1257,10 +1310,23 @@ int logic3_validar(const Proyecto3 *p, char *error, int tam_error) {
         const Variable3 *v = &p->variables[i];
         if (!validar_tipo(v->tipo, v->linea, "variable global", error, tam_error))
             goto fallo;
+        if (!validar_valor_tipo(v->tipo, v->valor, v->linea,
+                                "valor de variable global", error, tam_error))
+            goto fallo;
     }
     for (i = 0; i < p->num_listas; i++) {
-        if (p->listas[i].capacidad < 0)
-            FALLO_VALIDAR(p->listas[i].linea, "capacidad de lista negativa");
+        const Lista3 *li = &p->listas[i];
+        if (li->capacidad < 0 || li->capacidad > L3_LISTA_ELEMENTOS_MAX)
+            FALLO_VALIDAR(li->linea, "capacidad de lista fuera de rango");
+        if (!validar_tipo(li->tipo, li->linea, "lista", error, tam_error))
+            goto fallo;
+        if (li->num_elementos < 0 || li->num_elementos > li->capacidad ||
+            li->num_elementos > L3_LISTA_ELEMENTOS_MAX)
+            FALLO_VALIDAR(li->linea, "numero de elementos de lista fuera de rango");
+        for (j = 0; j < li->num_elementos; j++)
+            if (!validar_valor_tipo(li->tipo, li->elementos[j], li->linea,
+                                    "elemento de lista", error, tam_error))
+                goto fallo;
     }
 
     /* Ids y conteos antes de reservar los arrays de apoyo. */
@@ -1368,8 +1434,13 @@ int logic3_validar(const Proyecto3 *p, char *error, int tam_error) {
                 FALLO_VALIDAR(o->trajes[j].linea, "indice de traje negativo");
         }
         for (j = 0; j < o->num_variables; j++) {
-            if (!validar_tipo(o->variables[j].tipo, o->variables[j].linea,
+            const Variable3 *v = &o->variables[j];
+            if (!validar_tipo(v->tipo, v->linea,
                               "variable de objeto", error, tam_error))
+                goto fallo;
+            if (!validar_valor_tipo(v->tipo, v->valor, v->linea,
+                                    "valor de variable de objeto", error,
+                                    tam_error))
                 goto fallo;
         }
         for (j = 0; j < o->num_eventos; j++) {
@@ -1551,6 +1622,20 @@ static void escribir_bloque(Buffer3 *b, const Bloque3 *bl) {
         buf_printf(b, "  hijo %d\n", bl->hijos[i]);
 }
 
+/* Los enteros y booleanos se escriben en forma canonica para que guardar
+ * dos veces seguidas produzca exactamente el mismo archivo. */
+static const char *valor_canonico(int tipo, const char *valor,
+                                  char *dst, int tam) {
+    int n;
+    if (valor && (tipo == L3_TIPO_ENTERO || tipo == L3_TIPO_BOOLEANO) &&
+        a_entero(valor, &n)) {
+        snprintf(dst, (size_t)tam, "%d", n);
+        return dst;
+    }
+    copiar_texto(dst, tam, valor ? valor : "");
+    return dst;
+}
+
 static int serializar_logic3(const Proyecto3 *p, Buffer3 *b) {
     int i, j;
     if (!p || !b) return 0;
@@ -1569,16 +1654,25 @@ static int serializar_logic3(const Proyecto3 *p, Buffer3 *b) {
     buf_printf(b, "\n");
     for (i = 0; i < p->num_variables; i++) {
         const Variable3 *v = &p->variables[i];
+        char canon[L3_TEXTO_MAX];
         buf_printf(b, "variable global ");
         buf_texto(b, v->nombre);
         buf_printf(b, " %s ", logic3_tipo_texto(v->tipo));
-        buf_valor(b, v->valor);
+        buf_valor(b, valor_canonico(v->tipo, v->valor, canon, sizeof(canon)));
         buf_printf(b, "\n");
     }
     for (i = 0; i < p->num_listas; i++) {
+        const Lista3 *li = &p->listas[i];
         buf_printf(b, "lista global ");
-        buf_texto(b, p->listas[i].nombre);
-        buf_printf(b, " %d\n", p->listas[i].capacidad);
+        buf_texto(b, li->nombre);
+        buf_printf(b, " %d %s", li->capacidad, logic3_tipo_texto(li->tipo));
+        for (j = 0; j < li->num_elementos; j++) {
+            char canon[L3_TEXTO_MAX];
+            buf_printf(b, " ");
+            buf_valor(b, valor_canonico(li->tipo, li->elementos[j], canon,
+                                        sizeof(canon)));
+        }
+        buf_printf(b, "\n");
     }
     for (i = 0; i < p->num_escenas; i++) {
         const Escena3 *e = &p->escenas[i];
@@ -1603,10 +1697,11 @@ static int serializar_logic3(const Proyecto3 *p, Buffer3 *b) {
         }
         for (j = 0; j < o->num_variables; j++) {
             const Variable3 *v = &o->variables[j];
+            char canon[L3_TEXTO_MAX];
             buf_printf(b, "  variable ");
             buf_texto(b, v->nombre);
             buf_printf(b, " %s ", logic3_tipo_texto(v->tipo));
-            buf_valor(b, v->valor);
+            buf_valor(b, valor_canonico(v->tipo, v->valor, canon, sizeof(canon)));
             buf_printf(b, "\n");
         }
         for (j = 0; j < o->num_eventos; j++) escribir_evento(b, &o->eventos[j]);

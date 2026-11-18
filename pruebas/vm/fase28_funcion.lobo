@@ -1,0 +1,9 @@
+# Fase 28: llamada directa, alias llamar() y varios parametros.
+funcion danar(cantidad)
+    retornar cantidad * 2
+fin
+funcion suma(a, b)
+    retornar a + b
+fin
+x = danar(5) + llamar("danar", 3)
+y = suma(x, 7)

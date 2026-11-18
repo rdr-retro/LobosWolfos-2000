@@ -45,6 +45,12 @@ para cargar y guardar PNG.
   mensajes para los eventos `recibir`; `detener_script`, `detener_todo` y
   `reiniciar_escena` controlan el despacho, y un presupuesto por fotograma
   evita que un bucle de mensajes cuelgue el juego.
+- Variables y listas tipadas en `lobo` (fase 28): `entero`, `booleano`,
+  `texto` y `lista` con ámbitos global (`$`), de entidad (`@`), local y de
+  parámetro; funciones con `retornar`, `sino si`, `romper`, `continuar`,
+  `repetir`, `para cada` y built-ins numéricos y de texto. El editor guarda
+  los valores iniciales en LOGIC3 y el motor siembra la memoria de la VM con
+  ellos.
 - Apertura y exportación de PNG/BMP y mapas `.mav`, con un menú **EXPORTAR**
   propio para las dos exportaciones de imagen.
 - Guardado del proyecto entero en un paquete `.wolfo` (lógica, mapas y tiles)
@@ -283,49 +289,148 @@ corre con el movimiento por teclado de siempre.
 
 ### lobo 3 (modo VM)
 
-Los bloques `codigo.lobo` de un proyecto LOGIC3 se compilan en modo VM con
-la sintaxis anterior más:
+Los bloques `codigo.lobo` de un proyecto LOGIC3 se compilan en modo VM. Los
+comentarios empiezan por `#`. La sintaxis anterior sigue siendo válida y se
+amplía con tipos, ámbitos, funciones y bucles.
+
+#### Tipos y ámbitos
 
 ```lobo
-# global ($) y variable de entidad (@)
+entero vidas = 3           # local del script
+booleano listo = 1         # 0 o 1
+texto nombre = "Lobo"      # texto entre comillas
+lista inventario           # lista local de enteros
+lista texto nombres        # lista local de textos
+entero $puntos = 0         # global compartida por todos los scripts
+booleano @vivo = 1         # variable de la entidad actual
 $puntos = $puntos + 1
 @energia = @energia - 1
-
-# funciones con parametros y retorno
-funcion suma(a, b)
-  retornar a + b
-fin
-x = llamar("suma", 2, 3)
-
-# esperar no bloquea a los demas scripts
-esperar 30
-detener
-
-# listas de enteros
-lista inventario
-anadir(inventario, 7)
-ordenar(inventario)
-x = largo(inventario) + elemento(inventario, 0)
-
-# mensajes y clones (el planificador llega en la fase 27)
-mensaje "hola"
-clonar
 ```
 
-Sentencias nuevas: `esperar <expr>` (pausa N fotogramas y reanuda donde
-estaba), `detener` (termina el script), `funcion nombre(a, b)` ... `fin` con
-`retornar <expr>`, `mensaje "texto"` y `clonar`. Las funciones se llaman con
-`llamar("nombre", args...)`. Los textos van entre comillas con los escapes
-`\"`, `\\` y `\n`.
+Los cuatro tipos son `entero`, `booleano`, `texto` y `lista`. Los prefijos
+`$` y `@` convierten la variable en global o de entidad; sin prefijo es local
+(o parámetro, dentro de una función). Una declaración puede omitir el valor:
+los numéricos valen 0 y los textos valen `""`.
 
-Funciones de lista: `largo(l)`, `elemento(l, i)`, `fijar(l, i, v)`,
-`anadir(l, v)`, `insertar(l, i, v)`, `borrar(l, i)`, `tiene(l, v)`,
-`ordenar(l)` y `limpiar(l)`.
+#### Funciones, condicionales y bucles
+
+```lobo
+funcion danar(cantidad)
+    retornar cantidad * 2
+fin
+
+funcion suma(a, b)
+    retornar a + b
+fin
+
+x = danar(5) + llamar("danar", 3)   # ambas formas son equivalentes
+y = suma(x, 7)
+
+si vidas > 0
+    x = 1
+sino si vidas == 0
+    x = 2
+sino
+    x = 3
+fin
+
+repetir 10
+    si x > 100
+        romper
+    fin
+    si x == 7
+        continuar
+    fin
+    x = x + 1
+fin
+
+para cada objeto en inventario
+    x = x + objeto
+fin
+```
+
+`funcion nombre(a, b)` ... `fin` declara hasta 8 parámetros y `retornar
+<expr>` devuelve un valor. Las llamadas directas `nombre(args...)` y el alias
+`llamar("nombre", args...)` son equivalentes. Una cadena `sino si` se cierra
+con un solo `fin`. `romper` y `continuar` actúan sobre el bucle más interno;
+`para cada variable en lista` también admite `de` en lugar de `en`.
+
+#### Built-ins
+
+| Función | Qué hace |
+|---|---|
+| `abs(v)` | valor absoluto |
+| `min(a, b)`, `max(a, b)` | menor y mayor |
+| `limitar(v, bajo, alto)` | recorta `v` al intervalo |
+| `redondear(v)` | identidad: el lenguaje solo tiene enteros |
+| `aleatorio(a, b)` | entero en `[a, b]`, determinista (LCG con semilla 12345 por máquina) |
+| `longitud(t)` | caracteres del texto, hasta 63 |
+| `letra(t, i)` | código ASCII del carácter `i` |
+| `unir(a, b)` | concatena y devuelve un texto de hasta 63 caracteres |
+
+Los textos van entre comillas con los escapes `\"`, `\\`, `\n`, `\r` y
+`\t`. Se comparan con `==` y `!=`. Cada texto ocupa 64 bytes: 63 caracteres
+útiles y el terminador. Los creados por `unir()` viven en 32 huecos
+compartidos por todas las máquinas del proyecto.
+
+#### Listas
+
+```lobo
+lista inventario
+agregar(inventario, 7)
+insertar(inventario, 0, 3)
+fijar(inventario, 1, 5)
+x = elemento(inventario, 1) + largo(inventario)
+si contiene(inventario, 7)
+    vaciar(inventario)
+fin
+ordenar(inventario)
+```
+
+| Función | Alias | Qué hace |
+|---|---|---|
+| `agregar(l, v)` | `anadir` | añade al final |
+| `insertar(l, i, v)` | | inserta en la posición |
+| `borrar(l, i)` | | borra la posición |
+| `fijar(l, i, v)` | | cambia la posición |
+| `elemento(l, i)` | | lee la posición |
+| `largo(l)` | | número de elementos |
+| `contiene(l, v)` | `tiene` | busca un valor |
+| `vaciar(l)` | `limpiar` | borra todos los elementos |
+| `ordenar(l)` | | ordena de menor a mayor |
+
+#### Variables y listas en LOGIC3
+
+El editor guarda los valores iniciales como registros de una línea. Las
+listas se escriben con su capacidad, el tipo de elemento y los valores; los
+textos con espacios van entre comillas.
+
+```text
+variable global "vidas" entero 3
+variable global "nombre" texto "Lobo \"feroz\""
+lista global "inventario" 8 entero 3 1 2
+lista global "nombres" 4 texto espada "pocion roja"
+```
+
+Los tipos admitidos son `entero`, `booleano` y `texto`; los números se
+escriben en forma canónica (`007` se guarda como `7`) y los booleanos como
+`0` o `1`. Al cargar un proyecto el motor siembra `g_memoria` con esos
+valores en orden de declaración: la lista primera del archivo es la lista 0
+que ve el script. Las secciones desconocidas se ignoran y `FIN`/`CRC32` siguen
+siendo opcionales.
+
+#### Otras sentencias y límites
+
+`esperar <expr>` pausa N fotogramas y reanuda donde estaba, `detener`
+termina el script, y `mensaje "texto"`, `clonar`, `enviar("...")` y
+`enviar_a("objeto", "...")` interactúan con el planificador de la fase 27.
 
 Límites del modo VM (tabla 3.2): 4096 instrucciones, 64 locales, 64
-funciones, 8 parámetros por función, 32 frames de llamada, 256 valores de
-pila, 128 globales, 64 variables de entidad, 32 listas de 256 elementos,
-64 textos de 64 bytes y 1000000 de pasos por fotograma. El modo clásico
+funciones, 8 parámetros por función, 32 frames de llamada (la recursión se
+corta con error antes de colgar), 256 valores de pila, 128 globales, 64
+variables de entidad, 32 listas de 256 elementos, 64 textos de programa y 32
+textos runtime de 64 bytes (63 caracteres útiles), y 1000000 de pasos por
+fotograma. El modo clásico
 (LOGIC2) conserva sus topes antiguos.
 
 ## Uso

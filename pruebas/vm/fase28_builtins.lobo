@@ -1,0 +1,9 @@
+# Fase 28: built-ins numericos y de texto.
+entero a = abs(-7)
+entero b = min(3, 8)
+entero c = max(3, 8)
+entero d = limitar(50, 0, 10)
+entero e = redondear(4)
+entero r = aleatorio(5, 5)
+x = a + b + r
+y = c + d + e

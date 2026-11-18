@@ -2,9 +2,9 @@
 
 Seis suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
 (fase 24), la VM resumible y lobo 3 (fase 25), entidades, escenas y ciclo de
-vida (fase 26), eventos, planificador y mensajes (fase 27) y la interfaz del
-editor (fase 23). Congelan el comportamiento antes de cambiar el runtime en
-las fases siguientes.
+vida (fase 26), eventos, planificador y mensajes (fase 27), variables, listas
+y funciones (fase 28) y la interfaz del editor (fase 23). Congelan el
+comportamiento antes de cambiar el runtime en las fases siguientes.
 
 Todo es texto: los patrones de las capturas son hashes SHA-256 y
 volcados de estado, no imagenes. `recursos/ascii.png` no se versiona y
@@ -87,6 +87,8 @@ La suite de la fase 24 comprueba el modelo nuevo sin tocar el runtime:
 |---|---|
 | `logic3\base.logic` | fixture LOGIC2 con un mapa, un codigo y `PROYECTO` |
 | `logic3\esperado.logic3` | LOGIC3 canonico que debe producir la conversion |
+| `logic3\tipos_entrada.logic3` | entrada no canonica con variables tipadas y listas con valores |
+| `logic3\tipos.logic3` | LOGIC3 canonico con `007` convertido a `7` y textos escapados |
 | `logic3\esperado-export.log` | LOGIC2 canonico de la exportacion de emergencia |
 
 Casos:
@@ -103,6 +105,7 @@ Casos:
 | `version` | una version futura se rechaza |
 | `sin_fin` | un archivo sin `FIN` se rechaza |
 | `extension` | secciones desconocidas se ignoran y el CRC es opcional |
+| `tipos` | ida y vuelta tipada: valores canonizados y listas con elementos (fase 28) |
 
 Cada caso ejecuta el editor en una carpeta temporal con `--captura` y
 `--volcar`, y comprueba los campos `logic3=`, `escenas=`, `objetos=`,
@@ -117,8 +120,8 @@ git diff pruebas\logic3
 
 ## VM resumible y lobo 3 (`vm.ps1`)
 
-La suite de la fase 25 congela la VM resumible y el compilador en modo VM.
-Los casos viven en `pruebas\vm`:
+La suite de las fases 25 y 28 congela la VM resumible, el compilador en modo
+VM y las variables, listas, funciones y textos. Los casos viven en `pruebas\vm`:
 
 | Archivo | Que es |
 |---|---|
@@ -140,6 +143,14 @@ Casos:
 | `mensajes` | `mensaje` y `clonar` anotan en la memoria compartida |
 | `alias` | `enviar`, `enviar_a`, `reiniciar_escena` y `detener_*` con y sin parentesis (fase 27) |
 | `pila` | recursion sin fin: el tope de 32 frames corta con error sin colgar el fotograma |
+| `fase28_builtins` | `abs`, `min`, `max`, `limitar`, `redondear` y `aleatorio` determinista |
+| `fase28_textos` | textos por valor, comparacion `==`/`!=` y corte a 64 bytes |
+| `fase28_lista100` | lista de 100 elementos: se ordena y se recorre con `para cada` |
+| `fase28_bucles` | `romper`, `continuar`, `repetir` y `para cada` |
+| `fase28_sino` | cadena de `sino si` cerrada con un solo `fin` |
+| `fase28_funcion` | llamada directa y alias `llamar`, con dos parametros |
+| `fase28_juego` | criterio de salida: inventario, vidas, puntuacion y `danar(cantidad)` |
+| `fase28_datos` | un `.logic3` con semillas de variables y lista alimenta la VM |
 
 La traza de `--vm-test` es una linea por fotograma:
 

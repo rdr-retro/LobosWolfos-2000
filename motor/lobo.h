@@ -105,6 +105,18 @@
 #define LOBO_LISTAS_MAX    32   /* listas por programa */
 #define LOBO_LISTA_ELEMENTOS_MAX 256 /* elementos por lista */
 #define LOBO_ENTIDAD_NOMBRES_MAX 64 /* nombres de variable de entidad por programa */
+#define LOBO_TEXTOS_RUNTIME_MAX 32 /* textos creados en ejecucion (unir) */
+
+/* Un texto en la pila es un handle con este bit alto. Asi los textos
+ * conviven con los enteros en la misma pila de 32 bits: el indice son los
+ * 30 bits bajos (0..63 del programa, 64..95 del runtime). */
+#define LOBO_TEXTO_MARCA 0x40000000
+
+/* Codigos de tipo en las tablas del programa (0 = entero por defecto). */
+#define LOBO_TIPO_ENTERO   0
+#define LOBO_TIPO_BOOLEANO 1
+#define LOBO_TIPO_TEXTO    2
+#define LOBO_TIPO_LISTA    3
 
 /* Campos de `mi` (fase 26). Las variables de la entidad empiezan en
  * LOBO_MI_VARS para compartir un solo espacio de indices. */
@@ -202,7 +214,18 @@ enum {
     /* --- fase 27: mensajes y escena --- */
     LOBO_ENVIAR,         /* valor: indice del texto; a todos los objetos */
     LOBO_ENVIAR_A,       /* valor: indice del texto; destino en `extra` */
-    LOBO_REINICIAR_ESCENA /* reinicia la escena actual */
+    LOBO_REINICIAR_ESCENA, /* reinicia la escena actual */
+    /* --- fase 28: built-ins numericos y de texto --- */
+    LOBO_ABS,           /* abs(x): valor absoluto de x */
+    LOBO_MIN,           /* min(a, b): minimo de a y b */
+    LOBO_MAX,           /* max(a, b): maximo de a y b */
+    LOBO_LIMITAR,       /* limitar(v, lo, hi): v limitado a [lo, hi] */
+    LOBO_REDONDEAR,     /* redondear(v): entero mas cercano a v */
+    LOBO_ALEATORIO,     /* aleatorio(a, b): valor entre a y b (determinista) */
+    LOBO_TEXTO,         /* valor: indice de texto en el programa */
+    LOBO_LONGITUD,      /* longitud(texto): cantidad de caracteres */
+    LOBO_LETRA,         /* letra(texto, i): codigo del caracter i */
+    LOBO_UNIR           /* unir(a, b): concatena dos textos */
 };
 
 /* Una instruccion del programa compilado. */
@@ -233,6 +256,12 @@ typedef struct LoboPrograma {
      * mi.variable("nombre") (fase 26). */
     char entidad_nombres[LOBO_ENTIDAD_NOMBRES_MAX][LOBO_TEXTO_MAX];
     int num_ent_nombres;
+    /* Tipos declarados (fase 28). 0 = entero, para no cambiar el valor
+     * por defecto de los programas antiguos. */
+    char tipos_locales[LOBO_LOCALES_MAX];
+    char tipos_globales[LOBO_GLOBALES_MAX];
+    char tipos_entidad[LOBO_ENTIDAD_VARS_MAX];
+    char tipos_listas[LOBO_LISTAS_MAX];
 } LoboPrograma;
 
 /* Una lista de enteros con capacidad fija. */
@@ -250,6 +279,10 @@ typedef struct LoboMemoria {
     char mensaje[LOBO_TEXTO_MAX];
     int mensajes; /* mensajes emitidos en total */
     int clones;   /* clones pedidos en total */
+    /* Textos construidos por unir(). Se comparten entre scripts como
+     * las listas; sus handles empiezan en LOBO_TEXTOS_MAX. */
+    char textos[LOBO_TEXTOS_RUNTIME_MAX][LOBO_TEXTO_MAX];
+    int num_textos;
 } LoboMemoria;
 
 /* Lo que el juego expone a los scripts: posicion del sprite, velocidad,
@@ -303,6 +336,7 @@ typedef struct LoboMaquina {
     int detener_todo;/* 1 si el script pidio detener la escena */
     int clones;      /* clones pedidos por este script */
     int entidad;     /* id de la entidad actual (0 si no es de una) */
+    int semilla;     /* semilla de aleatorio(), propia de cada script */
 } LoboMaquina;
 
 /* Prepara un programa para compilar (buffer a cero). */

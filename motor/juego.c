@@ -496,6 +496,43 @@ static void estado_preparar(LoboEstado *st) {
     st->ctx_eventos = &g_eventos;
 }
 
+/* Siembra la memoria de la VM con las variables y listas globales del
+ * LOGIC3 (fase 28). Los indices son los de declaracion: la lista "inventario"
+ * primera del archivo es la lista 0 que ve el script. Las variables de texto
+ * se registran como textos runtime, detras de los textos del programa. */
+static void memoria_preparar_l3(void) {
+    int i, j;
+    memset(&g_memoria, 0, sizeof(g_memoria));
+    for (i = 0; i < g_l3.num_textos && i < LOBO_TEXTOS_RUNTIME_MAX; i++) {
+        strncpy(g_memoria.textos[i], g_l3.textos[i], LOBO_TEXTO_MAX - 1);
+        g_memoria.textos[i][LOBO_TEXTO_MAX - 1] = 0;
+    }
+    g_memoria.num_textos = g_l3.num_textos;
+    for (i = 0; i < g_l3.num_variables && i < LOBO_GLOBALES_MAX; i++) {
+        const MotorL3Variable *v = &g_l3.variables[i];
+        int valor = v->valor;
+        if (v->tipo == 2 && valor >= 0 && valor < g_l3.num_textos)
+            valor = (int)(LOBO_TEXTO_MARCA |
+                          (unsigned)(LOBO_TEXTOS_MAX + valor));
+        g_memoria.globales[i] = valor;
+    }
+    for (i = 0; i < g_l3.num_listas && i < LOBO_LISTAS_MAX; i++) {
+        const MotorL3Lista *li = &g_l3.listas[i];
+        LoboLista *dst = &g_memoria.listas[i];
+        int n = li->num_elementos;
+        if (n > li->capacidad) n = li->capacidad;
+        if (n > LOBO_LISTA_ELEMENTOS_MAX) n = LOBO_LISTA_ELEMENTOS_MAX;
+        for (j = 0; j < n; j++) {
+            int valor = li->elementos[j];
+            if (li->tipo == 2 && valor >= 0 && valor < g_l3.num_textos)
+                valor = (int)(LOBO_TEXTO_MARCA |
+                              (unsigned)(LOBO_TEXTOS_MAX + valor));
+            dst->elem[j] = valor;
+        }
+        dst->n = n;
+    }
+}
+
 /* Compila todos los scripts del LOGIC3 en el planificador de eventos:
  * cada bloque codigo.lobo trae su propio texto y su propia maquina,
  * todos contra la misma memoria compartida (globales, listas y mensajes
@@ -503,7 +540,7 @@ static void estado_preparar(LoboEstado *st) {
 static void scripts_preparar_l3(int con_ventana) {
     int i, n;
 
-    memset(&g_memoria, 0, sizeof(g_memoria));
+    memoria_preparar_l3();
     eventos_iniciar(&g_eventos, g_traza, g_eventos_traza);
     g_eventos.escena = g_l3.escena_inicial;
     n = eventos_cargar(&g_eventos, &g_l3, remapear_programa_cb, NULL);

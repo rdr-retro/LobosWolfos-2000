@@ -31,6 +31,7 @@
 #define L3_EVENTOS_FUNCION_MAX  64
 #define L3_FUNCIONES_MAX        64
 #define L3_LISTAS_MAX           32
+#define L3_LISTA_ELEMENTOS_MAX 256 /* elementos por lista (como en lobo) */
 #define L3_BLOQUES_MAX       16384
 #define L3_CAMPOS_MAX            8
 #define L3_RANURAS_MAX           4
@@ -77,9 +78,15 @@ typedef struct {
     int linea;
 } Variable3;
 
+/* Lista global con tipo de elemento y valores iniciales. Los elementos
+ * se reservan dinamicamente, igual que objetos y bloques, para no inflar
+ * el modelo que el editor tiene en la pila. */
 typedef struct {
     char nombre[L3_NOMBRE_MAX];
     int capacidad;
+    int tipo;                        /* L3_TIPO_* del elemento */
+    int num_elementos;
+    char (*elementos)[L3_TEXTO_MAX]; /* valores en texto, ya decodificados */
     int linea;
 } Lista3;
 

@@ -1,0 +1,17 @@
+# Fase 28: juego de prueba con inventario, vidas, puntuacion y danar().
+lista inventario
+anadir(inventario, 7)
+anadir(inventario, 3)
+anadir(inventario, 9)
+ordenar(inventario)
+entero vidas = 3
+entero puntuacion = 0
+funcion danar(cantidad)
+    retornar cantidad
+fin
+para cada objeto en inventario
+    puntuacion = puntuacion + objeto
+fin
+vidas = vidas - danar(1)
+x = puntuacion
+y = vidas * 100 + largo(inventario)

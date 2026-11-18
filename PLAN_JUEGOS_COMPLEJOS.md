@@ -964,6 +964,30 @@ cortan a 64 bytes.
 **Criterio de salida:** un juego de prueba con inventario, vidas, puntuacion
 y una funcion `danar(cantidad)` compila y corre.
 
+**Estado:** hecha (18-11-2026).
+
+**Entregado:** `motor/lobo.c` y `motor/lobo.h` con tipos `entero`, `booleano`,
+`texto` y `lista`; ambitos global (`$`), de entidad (`@`), local y de parametro;
+funciones de usuario con `retornar` y llamada directa `f(args)` ademas de
+`llamar("f", args)`; `sino si`, `romper`, `continuar`, `repetir` y `para cada`;
+y los built-ins `aleatorio`, `abs`, `min`, `max`, `limitar`, `redondear`,
+`longitud`, `unir` y `letra`. Los textos son handles con marca alta
+`0x40000000` y se cortan a 64 bytes; los runtime creados por `unir()` usan 32
+huecos compartidos. `aleatorio` usa un LCG con semilla 12345 por maquina y
+`redondear` es identidad porque no hay coma flotante. `src/logic3.c` y
+`src/logic3.h` guardan variables tipadas y listas con elementos iniciales
+(`variable global "n" entero v`, `lista global "n" 8 entero 3 1 2`), con
+valores canonicos y un tokenizador de 288 tokens por linea. El lector del
+runtime y `motor/juego.c` siembran la memoria de la VM con esos valores antes
+de compilar los scripts, manteniendo el orden de declaracion. La recursión
+infinita sigue cortandose a 32 frames sin colgar (`pruebas/vm/pila`). La suite
+`pruebas/vm.ps1` anade ocho casos (`fase28_builtins`, `fase28_textos`,
+`fase28_lista100`, `fase28_bucles`, `fase28_sino`, `fase28_funcion`,
+`fase28_juego` y `fase28_datos`) y `pruebas/logic3.ps1` anade `tipos`.
+`build.bat prueba` pasa las seis suites (12/12, 11/11, 18/18, 4/4, 8/8 y 8/8).
+El criterio de salida queda congelado en `pruebas/vm/fase28_juego.esperado`
+(x 19, y 203) y la gramatica completa esta en el README.
+
 ### Fase 29 - Colisiones, tiles con flags y fisica basica
 
 **Objetivo:** que el mundo interactue.
