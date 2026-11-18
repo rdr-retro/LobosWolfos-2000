@@ -1,0 +1,14 @@
+-- Mapa de la fase 29 para fisica: plataforma one-way bajo el lobo.
+return {
+    version = 2,
+    tile_size = 20,
+    tiles_dir = "tiles",
+    tiles = {
+        { x = 0, y = 4, image = "tile_3.png", w = 20, h = 20, one_way = true },
+        { x = 1, y = 4, image = "tile_3.png", w = 20, h = 20, one_way = true },
+        { x = 2, y = 4, image = "tile_3.png", w = 20, h = 20, one_way = true },
+        { x = 0, y = 8, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 1, y = 8, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 2, y = 8, image = "tile_1.png", w = 20, h = 20, solido = true }
+    }
+}

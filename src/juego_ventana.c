@@ -15,6 +15,7 @@
  * ========================================================================== */
 #include "app.h"
 #include "../motor/motor.h"
+#include "../motor/colisiones.h"
 
 #define JV_ANCHO      640
 #define JV_ALTO       480
@@ -84,15 +85,7 @@ static void jv_sprite_crear(void) {
 /* ------------------------------------------------------------------ */
 
 static int jv_choca_con_mapa_wh(int x, int y, int w, int h) {
-    const MotorMapa *m = &g_mapa;
-    int i;
-    for (i = 0; i < m->num_celdas; i++) {
-        const MotorCelda *c = &m->celdas[i];
-        if (motor_aabb(x, y, w, h,
-                       c->x * m->lado, c->y * m->lado, m->lado, m->lado))
-            return 1;
-    }
-    return 0;
+    return mapa_caja_bloqueada(&g_mapa, x, y, w, h, 0);
 }
 
 static int jv_choca_con_mapa(int x, int y) {
@@ -260,7 +253,9 @@ static void jv_renderizar(void) {
 
     motor_limpiar(g_fb, jv_ancho, jv_alto, 0x00101826u);
     motor_mapa_render(g_fb, jv_ancho, jv_alto, cam_x, cam_y, m->lado,
-                      m->celdas, m->num_celdas, m->imagenes);
+                      m->dibujo_celdas ? m->dibujo_celdas : m->celdas,
+                      m->dibujo_celdas ? m->num_dibujo : m->num_celdas,
+                      m->imagenes);
     motor_blit_alpha(g_fb, jv_ancho, jv_alto,
                      g_x - cam_x, g_y - cam_y,
                      g_sprite, JV_SPRITE_LADO, JV_SPRITE_LADO);

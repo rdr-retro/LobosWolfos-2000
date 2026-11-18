@@ -31,6 +31,7 @@
 #include "logic3_motor.h"
 #include "entidades.h"
 #include "eventos.h"
+#include "colisiones.h"
 
 #define VENTANA_ANCHO 640
 #define VENTANA_ALTO  480
@@ -61,6 +62,11 @@ static int g_fps = FPS_OBJETIVO;
 static int g_limitar = 1;
 static int g_velocidad = SPRITE_VEL;
 static u32 g_fondo = 0x00000000u;
+/* Fisica de la fase 29. Cero por defecto para no alterar el juego clasico;
+ * los scripts la activan escribiendo vel_x, vel_y o gravedad. */
+static struct {
+    int vel_x, vel_y, gravedad, rebote, friccion, en_suelo;
+} g_fisica;
 
 static void aplicar_ajustes(void) {
     g_ancho = activo_proyecto_ancho();
@@ -191,15 +197,7 @@ static void sprite_crear(void) {
 /* ------------------------------------------------------------------ */
 
 static int choca_con_mapa_wh(int x, int y, int w, int h) {
-    const MotorMapa *m = &juego.mapa;
-    int i;
-    for (i = 0; i < m->num_celdas; i++) {
-        const MotorCelda *c = &m->celdas[i];
-        if (motor_aabb(x, y, w, h,
-                       c->x * m->lado, c->y * m->lado, m->lado, m->lado))
-            return 1;
-    }
-    return 0;
+    return mapa_caja_bloqueada(&juego.mapa, x, y, w, h, 0);
 }
 
 static int choca_con_mapa(int x, int y) {
@@ -266,6 +264,7 @@ static char g_mensaje_ini[LOBO_TEXTO_MAX]; /* --mensaje: mensaje inicial */
 
 /* --- entidades (fase 26) --- */
 static int g_entidades; /* --entidades: detalle en traza y volcado */
+static int g_colisiones_traza; /* --colisiones: triggers, dano y suelo */
 static char g_ent_nombres[LOBO_ENTIDAD_NOMBRES_MAX][LOBO_TEXTO_MAX];
 static int g_num_ent_nombres;
 
@@ -402,6 +401,28 @@ static int ent_mover(void *ctx, int id, int x, int y) {
     return entidad_mover(id, x, y);
 }
 
+/* --- colisiones entidad-entidad (fase 29) --- */
+static int col_toca(void *ctx, int entidad, int id) {
+    (void)ctx;
+    return entidades_tocan(entidad, id);
+}
+
+static int col_toca_tag(void *ctx, int entidad, const char *tag) {
+    (void)ctx;
+    return entidades_toca_tag(entidad, tag);
+}
+
+static int col_distancia(void *ctx, int entidad, int id) {
+    (void)ctx;
+    return entidades_distancia(entidad, id);
+}
+
+static int col_caja_de(void *ctx, int entidad, int id, int indice) {
+    (void)ctx;
+    (void)entidad; /* la caja consultada es la del id, no la del emisor */
+    return entidades_caja(id, indice);
+}
+
 
 /* Instancia los objetos de una escena (arranque y reinicio de escena). */
 static void instanciar_escena(int escena) {
@@ -494,6 +515,48 @@ static void estado_preparar(LoboEstado *st) {
     st->enviar = eventos_enviar_cb;
     st->reiniciar_escena = eventos_reiniciar_cb;
     st->ctx_eventos = &g_eventos;
+    st->toca = col_toca;
+    st->toca_tag = col_toca_tag;
+    st->distancia = col_distancia;
+    st->caja_de = col_caja_de;
+    st->ctx_colisiones = NULL;
+    st->vel_x = g_fisica.vel_x;
+    st->vel_y = g_fisica.vel_y;
+    st->gravedad = g_fisica.gravedad;
+    st->rebote = g_fisica.rebote;
+    st->friccion = g_fisica.friccion;
+    st->en_suelo = g_fisica.en_suelo;
+}
+
+/* Copia la fisica escrita por los scripts al estado global y da un paso
+ * contra el mapa. Solo se activa si el script ha tocado alguna variable de
+ * fisica; con todo a cero el comportamiento clasico queda intacto. */
+static void aplicar_fisica(LoboEstado *st) {
+    int activo;
+    g_fisica.vel_x = st->vel_x;
+    g_fisica.vel_y = st->vel_y;
+    g_fisica.gravedad = st->gravedad;
+    g_fisica.rebote = st->rebote;
+    g_fisica.friccion = st->friccion;
+    g_fisica.en_suelo = st->en_suelo;
+    activo = g_fisica.vel_x || g_fisica.vel_y || g_fisica.gravedad ||
+             g_fisica.rebote || g_fisica.friccion;
+    if (activo) {
+        /* La caja del lobo es el sprite de 24 pixeles. */
+        g_fisica.en_suelo = fisica_paso(&juego.mapa, &juego.x, &juego.y,
+                                        SPRITE_LADO, SPRITE_LADO,
+                                        &g_fisica.vel_x, &g_fisica.vel_y,
+                                        g_fisica.gravedad, g_fisica.rebote,
+                                        g_fisica.friccion,
+                                        &g_fisica.en_suelo);
+        st->vel_x = g_fisica.vel_x;
+        st->vel_y = g_fisica.vel_y;
+        st->en_suelo = g_fisica.en_suelo;
+        /* El paso ha movido al lobo en el mundo: devuelve la posicion al
+         * estado que leen los scripts y la traza. */
+        st->x = juego.x;
+        st->y = juego.y;
+    }
 }
 
 /* Siembra la memoria de la VM con las variables y listas globales del
@@ -588,6 +651,16 @@ static void traza_fotograma(void) {
     int i, n;
     if (!g_traza) return;
     fprintf(g_traza, "%d %d %d\n", juego.fotograma, juego.x, juego.y);
+    if (g_colisiones_traza) {
+        int tx = juego.x, ty = juego.y;
+        int trig[8], ntrig = 0, dano = 0, k;
+        colisionar_caja_mapa(&juego.mapa, &tx, &ty, SPRITE_LADO, SPRITE_LADO,
+                             0, 0, trig, 8, &ntrig, &dano);
+        fprintf(g_traza, "colision suelo %d dano %d triggers",
+                g_fisica.en_suelo, dano);
+        for (k = 0; k < ntrig; k++) fprintf(g_traza, " %d", trig[k]);
+        fprintf(g_traza, "\n");
+    }
     if (!g_modo_vm) return;
     n = eventos_num(&g_eventos);
     fprintf(g_traza, "vm");
@@ -637,6 +710,7 @@ static void actualizar(void) {
         entidades_fin_fotograma();
         if (g_eventos.reiniciar) reiniciar_escena_juego(&st);
         if (eventos_cerrar(&g_eventos)) juego.corriendo = 0;
+        aplicar_fisica(&st);
         juego.x = st.x;
         juego.y = st.y;
         return;
@@ -653,6 +727,7 @@ static void actualizar(void) {
                           &g_scripts[i].maquina);
             if (g_scripts[i].maquina.cerrar) juego.corriendo = 0;
         }
+        aplicar_fisica(&st);
         juego.x = st.x;
         juego.y = st.y;
         return;
@@ -771,7 +846,9 @@ static void renderizar(void) {
 
     motor_limpiar(juego.fb, juego.fb_ancho, juego.fb_alto, 0x00101826u);
     motor_mapa_render(juego.fb, juego.fb_ancho, juego.fb_alto,
-                      cam_x, cam_y, m->lado, m->celdas, m->num_celdas,
+                      cam_x, cam_y, m->lado,
+                      m->dibujo_celdas ? m->dibujo_celdas : m->celdas,
+                      m->dibujo_celdas ? m->num_dibujo : m->num_celdas,
                       m->imagenes);
     motor_blit_alpha(juego.fb, juego.fb_ancho, juego.fb_alto,
                      juego.x - cam_x, juego.y - cam_y,
@@ -1069,6 +1146,7 @@ static int correr_vm_test(const char *ruta_lobo, const char *ruta_traza,
     st.memoria = &memoria;
     st.choca = lobo_choca;
     st.ctx = NULL;
+    memset(&g_fisica, 0, sizeof(g_fisica));
 
     fprintf(traza, "vm: %d instrucciones %d funciones\n", programa.largo,
             programa.num_funciones);
@@ -1080,6 +1158,20 @@ static int correr_vm_test(const char *ruta_lobo, const char *ruta_traza,
                 "clones %d err %d\n",
                 i + 1, maquina.estado, maquina.pc, maquina.np, maquina.espera,
                 st.x, st.y, memoria.mensajes, memoria.clones, maquina.agotado);
+        if (st.vel_x || st.vel_y || st.gravedad || st.rebote || st.friccion) {
+            /* El banco de pruebas no tiene mapa: la caja parte de (16,16)
+             * en cada fotograma para que la traza sea reproducible. */
+            st.x = 16;
+            st.y = 16;
+            int suelo;
+            suelo = fisica_paso(NULL, &st.x, &st.y, SPRITE_LADO, SPRITE_LADO,
+                                &st.vel_x, &st.vel_y, st.gravedad,
+                                st.rebote, st.friccion, &st.en_suelo);
+            fprintf(traza,
+                    "fisica %d vel_x %d vel_y %d x %d y %d suelo %d\n",
+                    i + 1, st.vel_x, st.vel_y, st.x, st.y, suelo);
+            (void)suelo;
+        }
     }
     fclose(traza);
     lobo_programa_liberar(&programa);
@@ -1091,7 +1183,8 @@ static int correr_vm_test(const char *ruta_lobo, const char *ruta_traza,
 /* ------------------------------------------------------------------ */
 
 static int opcion(const char *nombre) {
-    return strcmp(nombre, "--logica") == 0 || strcmp(nombre, "--mapa") == 0 ||
+    return strcmp(nombre, "--colisiones") == 0 ||
+           strcmp(nombre, "--logica") == 0 || strcmp(nombre, "--mapa") == 0 ||
            strcmp(nombre, "--logic3") == 0 || strcmp(nombre, "--vm-test") == 0 ||
            strcmp(nombre, "--captura") == 0 ||
            strcmp(nombre, "--volcar") == 0 ||
@@ -1114,6 +1207,10 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     for (i = 1; i < __argc; i++) {
         if (strcmp(__argv[i], "--entidades") == 0) {
             g_entidades = 1;
+            continue;
+        }
+        if (strcmp(__argv[i], "--colisiones") == 0) {
+            g_colisiones_traza = 1;
             continue;
         }
         if (strcmp(__argv[i], "--eventos") == 0) {

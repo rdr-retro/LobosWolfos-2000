@@ -806,6 +806,24 @@ el motor ya compila.
    seis suites (12/12, 11/11, 18/18, 4/4, 8/8 y 8/8) y la gramática completa
    queda documentada en `README.md`.
 
+- **18-11-2026 (fase 29, colisiones, tiles con flags y fisica basica)** -
+    `motor/colisiones.c` y `motor/colisiones.h` anaden el barrido de cajas por
+    ejes contra el mapa, triggers, dano, plataformas `one_way`, gravedad,
+    rebote y friccion, sin tocar el contrato de 12 bytes de `MotorCelda` que
+    lee el render en ensamblador. `MotorMapa` guarda `version`, `flags`,
+    `tags` y una lista `dibujo_celdas` sin huecos; `motor/activo.c` lee el
+    `.mav` v2 y sigue aceptando el v1 como todo solido. `motor/juego.c`
+    conecta la fisica con los scripts, la vista previa del editor usa la
+    misma sonda y `src/mapa.c` conserva los flags al abrir/guardar y oculta
+    los huecos en rejilla y miniatura. `motor/lobo.c` incorpora las variables
+    `vel_x`, `vel_y`, `gravedad`, `rebote`, `friccion` y `en_suelo` en indices
+    altos y los built-ins de VM `toca`, `toca_tag`, `distancia` y `caja_de`;
+    los opcodes se anaden al final del enum. La nueva suite
+    `pruebas/colisiones.ps1` congela cuatro casos: mapa v2 con pared, hueco,
+    trigger y dano, aterrizaje en one-way, colisiones entre entidades y
+    fisica en VM. `build.bat prueba` pasa las siete suites (12/12, 11/11,
+    18/18, 4/4, 8/8, 4/4 y 8/8). El puerto Rust del kernel queda pendiente.
+
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,

@@ -148,7 +148,15 @@
 #define LOBO_VAR_Y         1
 #define LOBO_VAR_VEL       2
 #define LOBO_VAR_FOTOGRAMA 3
-#define LOBO_VAR_LOCALES   4 /* primera local */
+#define LOBO_VAR_LOCALES   4 /* primera local (4..67, como siempre) */
+/* Fisica de la fase 29: indices altos para no desplazar las locales ni
+ * cambiar el formato de los programas ya compilados. */
+#define LOBO_VAR_VEL_X     1000
+#define LOBO_VAR_VEL_Y     1001
+#define LOBO_VAR_GRAVEDAD  1002
+#define LOBO_VAR_REBOTE    1003
+#define LOBO_VAR_FRICCION  1004
+#define LOBO_VAR_EN_SUELO  1005
 
 /* Bits de tecla de LOBO_TECLA: los mismos MOTOR_ENT_* de motor.h. */
 #define LOBO_TECLA_IZQUIERDA 0x01
@@ -225,7 +233,12 @@ enum {
     LOBO_TEXTO,         /* valor: indice de texto en el programa */
     LOBO_LONGITUD,      /* longitud(texto): cantidad de caracteres */
     LOBO_LETRA,         /* letra(texto, i): codigo del caracter i */
-    LOBO_UNIR           /* unir(a, b): concatena dos textos */
+    LOBO_UNIR,          /* unir(a, b): concatena dos textos */
+    /* --- fase 29: colisiones y fisica --- */
+    LOBO_TOCA,          /* toca(id): 1 si la entidad actual toca a id */
+    LOBO_TOCA_TAG,      /* valor: indice de texto; toca_tag("tag") */
+    LOBO_DISTANCIA,     /* distancia(id): distancia Manhattan al id */
+    LOBO_CAJA_DE        /* caja_de(id, i): x/y/w/h de otra entidad */
 };
 
 /* Una instruccion del programa compilado. */
@@ -311,6 +324,13 @@ typedef struct LoboEstado {
                    const char *texto);
     void (*reiniciar_escena)(void *ctx);
     void *ctx_eventos;
+    /* --- colisiones y fisica (fase 29) --- */
+    int (*toca)(void *ctx, int entidad, int id);
+    int (*toca_tag)(void *ctx, int entidad, const char *tag);
+    int (*distancia)(void *ctx, int entidad, int id);
+    int (*caja_de)(void *ctx, int entidad, int id, int indice);
+    void *ctx_colisiones;
+    int vel_x, vel_y, gravedad, rebote, friccion, en_suelo;
 } LoboEstado;
 
 /* Un frame de llamada: donde volver y el estado que hay que restaurar. */

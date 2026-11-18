@@ -146,6 +146,14 @@ int entidades_avisos(void);
 int entidades_siguiente_id(void);
 int entidades_creadas(void);
 
+/* Colisiones entidad-entidad de la fase 29. `entidades_toca_tag` busca
+ * cualquier entidad viva con ese tag que toque a `id`. */
+int entidades_tocan(int a, int b);
+int entidades_toca_tag(int id, const char *tag);
+int entidades_distancia(int a, int b);
+/* indice: 0=x, 1=y, 2=ancho, 3=alto. */
+int entidades_caja(int id, int indice);
+
 /* Anota un aviso (tag desconocido, limite tocado...). */
 void entidades_aviso(void);
 

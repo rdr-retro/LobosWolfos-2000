@@ -92,15 +92,16 @@ También se puede compilar desde PowerShell:
 
 ## Pruebas
 
-`build.bat prueba` compila el editor y pasa las seis suites:
+`build.bat prueba` compila el editor y pasa las siete suites:
 
 ```bat
-build.bat prueba              conformidad + logic3 + vm + entidades + eventos + regresion
+build.bat prueba              conformidad + logic3 + vm + entidades + eventos + colisiones + regresion
 build.bat prueba conformidad  solo el lenguaje lobo
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
 build.bat prueba entidades    solo entidades, escenas y ciclo de vida
 build.bat prueba eventos      solo eventos, planificador y mensajes
+build.bat prueba colisiones   solo colisiones, flags y fisica
 build.bat prueba regresion    solo la interfaz del editor
 build.bat prueba actualizar   reescribe los patrones (revisar el diff)
 ```
@@ -433,6 +434,38 @@ textos runtime de 64 bytes (63 caracteres útiles), y 1000000 de pasos por
 fotograma. El modo clásico
 (LOGIC2) conserva sus topes antiguos.
 
+#### Colisiones y física (fase 29)
+
+Los mapas `.mav` pueden declarar `version = 2` y, en cada celda, los flags
+`solido`, `hueco`, `trigger`, `one_way`, `dano` y `tag = "nombre"`. El lector
+sigue aceptando `version = 1` (todo sólido); en el v2, una celda sin claves de
+flags se considera sólida. `hueco` no colisiona ni se dibuja, `trigger` y
+`dano` se anotan sin bloquear, y `one_way` solo bloquea al bajar desde arriba.
+El editor conserva estos campos al abrir y guardar.
+
+El motor añade las variables de física `vel_x`, `vel_y`, `gravedad`, `rebote`,
+`friccion` y `en_suelo` (índices altos, para no desplazar las locales
+clásicas). Con `rebote` en porcentaje y `friccion` restando unidades por
+fotograma, un `codigo.lobo` de LOGIC3 puede mover al lobo con gravedad sin
+tocar el movimiento por teclado de los proyectos antiguos:
+
+```lobo
+gravedad = 2
+si tecla_derecha
+vel_x = 3
+fin
+```
+
+Los built-ins de colisiones para scripts de entidades son `toca(id)`,
+`toca_tag("nombre")` (el tag es el nombre del objeto), `distancia(id)`
+(distancia Manhattan) y `caja_de(id, i)` con `i` de 0 a 3 para x, y, ancho y
+alto. Devuelven 0/-1 cuando no hay entidad. Los opcodes nuevos se añadieron
+al final del enum y el puerto Rust del kernel aún no los implementa.
+
+`game.exe --colisiones` añade a la traza una línea con `suelo`, `dano` y los
+índices de celdas trigger tocadas, sin cambiar el formato de las trazas
+antiguas.
+
 ## Uso
 
 Ejecuta `LobosWolfos2000.exe`. Al arrancar crea junto al ejecutable las
@@ -599,7 +632,10 @@ volver a entrar se conserva el mapa que ya está en memoria. Los mapas se guarda
 por defecto en la carpeta `maps` junto al ejecutable (la misma que usa el
 selector de items del gestor de lógica). Las imágenes se buscan primero en la
 carpeta `tiles_dir` junto al `.mav`, después junto al propio `.mav` y por
-último en la carpeta `tiles` del ejecutable.
+último en la carpeta `tiles` del ejecutable. Los mapas guardados declaran
+`version = 2` y conservan los flags de colisión de cada celda (`solido`,
+`hueco`, `trigger`, `one_way`, `dano`, `tag`); los tiles `hueco` no se dibujan
+en la rejilla ni en la miniatura del selector de items.
 
 El menú **COMPILE** de la barra de menús, entre **AJUSTES DEL PROYECTO** y
 **AYUDA**, ofrece **Compilar para BIOS** y **Compilar para Windows**. Ambos toman

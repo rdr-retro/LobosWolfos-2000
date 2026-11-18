@@ -38,14 +38,29 @@ typedef struct MotorCelda {
     int imagen;
 } MotorCelda;
 
+/* Flags por celda del .mav v2 (fase 29). Las celdas del v1 se leen como
+ * SOLIDO. Los arrays paralelos viven en MotorMapa para no cambiar el tamano
+ * de MotorCelda, que el render en ensamblador da por bueno. */
+#define MOTOR_CELDA_SOLIDO  0x01
+#define MOTOR_CELDA_HUECO   0x02
+#define MOTOR_CELDA_TRIGGER 0x04
+#define MOTOR_CELDA_ONE_WAY 0x08
+#define MOTOR_CELDA_DANO    0x10
+#define MOTOR_CELDA_TAG_LEN 32
+
 /* Mapa cargado de un .mav: rejilla de celdas con su lado y las imagenes
- * deduplicadas que usan. */
+ * deduplicadas que usan. `version` es la del archivo (1 o 2). */
 typedef struct MotorMapa {
     MotorCelda *celdas;
     int num_celdas;
     int lado; /* tile_size del .mav */
     MotorImagen *imagenes; /* array deduplicado por nombre de tile */
     int num_imagenes;
+    int version;
+    unsigned char *flags;  /* MOTOR_CELDA_* por celda */
+    char *tags;            /* MOTOR_CELDA_TAG_LEN bytes por celda */
+    MotorCelda *dibujo_celdas; /* celdas visibles (sin HUECO) para el render */
+    int num_dibujo;
 } MotorMapa;
 
 /* Entrada empaquetada en bits: una sola u32 con el estado del teclado. */

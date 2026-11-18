@@ -430,6 +430,12 @@ static int lobo_nombre_conocido(const char *nombre, int *es_tecla,
     if (lobo_igual(nombre, "y")) return LOBO_VAR_Y;
     if (lobo_igual(nombre, "vel")) return LOBO_VAR_VEL;
     if (lobo_igual(nombre, "fotograma")) return LOBO_VAR_FOTOGRAMA;
+    if (lobo_igual(nombre, "vel_x")) return LOBO_VAR_VEL_X;
+    if (lobo_igual(nombre, "vel_y")) return LOBO_VAR_VEL_Y;
+    if (lobo_igual(nombre, "gravedad")) return LOBO_VAR_GRAVEDAD;
+    if (lobo_igual(nombre, "rebote")) return LOBO_VAR_REBOTE;
+    if (lobo_igual(nombre, "friccion")) return LOBO_VAR_FRICCION;
+    if (lobo_igual(nombre, "en_suelo")) return LOBO_VAR_EN_SUELO;
     *es_tecla = 1;
     if (lobo_igual(nombre, "tecla_izquierda")) return LOBO_TECLA_IZQUIERDA;
     if (lobo_igual(nombre, "tecla_derecha")) return LOBO_TECLA_DERECHA;
@@ -977,6 +983,51 @@ static int lobo_llamada_unir(LoboParser *p) {
     return lobo_emitir(p, LOBO_UNIR, 0);
 }
 
+/* Built-ins de colisiones de la fase 29. toca() y distancia() toman un id
+ * de entidad; caja_de() toma id e indice (0=x, 1=y, 2=w, 3=h). */
+static int lobo_llamada_colision_uno(LoboParser *p, int op,
+                                     const char *nombre) {
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar la funcion");
+        (void)nombre;
+        return 0;
+    }
+    return lobo_emitir(p, op, 0);
+}
+
+static int lobo_llamada_caja_de(LoboParser *p) {
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ",")) {
+        lobo_error(p, "caja_de necesita id e indice");
+        return 0;
+    }
+    if (!lobo_expresion(p)) return 0;
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar caja_de");
+        return 0;
+    }
+    return lobo_emitir(p, LOBO_CAJA_DE, 0);
+}
+
+/* toca_tag("nombre"): el tag se guarda como texto del programa, igual que
+ * en crear() o enviar_a(). */
+static int lobo_llamada_toca_tag(LoboParser *p) {
+    int idx;
+    if (lobo_fin_tokens(p) || p->tokens[p->pos].tipo != TOK_TXT) {
+        lobo_error(p, "toca_tag necesita el tag entre comillas");
+        return 0;
+    }
+    idx = lobo_agregar_texto(p, p->tokens[p->pos].texto);
+    if (idx < 0) return 0;
+    p->pos++;
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar toca_tag");
+        return 0;
+    }
+    return lobo_emitir2(p, LOBO_TOCA_TAG, idx, 0);
+}
+
 /* Primario: numero, variable, tecla, texto, lista o llamada. */
 static int lobo_primario(LoboParser *p) {
     if (lobo_fin_tokens(p)) {
@@ -1058,6 +1109,23 @@ static int lobo_primario(LoboParser *p) {
                 lobo_igual(lobo_mirar_op(p), "(")) {
                 p->pos++;
                 return lobo_llamada_unir(p);
+            }
+            /* Colisiones y fisica (fase 29). */
+            if ((lobo_igual(nombre, "toca") || lobo_igual(nombre, "distancia")) &&
+                lobo_mirar_op(p) && lobo_igual(lobo_mirar_op(p), "(")) {
+                int op = lobo_igual(nombre, "toca") ? LOBO_TOCA : LOBO_DISTANCIA;
+                p->pos++;
+                return lobo_llamada_colision_uno(p, op, nombre);
+            }
+            if (lobo_igual(nombre, "toca_tag") && lobo_mirar_op(p) &&
+                lobo_igual(lobo_mirar_op(p), "(")) {
+                p->pos++;
+                return lobo_llamada_toca_tag(p);
+            }
+            if (lobo_igual(nombre, "caja_de") && lobo_mirar_op(p) &&
+                lobo_igual(lobo_mirar_op(p), "(")) {
+                p->pos++;
+                return lobo_llamada_caja_de(p);
             }
             /* Llamada directa: danar(5) equivale a llamar("danar", 5). */
             {
@@ -2206,6 +2274,12 @@ static int lobo_leer_var(const LoboEstado *st, const LoboMaquina *m,
     case LOBO_VAR_Y: return st->y;
     case LOBO_VAR_VEL: return st->vel;
     case LOBO_VAR_FOTOGRAMA: return st->fotograma;
+    case LOBO_VAR_VEL_X: return st->vel_x;
+    case LOBO_VAR_VEL_Y: return st->vel_y;
+    case LOBO_VAR_GRAVEDAD: return st->gravedad;
+    case LOBO_VAR_REBOTE: return st->rebote;
+    case LOBO_VAR_FRICCION: return st->friccion;
+    case LOBO_VAR_EN_SUELO: return st->en_suelo;
     default:
         if (var >= LOBO_VAR_LOCALES && var < LOBO_VAR_LOCALES + LOBO_LOCALES_MAX)
             return m->locales[var - LOBO_VAR_LOCALES];
@@ -2221,6 +2295,12 @@ static void lobo_escribir_var(LoboEstado *st, LoboMaquina *m, int var,
     case LOBO_VAR_Y: st->y = valor; return;
     case LOBO_VAR_VEL: st->vel = valor; return;
     case LOBO_VAR_FOTOGRAMA: st->fotograma = valor; return;
+    case LOBO_VAR_VEL_X: st->vel_x = valor; return;
+    case LOBO_VAR_VEL_Y: st->vel_y = valor; return;
+    case LOBO_VAR_GRAVEDAD: st->gravedad = valor; return;
+    case LOBO_VAR_REBOTE: st->rebote = valor; return;
+    case LOBO_VAR_FRICCION: st->friccion = valor; return;
+    case LOBO_VAR_EN_SUELO: st->en_suelo = valor; return;
     default:
         if (var >= LOBO_VAR_LOCALES && var < LOBO_VAR_LOCALES + LOBO_LOCALES_MAX)
             m->locales[var - LOBO_VAR_LOCALES] = valor;
@@ -2982,6 +3062,47 @@ int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
                          lobo_texto_unir(estado->memoria, ta, tb), &ok);
         break;
     }
+    /* --- fase 29: colisiones --- */
+    case LOBO_TOCA:
+        a = lobo_vm_pop(maquina, &ok);
+        if (ok)
+            lobo_vm_push(maquina,
+                         (estado->toca && maquina->entidad > 0 &&
+                          estado->toca(estado->ctx_colisiones,
+                                       maquina->entidad, a))
+                             ? 1 : 0, &ok);
+        break;
+    case LOBO_TOCA_TAG: {
+        const char *tag = NULL;
+        if (in->valor >= 0 && in->valor < programa->num_textos)
+            tag = programa->textos[in->valor];
+        if (ok)
+            lobo_vm_push(maquina,
+                         (tag && estado->toca_tag && maquina->entidad > 0 &&
+                          estado->toca_tag(estado->ctx_colisiones,
+                                           maquina->entidad, tag))
+                             ? 1 : 0, &ok);
+        break;
+    }
+    case LOBO_DISTANCIA:
+        a = lobo_vm_pop(maquina, &ok);
+        if (ok)
+            lobo_vm_push(maquina,
+                         (estado->distancia && maquina->entidad > 0)
+                             ? estado->distancia(estado->ctx_colisiones,
+                                                 maquina->entidad, a)
+                             : -1, &ok);
+        break;
+    case LOBO_CAJA_DE:
+        b = lobo_vm_pop(maquina, &ok); /* indice: 0=x 1=y 2=w 3=h */
+        a = lobo_vm_pop(maquina, &ok); /* id */
+        if (ok)
+            lobo_vm_push(maquina,
+                         (estado->caja_de && maquina->entidad > 0)
+                             ? estado->caja_de(estado->ctx_colisiones,
+                                               maquina->entidad, a, b)
+                             : 0, &ok);
+        break;
     default:
         ok = 0;
         break;

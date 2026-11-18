@@ -462,7 +462,23 @@ void motor_mapa_liberar(MotorMapa *m) {
     for (i = 0; i < m->num_imagenes; i++) free(m->imagenes[i].pixeles);
     free(m->imagenes);
     free(m->celdas);
+    free(m->flags);
+    free(m->tags);
+    free(m->dibujo_celdas);
     memset(m, 0, sizeof(*m));
+}
+
+/* Lee un flag booleano de un bloque de celda. Si no aparece, devuelve 0 y
+ * `encontrado` queda a 0 para que el llamador decida el valor por defecto. */
+static int extraer_flag_lua(const char *texto, const char *clave,
+                            int *encontrado) {
+    const char *p = strstr(texto, clave);
+    *encontrado = 0;
+    if (!p) return 0;
+    p += strlen(clave);
+    while (*p == ' ' || *p == '=' || *p == '\t' || *p == ':') p++;
+    *encontrado = 1;
+    return (*p == '1' || *p == 't' || *p == 'T');
 }
 
 int activo_cargar_mapa(const char *ruta, MotorMapa *m) {
@@ -470,6 +486,7 @@ int activo_cargar_mapa(const char *ruta, MotorMapa *m) {
     int largo = 0;
     const char *p;
     int lado = 32;
+    int version = 1;
     char tiles_dir[128];
     char nombres[MOTOR_IMAGENES_MAX][64];
     int num_nombres = 0;
@@ -483,13 +500,22 @@ int activo_cargar_mapa(const char *ruta, MotorMapa *m) {
     if (lado < 4) lado = 4;
     if (lado > 256) lado = 256;
     m->lado = lado;
+    if (extraer_entero_lua(contenido, "version", &version) &&
+        version >= 2 && version <= 999)
+        m->version = version;
+    else
+        m->version = 1;
     if (!extraer_cadena_lua(contenido, "tiles_dir", tiles_dir, sizeof(tiles_dir)))
         strcpy(tiles_dir, "tiles");
     if (!tiles_dir[0]) strcpy(tiles_dir, "tiles");
 
     m->celdas = (MotorCelda *)calloc(MOTOR_CELDAS_MAX, sizeof(MotorCelda));
     m->imagenes = (MotorImagen *)calloc(MOTOR_IMAGENES_MAX, sizeof(MotorImagen));
-    if (!m->celdas || !m->imagenes) { motor_mapa_liberar(m); free(contenido); return 0; }
+    m->flags = (unsigned char *)calloc(MOTOR_CELDAS_MAX, 1);
+    m->tags = (char *)calloc(MOTOR_CELDAS_MAX, MOTOR_CELDA_TAG_LEN);
+    if (!m->celdas || !m->imagenes || !m->flags || !m->tags) {
+        motor_mapa_liberar(m); free(contenido); return 0;
+    }
 
     p = strstr(contenido, "tiles");
     if (p) p = strstr(p, "{");
@@ -520,11 +546,48 @@ int activo_cargar_mapa(const char *ruta, MotorMapa *m) {
                     num_nombres++;
                 }
                 if (idx >= 0 && m->num_celdas < MOTOR_CELDAS_MAX) {
-                    MotorCelda *c = &m->celdas[m->num_celdas++];
+                    int i = m->num_celdas++;
+                    MotorCelda *c = &m->celdas[i];
+                    int hay, valor;
+                    unsigned char f = 0;
+                    char tag[MOTOR_CELDA_TAG_LEN];
+
                     c->x = x;
                     c->y = y;
                     c->imagen = idx;
                     if (m->num_imagenes <= idx) m->num_imagenes = idx + 1;
+
+                    /* v1: todas solidas. v2: si el bloque no trae ninguna
+                     * clave de flag se mantiene el solido por defecto; si
+                     * trae alguna, solo se activa lo que diga. */
+                    if (m->version < 2) {
+                        f = MOTOR_CELDA_SOLIDO;
+                    } else {
+                        int explicito = 0;
+                        valor = extraer_flag_lua(bloque, "solido", &hay);
+                        if (hay) { explicito = 1; if (valor) f |= MOTOR_CELDA_SOLIDO; }
+                        valor = extraer_flag_lua(bloque, "hueco", &hay);
+                        if (hay) { explicito = 1; if (valor) f |= MOTOR_CELDA_HUECO; }
+                        valor = extraer_flag_lua(bloque, "trigger", &hay);
+                        if (hay) { explicito = 1; if (valor) f |= MOTOR_CELDA_TRIGGER; }
+                        valor = extraer_flag_lua(bloque, "one_way", &hay);
+                        if (hay) { explicito = 1; if (valor) f |= MOTOR_CELDA_ONE_WAY; }
+                        valor = extraer_flag_lua(bloque, "dano", &hay);
+                        if (hay) { explicito = 1; if (valor) f |= MOTOR_CELDA_DANO; }
+                        if (extraer_cadena_lua(bloque, "tag", tag, sizeof(tag)))
+                            explicito = 1;
+                        if (!explicito) f = MOTOR_CELDA_SOLIDO;
+                        /* one_way implica solido: bloquea al bajar desde
+                         * arriba, pero deja pasar al subir. */
+                        if (f & MOTOR_CELDA_ONE_WAY) f |= MOTOR_CELDA_SOLIDO;
+                        /* Una celda hueca no colisiona ni se dibuja, aunque
+                         * el archivo tambien diga solido. */
+                        if (f & MOTOR_CELDA_HUECO) f &= ~MOTOR_CELDA_SOLIDO;
+                        if (extraer_cadena_lua(bloque, "tag", tag, sizeof(tag)))
+                            memcpy(m->tags + (size_t)i * MOTOR_CELDA_TAG_LEN,
+                                   tag, MOTOR_CELDA_TAG_LEN);
+                    }
+                    m->flags[i] = f;
                 }
             }
         }
@@ -542,6 +605,20 @@ int activo_cargar_mapa(const char *ruta, MotorMapa *m) {
                                 ruta_img, sizeof(ruta_img)))
                 cargar_imagen(ruta_img, &m->imagenes[i]);
             /* si falla, pixeles queda NULL: la celda se dibuja hueca */
+        }
+    }
+
+    /* Lista de celdas dibujables: las marcadas como hueco no se stampan.
+     * El render en ensamblador recibe esta lista ya filtrada. */
+    if (m->num_celdas > 0) {
+        m->dibujo_celdas = (MotorCelda *)malloc((size_t)m->num_celdas *
+                                                sizeof(MotorCelda));
+        if (m->dibujo_celdas) {
+            int i;
+            for (i = 0; i < m->num_celdas; i++) {
+                if (m->flags[i] & MOTOR_CELDA_HUECO) continue;
+                m->dibujo_celdas[m->num_dibujo++] = m->celdas[i];
+            }
         }
     }
     return 1;

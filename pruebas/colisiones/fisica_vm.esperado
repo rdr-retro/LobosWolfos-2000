@@ -1,0 +1,13 @@
+vm: 8 instrucciones 0 funciones
+vm 1 estado 2 pc 8 np 0 espera 0 x 16 y 16 msg 0 clones 0 err 0
+fisica 1 vel_x 4 vel_y 2 x 16 y 16 suelo 0
+vm 2 estado 2 pc 8 np 0 espera 0 x 16 y 16 msg 0 clones 0 err 0
+fisica 2 vel_x 4 vel_y 4 x 16 y 16 suelo 0
+vm 3 estado 2 pc 8 np 0 espera 0 x 16 y 16 msg 0 clones 0 err 0
+fisica 3 vel_x 4 vel_y 6 x 16 y 16 suelo 0
+vm 4 estado 2 pc 8 np 0 espera 0 x 16 y 16 msg 0 clones 0 err 0
+fisica 4 vel_x 4 vel_y 8 x 16 y 16 suelo 0
+vm 5 estado 2 pc 8 np 0 espera 0 x 16 y 16 msg 0 clones 0 err 0
+fisica 5 vel_x 4 vel_y 10 x 16 y 16 suelo 0
+vm 6 estado 2 pc 8 np 0 espera 0 x 16 y 16 msg 0 clones 0 err 0
+fisica 6 vel_x 4 vel_y 12 x 16 y 16 suelo 0

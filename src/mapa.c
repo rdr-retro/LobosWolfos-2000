@@ -130,6 +130,7 @@ void mapa_colocar(int celda_x, int celda_y, int tile) {
         if (g.mapa.num >= MAX_CELDAS) return;
         destino = &g.mapa.celdas[g.mapa.num++];
         memset(destino, 0, sizeof(*destino));
+        destino->flags = MAPA_CELDA_SOLIDO; /* por defecto, como el .mav v1 */
         destino->x = celda_x;
         destino->y = celda_y;
     } else if (destino->pixeles) {
@@ -256,6 +257,9 @@ void mapa_dibujar(void) {
         int x = ox + t->x * lado;
         int y = oy + t->y * lado;
         int x0, y0, x1, y1;
+        /* Las celdas huecas no se estampan: son solo colision (o ausencia
+         * de ella) y deben quedar invisibles en el editor y en el juego. */
+        if (t->flags & MAPA_CELDA_HUECO) continue;
         if (x >= derecha || y >= abajo || x + lado <= tr.x || y + lado <= tr.y) continue;
         x0 = x > tr.x ? x : tr.x;
         y0 = y > tr.y ? y : tr.y;
@@ -530,7 +534,7 @@ static int comparar_celdas(const void *a, const void *b) {
 
 int mapa_guardar(const char *ruta) {
     char *texto;
-    size_t capacidad = (size_t)g.mapa.num * 160 + 512;
+    size_t capacidad = (size_t)g.mapa.num * 640 + 512;
     size_t usado = 0;
     int i;
     TileMapa *copia;
@@ -542,7 +546,7 @@ int mapa_guardar(const char *ruta) {
         "-- Mapa guardado con LobosWolfos 2000\n"
         "-- Love2D: local mapa = dofile(\"mapa.mav\")\n"
         "return {\n"
-        "    version = 1,\n"
+        "    version = 2,\n"
         "    tile_size = %d,\n"
         "    tiles_dir = \"tiles\",\n"
         "    tiles = {\n", mapa_lado());
@@ -554,14 +558,34 @@ int mapa_guardar(const char *ruta) {
     qsort(copia, (size_t)g.mapa.num, sizeof(TileMapa), comparar_celdas);
 
     for (i = 0; i < g.mapa.num; i++) {
-        char imagen[256];
-        escapar_lua(copia[i].imagen, imagen, sizeof(imagen));
+        char imagen[256], tag[128], extra[384];
+        const TileMapa *t = &copia[i];
+        escapar_lua(t->imagen, imagen, sizeof(imagen));
+        escapar_lua(t->tag, tag, sizeof(tag));
+        extra[0] = '\0';
+        /* El solido es el valor por defecto en el v2: solo se escribe para
+         * dejar constancia cuando el mapa se edita a mano. */
+        if (t->flags & MAPA_CELDA_SOLIDO)
+            strcat(extra, ", solido = true");
+        if (t->flags & MAPA_CELDA_HUECO)
+            strcat(extra, ", hueco = true");
+        if (t->flags & MAPA_CELDA_TRIGGER)
+            strcat(extra, ", trigger = true");
+        if (t->flags & MAPA_CELDA_ONE_WAY)
+            strcat(extra, ", one_way = true");
+        if (t->flags & MAPA_CELDA_DANO)
+            strcat(extra, ", dano = true");
+        if (t->tag[0]) {
+            strcat(extra, ", tag = \"");
+            strcat(extra, tag);
+            strcat(extra, "\"");
+        }
         usado += (size_t)sprintf(texto + usado,
-            "        { x = %d, y = %d, image = \"%s\", w = %d, h = %d },\n",
-            copia[i].x, copia[i].y, imagen,
-            copia[i].ancho > 0 ? copia[i].ancho : 0,
-            copia[i].alto > 0 ? copia[i].alto : 0);
-        if (usado + 256 > capacidad) break;
+            "        { x = %d, y = %d, image = \"%s\", w = %d, h = %d%s },\n",
+            t->x, t->y, imagen,
+            t->ancho > 0 ? t->ancho : 0,
+            t->alto > 0 ? t->alto : 0, extra);
+        if (usado + 512 > capacidad) break;
     }
     free(copia);
     usado += (size_t)sprintf(texto + usado, "    },\n}\n");
@@ -572,6 +596,17 @@ int mapa_guardar(const char *ruta) {
     }
     free(texto);
     return 1;
+}
+
+/* Lee un flag booleano sencillo (true/false, 1/0, si/no). */
+static int extraer_bool_lua(const char *texto, const char *clave) {
+    const char *pos = strstr(texto, clave);
+    if (!pos) return 0;
+    pos += strlen(clave);
+    while (*pos == ' ' || *pos == '=' || *pos == '\t' || *pos == ':') pos++;
+    if (*pos == '1' || *pos == 't' || *pos == 'T' || *pos == 's' || *pos == 'S')
+        return 1;
+    return 0;
 }
 
 static int extraer_entero_lua(const char *texto, const char *clave, int *salida) {
@@ -684,7 +719,39 @@ static int mapa_parsear(const char *ruta, Mapa *m) {
                         if (m->num < MAX_CELDAS) {
                             char ruta_img[MAX_PATH];
                             TileMapa *t = &m->celdas[m->num++];
+                            int version = 1;
                             memset(t, 0, sizeof(*t));
+                            extraer_entero_lua(contenido, "version", &version);
+                            t->flags = MAPA_CELDA_SOLIDO;
+                            if (version >= 2) {
+                                /* En el v2, si el bloque trae claves de flag,
+                                 * solo cuenta lo que pone; si no trae ninguna,
+                                 * se mantiene el solido por defecto. */
+                                int explicito = 0;
+                                if (strstr(bloque, "solido")) explicito = 1;
+                                if (strstr(bloque, "hueco")) explicito = 1;
+                                if (strstr(bloque, "trigger")) explicito = 1;
+                                if (strstr(bloque, "one_way")) explicito = 1;
+                                if (strstr(bloque, "dano")) explicito = 1;
+                                if (strstr(bloque, "tag")) explicito = 1;
+                                if (explicito) t->flags = 0;
+                                if (strstr(bloque, "one_way"))
+                                    t->flags |= MAPA_CELDA_SOLIDO;
+                                if (extraer_bool_lua(bloque, "solido"))
+                                    t->flags |= MAPA_CELDA_SOLIDO;
+                                if (extraer_bool_lua(bloque, "hueco"))
+                                    t->flags |= MAPA_CELDA_HUECO;
+                                if (extraer_bool_lua(bloque, "trigger"))
+                                    t->flags |= MAPA_CELDA_TRIGGER;
+                                if (extraer_bool_lua(bloque, "one_way"))
+                                    t->flags |= MAPA_CELDA_ONE_WAY;
+                                if (extraer_bool_lua(bloque, "dano"))
+                                    t->flags |= MAPA_CELDA_DANO;
+                                if (t->flags & MAPA_CELDA_HUECO)
+                                    t->flags &= ~MAPA_CELDA_SOLIDO;
+                                extraer_cadena_lua(bloque, "tag", t->tag,
+                                                   sizeof(t->tag));
+                            }
                             t->x = x;
                             t->y = y;
                             recortar_texto(t->imagen, imagen, sizeof(t->imagen));
@@ -823,8 +890,10 @@ u32 *mapa_miniatura(const char *ruta, int caja_w, int caja_h,
 
     for (i = 0; i < m->num; i++) {
         TileMapa *t = &m->celdas[i];
-        int cx = t->x - minx;
-        int cy = t->y - miny;
+        int cx, cy;
+        if (t->flags & MAPA_CELDA_HUECO) continue;
+        cx = t->x - minx;
+        cy = t->y - miny;
         int x0 = (int)((long long)cx * lado * tw / world_w);
         int x1 = (int)((long long)(cx + 1) * lado * tw / world_w);
         int y0 = (int)((long long)cy * lado * th / world_h);

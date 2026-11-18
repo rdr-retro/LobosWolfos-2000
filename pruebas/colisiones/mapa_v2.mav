@@ -1,0 +1,36 @@
+-- Mapa de la fase 29: suelo, pared, hueco, trigger, one-way y dano.
+return {
+    version = 2,
+    tile_size = 20,
+    tiles_dir = "tiles",
+    tiles = {
+        { x = 2, y = 1, image = "tile_1.png", w = 20, h = 20, solido = false, hueco = true },
+        { x = 4, y = 1, image = "tile_2.png", w = 20, h = 20, solido = false, trigger = true, tag = "puerta" },
+        { x = 7, y = 2, image = "tile_3.png", w = 20, h = 20, one_way = true },
+        { x = 8, y = 1, image = "tile_1.png", w = 20, h = 20, solido = false, dano = true },
+        { x = 10, y = 0, image = "tile_2.png", w = 20, h = 20, solido = true },
+        { x = 10, y = 1, image = "tile_2.png", w = 20, h = 20, solido = true },
+        { x = 10, y = 2, image = "tile_2.png", w = 20, h = 20, solido = true },
+        { x = 0, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 1, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 2, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 3, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 4, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 5, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 6, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 7, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 8, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 9, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 10, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 11, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 12, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 13, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 14, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 15, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 16, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 17, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 18, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 19, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true },
+        { x = 20, y = 3, image = "tile_1.png", w = 20, h = 20, solido = true }
+    }
+}

@@ -1012,6 +1012,25 @@ El criterio de salida queda congelado en `pruebas/vm/fase28_juego.esperado`
 **Criterio de salida:** un nivel con suelo, plataformas one-way y una puerta
 trigger funciona; el jugador no atraviesa paredes y si atraviesa triggers.
 
+**Estado:** hecha (18-11-2026).
+
+**Entregado:** `motor/colisiones.c` y `motor/colisiones.h` resuelven el barrido
+de cajas por ejes, triggers, dano, plataformas one-way, gravedad, rebote y
+friccion sin cambiar el layout de 12 bytes de `MotorCelda`. `motor/motor.h`
+amplia `MotorMapa` con `version`, `flags`, `tags` y `dibujo_celdas`;
+`motor/activo.c` lee el `.mav` v2 y mantiene el v1 como todo solido, con
+valor por defecto solido si una celda v2 no trae claves de flag.
+`motor/juego.c` conecta la fisica con los scripts, anade `--colisiones` a la
+traza y usa la misma sonda en la vista previa del editor. `src/mapa.c`
+guarda y lee los flags y oculta los huecos en rejilla y miniatura.
+`motor/lobo.c` anade las variables de fisica en indices altos (1000..1005) y
+los built-ins de VM `toca`, `toca_tag`, `distancia` y `caja_de`, con opcodes
+al final del enum. `pruebas/colisiones.ps1` congela cuatro casos: mapa v2 con
+pared, hueco, trigger y dano, aterrizaje en one-way, colisiones entre
+entidades y fisica en VM. `build.bat prueba` pasa las siete suites (12/12,
+11/11, 18/18, 4/4, 8/8, 4/4 y 8/8). El puerto Rust del kernel queda
+pendiente para una fase posterior.
+
 ### Fase 30 - Render de objetos, trajes, animacion y capas
 
 **Objetivo:** que el juego se vea como un juego.

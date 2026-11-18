@@ -366,3 +366,55 @@ int entidades_siguiente_id(void) { return g_siguiente_id; }
 int entidades_creadas(void) { return g_creadas; }
 
 void entidades_aviso(void) { g_avisos++; }
+
+/* Caja util de una entidad, con tamano minimo 1 como en el render. */
+static int caja_de_entidad(const Entidad *e, int *x, int *y, int *w, int *h) {
+    if (!e || !e->usada) return 0;
+    *x = e->x;
+    *y = e->y;
+    *w = e->w > 0 ? e->w : 1;
+    *h = e->h > 0 ? e->h : 1;
+    return 1;
+}
+
+int entidades_tocan(int a, int b) {
+    int ax, ay, aw, ah, bx, by, bw, bh;
+    if (!caja_de_entidad(entidad_buscar(a), &ax, &ay, &aw, &ah)) return 0;
+    if (!caja_de_entidad(entidad_buscar(b), &bx, &by, &bw, &bh)) return 0;
+    return ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah;
+}
+
+int entidades_toca_tag(int id, const char *tag) {
+    int tipo, i;
+    if (!tag || !tag[0]) return 0;
+    tipo = entidades_tipo_por_tag(tag);
+    if (tipo < 0) return 0;
+    for (i = 0; i < ENTIDADES_MAX; i++) {
+        Entidad *e = &g_entidades[i];
+        if (!e->usada || e->id == id || e->tipo != tipo) continue;
+        if (entidades_tocan(id, e->id)) return 1;
+    }
+    return 0;
+}
+
+int entidades_distancia(int a, int b) {
+    Entidad *ea = entidad_buscar(a);
+    Entidad *eb = entidad_buscar(b);
+    int dx, dy;
+    if (!ea || !eb) return -1;
+    dx = ea->x - eb->x;
+    dy = ea->y - eb->y;
+    if (dx < 0) dx = -dx;
+    if (dy < 0) dy = -dy;
+    return dx + dy; /* distancia Manhattan, sin coma flotante */
+}
+
+int entidades_caja(int id, int indice) {
+    int x, y, w, h;
+    if (!caja_de_entidad(entidad_buscar(id), &x, &y, &w, &h)) return 0;
+    if (indice == 0) return x;
+    if (indice == 1) return y;
+    if (indice == 2) return w;
+    if (indice == 3) return h;
+    return 0;
+}

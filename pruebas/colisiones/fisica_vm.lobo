@@ -1,0 +1,5 @@
+# Fase 29: velocidad, gravedad, rebote y friccion en la VM.
+vel_x = 5
+gravedad = 2
+rebote = 50
+friccion = 1

@@ -642,11 +642,22 @@ typedef struct TileGuardado {
     u32 *pixeles;
 } TileGuardado;
 
+/* Flags de colision de la fase 29. Se guardan en el .mav v2 y se conservan
+ * al abrir y volver a guardar el mapa en el editor. */
+#define MAPA_CELDA_SOLIDO   0x01
+#define MAPA_CELDA_HUECO    0x02
+#define MAPA_CELDA_TRIGGER  0x04
+#define MAPA_CELDA_ONE_WAY  0x08
+#define MAPA_CELDA_DANO     0x10
+#define MAPA_CELDA_TAG_LEN  32
+
 typedef struct TileMapa {
     int x, y;
     char imagen[64];
     int ancho, alto;
     u32 *pixeles;
+    int flags;                       /* MAPA_CELDA_* */
+    char tag[MAPA_CELDA_TAG_LEN];    /* etiqueta para toca_tag / busquedas */
 } TileMapa;
 
 typedef struct Mapa {

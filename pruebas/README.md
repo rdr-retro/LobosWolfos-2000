@@ -1,9 +1,10 @@
 # Pruebas de LobosWolfos 2000
 
-Seis suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
+Siete suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
 (fase 24), la VM resumible y lobo 3 (fase 25), entidades, escenas y ciclo de
 vida (fase 26), eventos, planificador y mensajes (fase 27), variables, listas
-y funciones (fase 28) y la interfaz del editor (fase 23). Congelan el
+y funciones (fase 28), colisiones, flags y fisica (fase 29) y la interfaz
+del editor (fase 23). Congelan el
 comportamiento antes de cambiar el runtime en las fases siguientes.
 
 Todo es texto: los patrones de las capturas son hashes SHA-256 y
@@ -13,12 +14,13 @@ las pruebas no lo necesitan.
 ## Comandos
 
 ```bat
-build.bat prueba              compila y pasa las seis suites
+build.bat prueba              compila y pasa las siete suites
 build.bat prueba conformidad  solo la suite del lenguaje
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
 build.bat prueba entidades    solo entidades, escenas y ciclo de vida
 build.bat prueba eventos      solo eventos, planificador y mensajes
+build.bat prueba colisiones   solo colisiones, flags y fisica
 build.bat prueba regresion    solo la regresion del editor
 build.bat prueba actualizar   reescribe los patrones con el estado actual
 ```
@@ -32,6 +34,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\logic3.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\vm.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\entidades.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\eventos.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\colisiones.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\regresion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\linea_base.ps1
 ```
@@ -267,6 +270,25 @@ queda en espera: es la prueba de que la cola no se pierde. El volcado anade
 Para anadir un caso: crear el `.logic3` y su `.args`, ejecutar
 `pruebas\eventos.ps1 -Filtro <nombre>* -Actualizar`, revisar la traza y el
 volcado a mano, y volver a pasarla sin `-Actualizar` y con `-Repetir`.
+
+## Colisiones, flags y fisica (`colisiones.ps1`)
+
+Los casos viven en `pruebas\colisiones`. Un `.args` manda los argumentos de
+`game.exe` (normalmente un `.mav` v2 o un `.logic3`) y la suite anade
+`--captura` y `--traza`; si ademas existe un `.lobo`, se ejecuta con
+`--vm-test`. Se compara `<nombre>.esperado` y, cuando existe,
+`<nombre>.bmp.sha256`.
+
+| Caso | Que comprueba |
+|---|---|
+| `mapa_v2` | pared que no se atraviesa, hueco que no bloquea, trigger y dano senalados en la traza |
+| `fisica_oneway` | caida con gravedad y aterrizaje estable sobre una plataforma one-way |
+| `entidades_toca` | `toca`, `toca_tag`, `distancia` y `caja_de` entre dos entidades |
+| `fisica_vm` | vel_x, gravedad, rebote y friccion en la VM de `--vm-test` |
+
+`game.exe --colisiones` anade a la traza una linea `colision suelo N dano N
+triggers ...`; es la unica suite que usa esa flag, asi que las demas trazas
+quedan intactas.
 
 ## Regresion del editor (`regresion.ps1`)
 
