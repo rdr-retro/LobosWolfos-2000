@@ -1,0 +1,13 @@
+LOGIC3
+version 3
+proyecto "Render capas" 640 480 1 60 3 001E5A2E
+carpetas "tiles" "maps" "trajes" "sonidos"
+camara objetivo 0 limites 0 0 640 480 zoom 1
+escena 1 "Escena 1" "render.mav" 640 480 001E5A2E
+objeto 1 "Fondo" escena 1 x 200 y 100 w 16 h 16 visible 1 capa 0
+  traje 0 unico.png 16 16 0 0
+objeto 2 "Medio" escena 1 x 200 y 100 w 16 h 16 visible 1 capa 5
+  traje 0 tira.png 64 16 0 0 cuadros 4 cuadro_ancho 16 cuadro_alto 16 velocidad 2
+objeto 3 "Arriba" escena 1 x 200 y 100 w 16 h 16 visible 1 capa 15
+  traje 0 girado.png 16 16 0 0 flip_x 1 rotacion 90
+FIN

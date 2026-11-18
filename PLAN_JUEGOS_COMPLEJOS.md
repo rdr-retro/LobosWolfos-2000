@@ -1051,6 +1051,16 @@ pendiente para una fase posterior.
 **Criterio de salida:** una captura 640x480 muestra mapa, tres objetos con
 trajes distintos, animacion y orden de capas correcto.
 
+**Estado (18-11-2026): completada.** `motor/render.c` implementa la cache de
+trajes, la animacion por tira y lista, pivote, flip, rotacion, zoom entero,
+culling y presupuesto de blits. `motor/juego.c` pinta por capa e id y expone
+camara y sondas `--pixel`. El editor escribe las extensiones sin alterar los
+CRC antiguos y crea `trajes/` al arrancar. `pruebas/render.ps1` congela cuatro
+casos (capas, animacion inicio/fin y zoom 2) con trazas y hashes BMP. El
+kernel anade `Canvas::blit_ex` y camara equivalente para el sprite; no tiene
+entidades LOGIC3, por lo que el espejo queda en la primitiva y la camara.
+`build.bat prueba` pasa las ocho suites.
+
 ### Fase 31 - Vista Estudio: escenario, objetos e inspector
 
 **Objetivo:** la nueva interfaz de proyecto.

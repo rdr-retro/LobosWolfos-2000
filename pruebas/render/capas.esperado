@@ -1,0 +1,15 @@
+vm: 0 scripts
+1 16 16
+vm
+render entidad 1 traje 0 cuadro 0 capa 0 x 200 y 100
+render entidad 2 traje 0 cuadro 0 capa 5 x 200 y 100
+render entidad 3 traje 0 cuadro 0 capa 15 x 200 y 100
+render cam 0 0 zoom 1 blits 3 recortados 0 saltados 0
+2 16 16
+vm
+render entidad 1 traje 0 cuadro 0 capa 0 x 200 y 100
+render entidad 2 traje 0 cuadro 0 capa 5 x 200 y 100
+render entidad 3 traje 0 cuadro 0 capa 15 x 200 y 100
+render cam 0 0 zoom 1 blits 3 recortados 0 saltados 0
+pixel 200 110 FFE0C040
+pixel 205 110 FF3060D0

@@ -1,10 +1,11 @@
 # Pruebas de LobosWolfos 2000
 
-Siete suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
+Ocho suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
 (fase 24), la VM resumible y lobo 3 (fase 25), entidades, escenas y ciclo de
 vida (fase 26), eventos, planificador y mensajes (fase 27), variables, listas
-y funciones (fase 28), colisiones, flags y fisica (fase 29) y la interfaz
-del editor (fase 23). Congelan el
+y funciones (fase 28), colisiones, flags y fisica (fase 29), render de
+trajes, animacion, capas y camara (fase 30) y la interfaz del editor
+(fase 23). Congelan el
 comportamiento antes de cambiar el runtime en las fases siguientes.
 
 Todo es texto: los patrones de las capturas son hashes SHA-256 y
@@ -14,13 +15,14 @@ las pruebas no lo necesitan.
 ## Comandos
 
 ```bat
-build.bat prueba              compila y pasa las siete suites
+build.bat prueba              compila y pasa las ocho suites
 build.bat prueba conformidad  solo la suite del lenguaje
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
 build.bat prueba entidades    solo entidades, escenas y ciclo de vida
 build.bat prueba eventos      solo eventos, planificador y mensajes
 build.bat prueba colisiones   solo colisiones, flags y fisica
+build.bat prueba render       solo trajes, animacion, capas y camara
 build.bat prueba regresion    solo la regresion del editor
 build.bat prueba actualizar   reescribe los patrones con el estado actual
 ```
@@ -35,6 +37,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\vm.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\entidades.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\eventos.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\colisiones.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\render.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\render.ps1 -Repetir
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\regresion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\linea_base.ps1
 ```
@@ -289,6 +293,28 @@ Los casos viven en `pruebas\colisiones`. Un `.args` manda los argumentos de
 `game.exe --colisiones` anade a la traza una linea `colision suelo N dano N
 triggers ...`; es la unica suite que usa esa flag, asi que las demas trazas
 quedan intactas.
+
+## Render de trajes, animacion, capas y camara (`render.ps1`)
+
+Los casos viven en `pruebas\render`. Cada `.args` abre un `.logic3` con
+`--render` y sonda pixeles con `--pixel`; la suite anade `--captura` y
+`--traza`, y compara `<nombre>.esperado` y `<nombre>.bmp.sha256`. El mapa
+`render.mav`, los tiles y los PNG de `trajes/` son parte del patron.
+
+| Caso | Que comprueba |
+|---|---|
+| `capas` | tres objetos en capas 0, 5 y 15; el de arriba tapa al de abajo en el mismo punto |
+| `animacion_inicio` | tres trajes distintos en el primer cuadro de la tira |
+| `animacion_fin` | avance de cuadros por tiempo y color del cuadro 3 despues de ocho fotogramas |
+| `zoom2` | camara con zoom 2, mapa ampliado y sprite con pivote en x,y |
+
+La traza congela el orden por capa e id, el cuadro elegido, la camara y el
+presupuesto de blits. Las sondas comprueban colores exactos: `FFE0C040` en la
+capa 0, `FF3060D0` en la capa 5, `FFC040C0` en el cuadro 3 y `FFE04040` al
+zoom 2. `-Repetir` ejecuta cada caso dos veces para detectar render no
+determinista. Para anadir un caso: crear el `.logic3`, sus PNG y su `.args`,
+ejecutar `pruebas\render.ps1 -Filtro <nombre>* -Actualizar`, revisar la traza
+y el hash a mano, y volver a pasarla sin `-Actualizar` y con `-Repetir`.
 
 ## Regresion del editor (`regresion.ps1`)
 

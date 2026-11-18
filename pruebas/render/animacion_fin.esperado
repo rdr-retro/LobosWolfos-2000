@@ -1,0 +1,52 @@
+vm: 0 scripts
+1 16 16
+vm
+render entidad 1 traje 0 cuadro 0 capa 0 x 100 y 100
+render entidad 2 traje 0 cuadro 0 capa 5 x 200 y 100
+render entidad 3 traje 0 cuadro 0 capa 10 x 300 y 100
+render cam 0 0 zoom 1 blits 3 recortados 0 saltados 0
+2 16 16
+vm
+render entidad 1 traje 0 cuadro 0 capa 0 x 100 y 100
+render entidad 2 traje 0 cuadro 0 capa 5 x 200 y 100
+render entidad 3 traje 0 cuadro 0 capa 10 x 300 y 100
+render cam 0 0 zoom 1 blits 3 recortados 0 saltados 0
+3 16 16
+vm
+render entidad 1 traje 0 cuadro 0 capa 0 x 100 y 100
+render entidad 2 traje 0 cuadro 1 capa 5 x 200 y 100
+render entidad 3 traje 0 cuadro 0 capa 10 x 300 y 100
+render cam 0 0 zoom 1 blits 3 recortados 0 saltados 0
+4 16 16
+vm
+render entidad 1 traje 0 cuadro 0 capa 0 x 100 y 100
+render entidad 2 traje 0 cuadro 1 capa 5 x 200 y 100
+render entidad 3 traje 0 cuadro 0 capa 10 x 300 y 100
+render cam 0 0 zoom 1 blits 3 recortados 0 saltados 0
+5 16 16
+vm
+render entidad 1 traje 0 cuadro 0 capa 0 x 100 y 100
+render entidad 2 traje 0 cuadro 2 capa 5 x 200 y 100
+render entidad 3 traje 0 cuadro 0 capa 10 x 300 y 100
+render cam 0 0 zoom 1 blits 3 recortados 0 saltados 0
+6 16 16
+vm
+render entidad 1 traje 0 cuadro 0 capa 0 x 100 y 100
+render entidad 2 traje 0 cuadro 2 capa 5 x 200 y 100
+render entidad 3 traje 0 cuadro 0 capa 10 x 300 y 100
+render cam 0 0 zoom 1 blits 3 recortados 0 saltados 0
+7 16 16
+vm
+render entidad 1 traje 0 cuadro 0 capa 0 x 100 y 100
+render entidad 2 traje 0 cuadro 3 capa 5 x 200 y 100
+render entidad 3 traje 0 cuadro 0 capa 10 x 300 y 100
+render cam 0 0 zoom 1 blits 3 recortados 0 saltados 0
+8 16 16
+vm
+render entidad 1 traje 0 cuadro 0 capa 0 x 100 y 100
+render entidad 2 traje 0 cuadro 3 capa 5 x 200 y 100
+render entidad 3 traje 0 cuadro 0 capa 10 x 300 y 100
+render cam 0 0 zoom 1 blits 3 recortados 0 saltados 0
+pixel 105 105 FFE04040
+pixel 205 105 FFC040C0
+pixel 295 110 FFE0C040

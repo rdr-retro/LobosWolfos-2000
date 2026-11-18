@@ -132,6 +132,7 @@ void logic3_iniciar(Proyecto3 *p) {
     p->fps = 60;
     p->velocidad = 3;
     p->fondo = 0x001E5A2Eu;
+    p->camara.zoom = 1;
     copiar_texto(p->carpetas[0], L3_RUTA_MAX, "tiles");
     copiar_texto(p->carpetas[1], L3_RUTA_MAX, "maps");
     copiar_texto(p->carpetas[2], L3_RUTA_MAX, "trajes");
@@ -723,6 +724,49 @@ int logic3_cargar(Proyecto3 *p, const char *ruta, char *error, int tam_error) {
             continue;
         }
 
+        if (strcmp(tok[0], "camara") == 0) {
+            int v;
+            tmp.camara.linea = num_linea;
+            i = 1;
+            while (i < l.n) {
+                if (strcmp(tok[i], "objetivo") == 0 && i + 1 < l.n) {
+                    if (!a_entero(tok[i + 1], &v)) {
+                        fallo3(error, tam_error, num_linea,
+                                "objetivo de camara invalido");
+                        goto error_lectura;
+                    }
+                    tmp.camara.objetivo = v > 0 ? v : 0;
+                    i += 2;
+                } else if (strcmp(tok[i], "limites") == 0 && i + 4 < l.n) {
+                    int k;
+                    for (k = 0; k < 4; k++) {
+                        if (!a_entero(tok[i + 1 + k], &v)) {
+                            fallo3(error, tam_error, num_linea,
+                                    "limites de camara invalidos");
+                            goto error_lectura;
+                        }
+                        if (v < 0) v = 0;
+                        if (k == 0) tmp.camara.x = v;
+                        else if (k == 1) tmp.camara.y = v;
+                        else if (k == 2) tmp.camara.ancho = v;
+                        else tmp.camara.alto = v;
+                    }
+                    i += 5;
+                } else if (strcmp(tok[i], "zoom") == 0 && i + 1 < l.n) {
+                    if (!a_entero(tok[i + 1], &v)) {
+                        fallo3(error, tam_error, num_linea,
+                                "zoom de camara invalido");
+                        goto error_lectura;
+                    }
+                    tmp.camara.zoom = (v == 2 || v == 4) ? v : 1;
+                    i += 2;
+                } else {
+                    i++;
+                }
+            }
+            continue;
+        }
+
         if (strcmp(tok[0], "variable") == 0) {
             Variable3 *v;
             int tipo;
@@ -964,6 +1008,32 @@ int logic3_cargar(Proyecto3 *p, const char *ruta, char *error, int tam_error) {
             t->alto = alto;
             t->pivote_x = px;
             t->pivote_y = py;
+            t->cuadros = 1;
+            t->velocidad = 1;
+            /* Extensiones opcionales como pares clave valor: no cambian
+             * el formato de los archivos que no las usan. */
+            for (i = 7; i + 1 < l.n; i += 2) {
+                int v;
+                if (strcmp(tok[i], "cuadros") == 0 && a_entero(tok[i + 1], &v)) {
+                    if (v > 0) t->cuadros = v;
+                } else if (strcmp(tok[i], "cuadro_ancho") == 0 &&
+                           a_entero(tok[i + 1], &v)) {
+                    t->cuadro_ancho = v;
+                } else if (strcmp(tok[i], "cuadro_alto") == 0 &&
+                           a_entero(tok[i + 1], &v)) {
+                    t->cuadro_alto = v;
+                } else if (strcmp(tok[i], "flip_x") == 0) {
+                    t->flip_x = strcmp(tok[i + 1], "1") == 0;
+                } else if (strcmp(tok[i], "flip_y") == 0) {
+                    t->flip_y = strcmp(tok[i + 1], "1") == 0;
+                } else if (strcmp(tok[i], "rotacion") == 0 &&
+                           a_entero(tok[i + 1], &v)) {
+                    t->rotacion = (v == 90 || v == 180 || v == 270) ? v : 0;
+                } else if (strcmp(tok[i], "velocidad") == 0 &&
+                           a_entero(tok[i + 1], &v)) {
+                    if (v > 0) t->velocidad = v;
+                }
+            }
             t->linea = num_linea;
             continue;
         }
@@ -1304,6 +1374,13 @@ int logic3_validar(const Proyecto3 *p, char *error, int tam_error) {
     if (p->ancho <= 0 || p->alto <= 0)
         FALLO_VALIDAR(1, "resolucion de proyecto invalida");
     if (p->fps <= 0) FALLO_VALIDAR(1, "fps invalido");
+    if (p->camara.zoom != 1 && p->camara.zoom != 2 && p->camara.zoom != 4)
+        FALLO_VALIDAR(p->camara.linea ? p->camara.linea : 1,
+                      "zoom de camara invalido");
+    if (p->camara.x < 0 || p->camara.y < 0 || p->camara.ancho < 0 ||
+        p->camara.alto < 0)
+        FALLO_VALIDAR(p->camara.linea ? p->camara.linea : 1,
+                      "limites de camara invalidos");
 
     /* Limites y tipos de la cabecera. */
     for (i = 0; i < p->num_variables; i++) {
@@ -1430,8 +1507,20 @@ int logic3_validar(const Proyecto3 *p, char *error, int tam_error) {
         if (o->visible != 0 && o->visible != 1)
             FALLO_VALIDAR(o->linea, "visible debe ser 0 o 1");
         for (j = 0; j < o->num_trajes; j++) {
-            if (o->trajes[j].indice < 0)
-                FALLO_VALIDAR(o->trajes[j].linea, "indice de traje negativo");
+            const Traje3 *t = &o->trajes[j];
+            if (t->indice < 0)
+                FALLO_VALIDAR(t->linea, "indice de traje negativo");
+            /* 0 significa "valor por defecto" para modelos construidos
+             * por codigo; el lector ya los normaliza a 1. */
+            if (t->cuadros < 0 || t->cuadros > 1024)
+                FALLO_VALIDAR(t->linea, "numero de cuadros fuera de rango");
+            if (t->velocidad < 0 || t->velocidad > 3600)
+                FALLO_VALIDAR(t->linea, "velocidad de traje fuera de rango");
+            if (t->cuadro_ancho < 0 || t->cuadro_alto < 0)
+                FALLO_VALIDAR(t->linea, "tamano de cuadro invalido");
+            if (t->rotacion != 0 && t->rotacion != 90 &&
+                t->rotacion != 180 && t->rotacion != 270)
+                FALLO_VALIDAR(t->linea, "rotacion de traje invalida");
         }
         for (j = 0; j < o->num_variables; j++) {
             const Variable3 *v = &o->variables[j];
@@ -1652,6 +1741,20 @@ static int serializar_logic3(const Proyecto3 *p, Buffer3 *b) {
         buf_texto(b, p->carpetas[i]);
     }
     buf_printf(b, "\n");
+    /* La camara es opcional: no se escribe si esta en los valores por
+     * defecto, para no cambiar el CRC de los proyectos antiguos. */
+    if (p->camara.objetivo || p->camara.x || p->camara.y ||
+        p->camara.ancho || p->camara.alto || p->camara.zoom != 1) {
+        buf_printf(b, "camara");
+        if (p->camara.objetivo)
+            buf_printf(b, " objetivo %d", p->camara.objetivo);
+        if (p->camara.x || p->camara.y || p->camara.ancho || p->camara.alto)
+            buf_printf(b, " limites %d %d %d %d", p->camara.x, p->camara.y,
+                       p->camara.ancho, p->camara.alto);
+        if (p->camara.zoom != 1)
+            buf_printf(b, " zoom %d", p->camara.zoom);
+        buf_printf(b, "\n");
+    }
     for (i = 0; i < p->num_variables; i++) {
         const Variable3 *v = &p->variables[i];
         char canon[L3_TEXTO_MAX];
@@ -1692,8 +1795,16 @@ static int serializar_logic3(const Proyecto3 *p, Buffer3 *b) {
             const Traje3 *t = &o->trajes[j];
             buf_printf(b, "  traje %d ", t->indice);
             buf_texto(b, t->imagen);
-            buf_printf(b, " %d %d %d %d\n", t->ancho, t->alto,
+            buf_printf(b, " %d %d %d %d", t->ancho, t->alto,
                        t->pivote_x, t->pivote_y);
+            if (t->cuadros > 1) buf_printf(b, " cuadros %d", t->cuadros);
+            if (t->cuadro_ancho) buf_printf(b, " cuadro_ancho %d", t->cuadro_ancho);
+            if (t->cuadro_alto) buf_printf(b, " cuadro_alto %d", t->cuadro_alto);
+            if (t->flip_x) buf_printf(b, " flip_x 1");
+            if (t->flip_y) buf_printf(b, " flip_y 1");
+            if (t->rotacion) buf_printf(b, " rotacion %d", t->rotacion);
+            if (t->velocidad > 1) buf_printf(b, " velocidad %d", t->velocidad);
+            buf_printf(b, "\n");
         }
         for (j = 0; j < o->num_variables; j++) {
             const Variable3 *v = &o->variables[j];
@@ -1810,6 +1921,10 @@ int logic3_desde_logic2(Proyecto3 *p, const AjustesProyecto *ajustes,
     objeto->trajes[0].alto = 0;
     objeto->trajes[0].pivote_x = 0;
     objeto->trajes[0].pivote_y = 0;
+    /* Valores por defecto de la fase 30: un cuadro y un fotograma por
+     * cuadro, para que el archivo convertido siga siendo canonico. */
+    objeto->trajes[0].cuadros = 1;
+    objeto->trajes[0].velocidad = 1;
     objeto->num_eventos = 1;
     evento = &objeto->eventos[0];
     memset(evento, 0, sizeof(*evento));

@@ -92,16 +92,17 @@ También se puede compilar desde PowerShell:
 
 ## Pruebas
 
-`build.bat prueba` compila el editor y pasa las siete suites:
+`build.bat prueba` compila el editor y pasa las ocho suites:
 
 ```bat
-build.bat prueba              conformidad + logic3 + vm + entidades + eventos + colisiones + regresion
+build.bat prueba              conformidad + logic3 + vm + entidades + eventos + colisiones + render + regresion
 build.bat prueba conformidad  solo el lenguaje lobo
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
 build.bat prueba entidades    solo entidades, escenas y ciclo de vida
 build.bat prueba eventos      solo eventos, planificador y mensajes
 build.bat prueba colisiones   solo colisiones, flags y fisica
+build.bat prueba render       solo trajes, animacion, capas y camara
 build.bat prueba regresion    solo la interfaz del editor
 build.bat prueba actualizar   reescribe los patrones (revisar el diff)
 ```
@@ -466,14 +467,39 @@ al final del enum y el puerto Rust del kernel aún no los implementa.
 índices de celdas trigger tocadas, sin cambiar el formato de las trazas
 antiguas.
 
+#### Render de objetos y trajes (fase 30)
+
+Los objetos LOGIC3 pueden declarar trajes con
+`traje <índice> <png> <ancho> <alto> <pivote_x> <pivote_y>` y, tras esos seis
+campos, pares opcionales `cuadros`, `cuadro_ancho`, `cuadro_alto`, `flip_x`,
+`flip_y`, `rotacion` (0/90/180/270) y `velocidad` (fotogramas por cuadro). El
+PNG se busca en `trajes/` junto al proyecto, junto al `.exe` y en el directorio
+de trabajo, y se guarda en una caché indexada por traje. Un traje con varias
+tiras o un objeto con varios trajes se anima por tiempo; `mi.traje` distinto
+de 0 fija un traje concreto. Los objetos se dibujan por capa 0..15 y luego por
+id, con culling de las cuatro esquinas y un máximo de 256 blits por fotograma.
+
+La cámara se declara con
+`camara objetivo <id> limites <x> <y> <ancho> <alto> zoom <1|2|4>`; sin
+`limites` se usa el tamaño del proyecto y sin la línea se mantiene la cámara
+clásica que sigue al sprite sin topes. Las opciones de captura `--render`,
+`--camara N`, `--zoom 1|2|4`, `--limites x,y,w,h` y `--pixel x,y` permiten
+congelar la traza de trajes/blits y sondear colores exactos.
+
+El kernel (`loboswolfos/kernel`) recibe la primitiva `gfx::Canvas::blit_ex`
+con el mismo flip, rotación y zoom, y calcula la cámara con el mismo criterio
+sobre el sprite clásico. No hay entidades LOGIC3 en el kernel: el espejo se
+limita a la primitiva y a la cámara.
+
 ## Uso
 
 Ejecuta `LobosWolfos2000.exe`. Al arrancar crea junto al ejecutable las
 carpetas del proyecto: `tiles` (mosaicos e imágenes), `maps` (mapas `.mav`),
-`logic` (archivos `.logic`) y `titles` (pantallas de título del editor de
-menús). Los diálogos de abrir y guardar proponen esas carpetas: los tiles y
-las imágenes van a `tiles`, los mapas a `maps`, las lógicas a `logic` y los
-PNG/BMP exportados desde el editor de menús a `titles`. Los tiles que guardes
+`trajes` (PNG de los objetos LOGIC3), `logic` (archivos `.logic`) y `titles`
+(pantallas de título del editor de menús). Los diálogos de abrir y guardar
+proponen esas carpetas: los tiles y las imágenes del editor van a `tiles`,
+los trajes de los objetos a `trajes`, los mapas a `maps`, las lógicas a
+`logic` y los PNG/BMP exportados desde el editor de menús a `titles`. Los tiles que guardes
 se almacenan en la carpeta `tiles` junto al ejecutable. En **modo tiles** los
 lienzos quedan totalmente
 pegados: las imagenes se tocan y no hay ninguna separacion entre ellas. Solo se

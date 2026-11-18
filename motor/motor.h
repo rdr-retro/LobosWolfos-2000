@@ -160,6 +160,17 @@ int activo_funciones_usadas(int *ids, int max);
 int activo_gdiplus_iniciar(void);
 void activo_gdiplus_terminar(void);
 
+/* Fase 30: carga directa de una imagen (PNG o BMP) ya resuelta. La usa
+ * el cache de trajes; `img->pixeles` queda en 0xAARRGGBB. */
+int activo_cargar_imagen(const char *ruta, MotorImagen *img);
+
+/* Resuelve un activo por nombre dentro de una carpeta del proyecto. Busca
+ * junto al archivo del proyecto, junto al exe y en el directorio de
+ * trabajo, en ese orden. Devuelve 1 si el archivo existe. */
+int activo_resolver_activo(const char *proyecto_ruta,
+                           const char *carpeta_nombre, const char *nombre,
+                           char *dst, int tam);
+
 /* Lee el proyecto incrustado (pie LGB1) del final del propio
  * ejecutable y lo registra como archivos virtuales: a partir de aqui,
  * la carga del proyecto no toca el disco. Devuelve el numero de

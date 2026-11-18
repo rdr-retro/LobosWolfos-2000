@@ -1,0 +1,10 @@
+vm: 0 scripts
+1 16 16
+vm
+render entidad 1 traje 0 cuadro 0 capa 0 x 200 y 200
+render cam 0 0 zoom 2 blits 1 recortados 0 saltados 0
+2 16 16
+vm
+render entidad 1 traje 0 cuadro 0 capa 0 x 200 y 200
+render cam 0 0 zoom 2 blits 1 recortados 0 saltados 0
+pixel 210 210 FFE04040

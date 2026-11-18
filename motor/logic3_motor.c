@@ -464,6 +464,72 @@ static void agregar_traje_objeto(L3Lector *l, const char *salida,
     t->alto = entero(salida, tokens, 4);
     t->pivote_x = entero(salida, tokens, 5);
     t->pivote_y = entero(salida, tokens, 6);
+    /* Extensiones del formato: pares clave valor despues de los seis
+     * campos originales. Los valores por defecto conservan el render
+     * clasico, asi un LOGIC3 antiguo no cambia ni un pixel. */
+    t->cuadros = 1;
+    t->velocidad = 1;
+    {
+        int i;
+        for (i = 7; i + 1 < nt; i += 2) {
+            if (es(salida, tokens, i, "cuadros")) {
+                int v = entero(salida, tokens, i + 1);
+                if (v > 0) t->cuadros = v;
+            } else if (es(salida, tokens, i, "cuadro_ancho")) {
+                t->cuadro_ancho = entero(salida, tokens, i + 1);
+            } else if (es(salida, tokens, i, "cuadro_alto")) {
+                t->cuadro_alto = entero(salida, tokens, i + 1);
+            } else if (es(salida, tokens, i, "flip_x")) {
+                t->flip_x = entero(salida, tokens, i + 1) ? 1 : 0;
+            } else if (es(salida, tokens, i, "flip_y")) {
+                t->flip_y = entero(salida, tokens, i + 1) ? 1 : 0;
+            } else if (es(salida, tokens, i, "rotacion")) {
+                int v = entero(salida, tokens, i + 1);
+                t->rotacion = (v == 90 || v == 180 || v == 270) ? v : 0;
+            } else if (es(salida, tokens, i, "velocidad")) {
+                int v = entero(salida, tokens, i + 1);
+                if (v > 0) t->velocidad = v;
+            }
+        }
+    }
+}
+
+/* Linea opcional de camara (fase 30):
+ *   camara objetivo <id> limites <x> <y> <ancho> <alto> zoom <1|2|4>
+ * Las claves pueden venir en cualquier orden y las desconocidas se saltan. */
+static void agregar_camara(MotorL3 *p, const char *salida,
+                           const L3Tok *tokens, int nt) {
+    int i;
+    p->camara.definida = 1;
+    p->camara.objetivo = 0;
+    p->camara.x = 0;
+    p->camara.y = 0;
+    p->camara.ancho = 0;
+    p->camara.alto = 0;
+    p->camara.zoom = 1;
+    for (i = 1; i < nt;) {
+        if (es(salida, tokens, i, "objetivo") && i + 1 < nt) {
+            int v = entero(salida, tokens, i + 1);
+            p->camara.objetivo = v > 0 ? v : 0;
+            i += 2;
+        } else if (es(salida, tokens, i, "limites") && i + 4 < nt) {
+            p->camara.x = entero(salida, tokens, i + 1);
+            p->camara.y = entero(salida, tokens, i + 2);
+            p->camara.ancho = entero(salida, tokens, i + 3);
+            p->camara.alto = entero(salida, tokens, i + 4);
+            i += 5;
+        } else if (es(salida, tokens, i, "zoom") && i + 1 < nt) {
+            int v = entero(salida, tokens, i + 1);
+            p->camara.zoom = (v == 2 || v == 4) ? v : 1;
+            i += 2;
+        } else {
+            i++;
+        }
+    }
+    if (p->camara.x < 0) p->camara.x = 0;
+    if (p->camara.y < 0) p->camara.y = 0;
+    if (p->camara.ancho < 0) p->camara.ancho = 0;
+    if (p->camara.alto < 0) p->camara.alto = 0;
 }
 
 int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
@@ -542,6 +608,11 @@ int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
                 p->fondo = (unsigned int)strtoul(
                     texto(salida, tokens, i + 5), NULL, 16);
             }
+            goto siguiente;
+        }
+        /* --- camara opcional (fase 30) --- */
+        if (es(salida, tokens, 0, "camara")) {
+            agregar_camara(p, salida, tokens, nt);
             goto siguiente;
         }
         /* --- escenas: la primera es la que arranca --- */
@@ -673,6 +744,7 @@ int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
     if (p->alto < 200 || p->alto > 4096) p->alto = 240;
     if (p->fps < 1 || p->fps > 1000) p->fps = 60;
     if (p->velocidad < 1 || p->velocidad > 10) p->velocidad = 4;
+    if (!p->camara.definida || p->camara.zoom < 1) p->camara.zoom = 1;
 
     ordenar_scripts(p);
     return 1;

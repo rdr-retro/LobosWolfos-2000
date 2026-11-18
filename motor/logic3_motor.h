@@ -78,13 +78,30 @@ typedef struct MotorL3Lista {
     int elementos[MOTOR_L3_LISTA_ELEMS_MAX];
 } MotorL3Lista;
 
-/* Un traje del objeto (en la fase 26 solo se guarda, aun no se pinta). */
+/* Un traje del objeto. Los seis primeros campos son el formato original;
+ * el resto son extensiones opcionales de la fase 30 (valores por defecto:
+ * un cuadro, sin flip, sin rotacion y un fotograma por cuadro). */
 typedef struct MotorL3Traje {
     int indice;
     char imagen[MOTOR_L3_RUTA_MAX];
     int ancho, alto;
     int pivote_x, pivote_y;
+    int cuadros;        /* cuadros de una tira horizontal */
+    int cuadro_ancho;   /* 0 = deducir de ancho / cuadros */
+    int cuadro_alto;    /* 0 = deducir de alto */
+    int flip_x, flip_y;
+    int rotacion;       /* 0, 90, 180 o 270 grados */
+    int velocidad;      /* fotogramas por cuadro */
 } MotorL3Traje;
+
+/* Camara del proyecto (linea opcional `camara`). objetivo 0 sigue al
+ * sprite del jugador; si no hay limites se usa el tamano del proyecto. */
+typedef struct MotorL3Camara {
+    int objetivo;       /* id de objeto LOGIC3, 0 = jugador */
+    int x, y, ancho, alto; /* limites del mundo; 0 = sin limites */
+    int zoom;           /* 1, 2 o 4 */
+    int definida;       /* 1 si el LOGIC3 trae la linea */
+} MotorL3Camara;
 
 /* Un objeto LOGIC3: el tipo de las entidades que se instancian. */
 typedef struct MotorL3Objeto {
@@ -108,6 +125,7 @@ typedef struct MotorL3 {
     int fps;
     int velocidad;
     unsigned int fondo;
+    MotorL3Camara camara;      /* fase 30, valores por defecto si falta */
     char mapa[MOTOR_L3_RUTA_MAX]; /* mapa de la primera escena, "" si no hay */
     int escena_inicial;           /* id de la escena que arranca (0 si no hay) */
     MotorL3Escena escenas[MOTOR_L3_ESCENAS_MAX];

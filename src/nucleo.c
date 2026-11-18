@@ -700,13 +700,14 @@ int app_iniciar(void) {
     cargar_iconos();
     tiles_cargar();
 
-    /* Carpetas del proyecto junto al ejecutable: los tiles, los mapas, las
-     * logicas y los titulos se guardan siempre en su carpeta. */
+    /* Carpetas del proyecto junto al ejecutable: los tiles, los mapas, los
+     * trajes, las logicas y los titulos se guardan siempre en su carpeta. */
     obtener_ruta_exe(carpeta, sizeof(carpeta));
     {
         static const char *carpetas[] = {
             CARPETA_TILES_TEXTO, CARPETA_MAPS_TEXTO,
-            CARPETA_LOGIC_TEXTO, CARPETA_TITLES_TEXTO
+            CARPETA_TRAJES_TEXTO, CARPETA_LOGIC_TEXTO,
+            CARPETA_TITLES_TEXTO
         };
         int i;
         for (i = 0; i < (int)(sizeof(carpetas) / sizeof(carpetas[0])); i++) {

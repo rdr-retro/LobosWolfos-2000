@@ -284,6 +284,88 @@ impl Canvas {
         }
     }
 
+    /// Blit transformado (fase 30): aplica flip, rotacion de 0/90/180/270
+    /// grados y zoom entero, con el pivote del sprite situado en `(x, y)`.
+    /// El origen es un rectangulo de `src` con paso `src_stride`; solo se
+    /// escriben los pixeles visibles del lienzo. No usa memoria dinamica.
+    pub fn blit_ex(
+        &self,
+        src: *const u32,
+        src_stride: usize,
+        x: i32,
+        y: i32,
+        sx: i32,
+        sy: i32,
+        w: i32,
+        h: i32,
+        pivote_x: i32,
+        pivote_y: i32,
+        flip_x: bool,
+        flip_y: bool,
+        rotacion: i32,
+        zoom: i32,
+    ) {
+        if src.is_null() || w <= 0 || h <= 0 {
+            return;
+        }
+        let zoom = if zoom < 1 { 1 } else if zoom > 4 { 4 } else { zoom };
+        let mut j = 0;
+        while j < h {
+            let mut i = 0;
+            while i < w {
+                let ox = sx + i;
+                let oy = sy + j;
+                if ox >= 0 && oy >= 0 {
+                    unsafe {
+                        let color = *src.add(oy as usize * src_stride + ox as usize);
+                        if color & 0xFF00_0000 != 0 {
+                            let fx = if flip_x { w - 1 - i } else { i };
+                            let fy = if flip_y { h - 1 - j } else { j };
+                            let mut rx = fx - pivote_x;
+                            let mut ry = fy - pivote_y;
+                            match rotacion {
+                                90 => {
+                                    let t = rx;
+                                    rx = -ry;
+                                    ry = t;
+                                }
+                                180 => {
+                                    rx = -rx;
+                                    ry = -ry;
+                                }
+                                270 => {
+                                    let t = rx;
+                                    rx = ry;
+                                    ry = -t;
+                                }
+                                _ => {}
+                            }
+                            let px = x + rx * zoom;
+                            let py = y + ry * zoom;
+                            let mut by = 0;
+                            while by < zoom {
+                                let dy = py + by;
+                                if dy >= 0 && dy < self.height {
+                                    let mut bx = 0;
+                                    while bx < zoom {
+                                        let dx = px + bx;
+                                        if dx >= 0 && dx < self.width {
+                                            self.put(dx, dy, color);
+                                        }
+                                        bx += 1;
+                                    }
+                                }
+                                by += 1;
+                            }
+                        }
+                    }
+                }
+                i += 1;
+            }
+            j += 1;
+        }
+    }
+
     /// Indica si se esta usando doble buffer.
     pub fn is_buffered(&self) -> bool {
         self.ptr != self.lfb

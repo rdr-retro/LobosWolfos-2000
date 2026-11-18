@@ -90,13 +90,30 @@ typedef struct {
     int linea;
 } Lista3;
 
+/* Traje de un objeto. Los seis primeros campos son el formato original;
+ * el resto son opcionales (fase 30) y por defecto dibujan un solo cuadro,
+ * sin flip, sin rotacion y a un fotograma por cuadro. */
 typedef struct {
     int indice;
     char imagen[L3_RUTA_MAX]; /* "" = traje vacio, sin PNG */
     int ancho, alto;
     int pivote_x, pivote_y;
+    int cuadros;
+    int cuadro_ancho, cuadro_alto;
+    int flip_x, flip_y;
+    int rotacion;  /* 0, 90, 180 o 270 */
+    int velocidad; /* fotogramas por cuadro */
     int linea;
 } Traje3;
+
+/* Camara opcional del proyecto (fase 30). objetivo 0 sigue al jugador;
+ * limites 0,0,0,0 usa el tamano del proyecto. */
+typedef struct {
+    int objetivo;
+    int x, y, ancho, alto;
+    int zoom;
+    int linea;
+} Camara3;
 
 typedef struct {
     int id;
@@ -186,6 +203,7 @@ typedef struct {
     int velocidad;
     unsigned int fondo;
     char carpetas[4][L3_RUTA_MAX]; /* tiles, maps, trajes, sonidos */
+    Camara3 camara;                 /* fase 30, opcional */
     Variable3 variables[L3_VARIABLES_GLOBAL_MAX];
     int num_variables;
     Lista3 listas[L3_LISTAS_MAX];

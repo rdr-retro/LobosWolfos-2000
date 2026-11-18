@@ -824,6 +824,20 @@ el motor ya compila.
     fisica en VM. `build.bat prueba` pasa las siete suites (12/12, 11/11,
     18/18, 4/4, 8/8, 4/4 y 8/8). El puerto Rust del kernel queda pendiente.
 
+- **18-11-2026 (fase 30, render de objetos, trajes, animacion y capas)** -
+    `motor/render.c` cachea los PNG de `trajes/`, selecciona cuadros por
+    tira o lista ponderada por `velocidad * cuadros`, aplica pivote, flip,
+    rotacion y zoom entero, recorta por cuatro esquinas y limita los blits a
+    256 por fotograma. `motor/logic3_motor.c` y `src/logic3.c` aceptan las
+    extensiones de traje y la linea `camara` sin cambiar el formato ni el CRC
+    de los proyectos antiguos. `motor/juego.c` dibuja las entidades por capa
+    e id, conecta la camara y anade `--render`, `--camara`, `--zoom`,
+    `--limites` y `--pixel`. La nueva suite `pruebas/render.ps1` congela
+    cuatro casos con mapa, tres trajes, animacion, capas y zoom 2; el kernel
+    recibe `gfx::Canvas::blit_ex` y el calculo de camara equivalente sobre
+    el sprite clásico, sin entidades LOGIC3. `build.bat prueba` pasa las
+    ocho suites (12/12, 11/11, 18/18, 4/4, 8/8, 4/4, 4/4 y 8/8).
+
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,

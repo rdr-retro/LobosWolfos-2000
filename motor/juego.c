@@ -32,6 +32,7 @@
 #include "entidades.h"
 #include "eventos.h"
 #include "colisiones.h"
+#include "render.h"
 
 #define VENTANA_ANCHO 640
 #define VENTANA_ALTO  480
@@ -265,6 +266,18 @@ static char g_mensaje_ini[LOBO_TEXTO_MAX]; /* --mensaje: mensaje inicial */
 /* --- entidades (fase 26) --- */
 static int g_entidades; /* --entidades: detalle en traza y volcado */
 static int g_colisiones_traza; /* --colisiones: triggers, dano y suelo */
+
+/* --- render y camara (fase 30) --- */
+static int g_render_traza;              /* --render: traza de trajes y blits */
+static RenderCamara g_camara;
+static RenderInfo g_render_info;
+static int g_camara_objetivo = -1;     /* --camara: -1 = no cambiar */
+static int g_zoom_override;            /* --zoom: 0 = no cambiar */
+static int g_limites[4];
+static int g_limites_override;
+#define PIXEL_SONDAS_MAX 16
+static int g_pixels[PIXEL_SONDAS_MAX][2];
+static int g_num_pixels;
 static char g_ent_nombres[LOBO_ENTIDAD_NOMBRES_MAX][LOBO_TEXTO_MAX];
 static int g_num_ent_nombres;
 
@@ -801,8 +814,10 @@ static void dibujar_id(int x, int y, int id) {
         dibujar_digito(x + i * 8, y, num[n - 1 - i] - '0');
 }
 
-/* Dibuja las entidades vivas en el orden de capa e id. */
-static void dibujar_entidades(int cam_x, int cam_y) {
+/* Dibuja las entidades vivas en el orden de capa e id. Con traje cargado
+ * se usa el render de la fase 30; sin el se mantiene el rectangulo de
+ * color con el id de las fases anteriores. */
+static void dibujar_entidades(int cam_x, int cam_y, int zoom) {
     static const u32 colores[8] = {
         0xFFC84A4Au, 0xFF4AA85Au, 0xFF4A72C8u, 0xFFC89A3Au,
         0xFF9A4AC8u, 0xFF3AA8A8u, 0xFFC85A9Au, 0xFF7A8A3Au
@@ -812,12 +827,25 @@ static void dibujar_entidades(int cam_x, int cam_y) {
     int i;
     for (i = 0; i < n; i++) {
         Entidad *e = entidad_indice(orden[i]);
+        RenderSeleccion sel;
         int sx, sy, w, h;
         if (!e || !e->visible) continue;
-        sx = e->x - cam_x;
-        sy = e->y - cam_y;
-        w = e->w > 0 ? e->w : 16;
-        h = e->h > 0 ? e->h : 16;
+        sx = (e->x - cam_x) * zoom;
+        sy = (e->y - cam_y) * zoom;
+
+        if (render_seleccionar(&g_l3, e, juego.fotograma, &sel)) {
+            if (g_render_traza && g_traza)
+                fprintf(g_traza,
+                        "render entidad %d traje %d cuadro %d capa %d "
+                        "x %d y %d\n",
+                        e->id, sel.indice, sel.cuadro, sel.capa, sx, sy);
+            render_dibujar(juego.fb, juego.fb_ancho, juego.fb_alto,
+                           &sel, sx, sy, zoom, &g_render_info);
+            continue;
+        }
+
+        w = (e->w > 0 ? e->w : 16) * zoom;
+        h = (e->h > 0 ? e->h : 16) * zoom;
         rellenar_rect(sx, sy, w, h, colores[(e->id - 1) & 7]);
         /* borde oscuro para separar entidades contiguas */
         rellenar_rect(sx, sy, w, 1, 0xFF101010u);
@@ -830,30 +858,60 @@ static void dibujar_entidades(int cam_x, int cam_y) {
 
 static void renderizar(void) {
     MotorMapa *m = &juego.mapa;
-    int cam_x, cam_y;
+    int cam_x = 0, cam_y = 0;
+    int zoom = g_camara.zoom;
+    MotorImagen sprite;
 
-    /* camara centrada en el sprite */
-    cam_x = juego.x + SPRITE_LADO / 2 - juego.fb_ancho / 2;
-    cam_y = juego.y + SPRITE_LADO / 2 - juego.fb_alto / 2;
+    if (zoom < 1) zoom = 1;
+    render_camara_calcular(&g_camara, juego.fb_ancho, juego.fb_alto,
+                           juego.x + SPRITE_LADO / 2,
+                           juego.y + SPRITE_LADO / 2, &cam_x, &cam_y);
+    memset(&g_render_info, 0, sizeof(g_render_info));
+    g_render_info.cam_x = cam_x;
+    g_render_info.cam_y = cam_y;
 
     /* Sin mapa el proyecto corre igual: se pinta el fondo y las
      * entidades (fase 26), que no necesitan tiles. */
     if (!juego.mapa_usado[0]) {
         motor_limpiar(juego.fb, juego.fb_ancho, juego.fb_alto, g_fondo);
-        dibujar_entidades(cam_x, cam_y);
-        return;
+        dibujar_entidades(cam_x, cam_y, zoom);
+    } else {
+        motor_limpiar(juego.fb, juego.fb_ancho, juego.fb_alto, 0x00101826u);
+        /* Escalar el lado del tile y la camara por el zoom entero es
+         * equivalente a dibujar el mapa y ampliarlo en pantalla. */
+        motor_mapa_render(juego.fb, juego.fb_ancho, juego.fb_alto,
+                          cam_x * zoom, cam_y * zoom, m->lado * zoom,
+                          m->dibujo_celdas ? m->dibujo_celdas : m->celdas,
+                          m->dibujo_celdas ? m->num_dibujo : m->num_celdas,
+                          m->imagenes);
     }
 
-    motor_limpiar(juego.fb, juego.fb_ancho, juego.fb_alto, 0x00101826u);
-    motor_mapa_render(juego.fb, juego.fb_ancho, juego.fb_alto,
-                      cam_x, cam_y, m->lado,
-                      m->dibujo_celdas ? m->dibujo_celdas : m->celdas,
-                      m->dibujo_celdas ? m->num_dibujo : m->num_celdas,
-                      m->imagenes);
-    motor_blit_alpha(juego.fb, juego.fb_ancho, juego.fb_alto,
-                     juego.x - cam_x, juego.y - cam_y,
-                     juego.sprite, SPRITE_LADO, SPRITE_LADO);
-    dibujar_entidades(cam_x, cam_y);
+    sprite.pixeles = juego.sprite;
+    sprite.ancho = SPRITE_LADO;
+    sprite.alto = SPRITE_LADO;
+    /* El sprite clasico solo se pinta cuando hay mapa, igual que en las
+     * capturas de las fases anteriores: las pruebas VM sin mapa esperan
+     * unicamente el fondo y las entidades. */
+    if (juego.mapa_usado[0]) {
+        if (zoom == 1) {
+            motor_blit_alpha(juego.fb, juego.fb_ancho, juego.fb_alto,
+                             juego.x - cam_x, juego.y - cam_y,
+                             juego.sprite, SPRITE_LADO, SPRITE_LADO);
+        } else {
+            render_blit(juego.fb, juego.fb_ancho, juego.fb_alto,
+                        juego.x - cam_x, juego.y - cam_y,
+                        &sprite, 0, 0, SPRITE_LADO, SPRITE_LADO,
+                        0, 0, 0, 0, 0, zoom);
+        }
+    }
+    if (juego.mapa_usado[0]) dibujar_entidades(cam_x, cam_y, zoom);
+
+    if (g_render_traza && g_traza)
+        fprintf(g_traza,
+                "render cam %d %d zoom %d blits %d recortados %d "
+                "saltados %d\n",
+                cam_x, cam_y, zoom, g_render_info.blits,
+                g_render_info.recortados, g_render_info.saltados);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1011,6 +1069,19 @@ static int correr_captura(const char *ruta_bmp, int fotogramas) {
         fprintf(g_traza, "eventos final: %d avisos %d ejecutados %d\n",
                 eventos_num(&g_eventos), eventos_avisos(&g_eventos),
                 eventos_ejecutados(&g_eventos));
+    /* Sondas de pixel del ultimo fotograma: permiten comprobar posicion,
+     * capa, flip y rotacion sin depender solo del hash del BMP. */
+    if (g_traza) {
+        for (i = 0; i < g_num_pixels; i++) {
+            int px = g_pixels[i][0], py = g_pixels[i][1];
+            if (px < 0 || py < 0 || px >= juego.fb_ancho ||
+                py >= juego.fb_alto)
+                fprintf(g_traza, "pixel %d %d fuera\n", px, py);
+            else
+                fprintf(g_traza, "pixel %d %d %08X\n", px, py,
+                        juego.fb[py * juego.fb_ancho + px]);
+        }
+    }
     if (!activo_guardar_bmp(ruta_bmp, juego.fb, juego.fb_ancho, juego.fb_alto))
         return 1;
     free(juego.fb);
@@ -1191,7 +1262,12 @@ static int opcion(const char *nombre) {
            strcmp(nombre, "--fotogramas") == 0 ||
            strcmp(nombre, "--tecla") == 0 || strcmp(nombre, "--traza") == 0 ||
            strcmp(nombre, "--evento") == 0 ||
-           strcmp(nombre, "--mensaje") == 0;
+           strcmp(nombre, "--mensaje") == 0 ||
+           strcmp(nombre, "--render") == 0 ||
+           strcmp(nombre, "--camara") == 0 ||
+           strcmp(nombre, "--zoom") == 0 ||
+           strcmp(nombre, "--limites") == 0 ||
+           strcmp(nombre, "--pixel") == 0;
 }
 
 int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show) {
@@ -1211,6 +1287,10 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         }
         if (strcmp(__argv[i], "--colisiones") == 0) {
             g_colisiones_traza = 1;
+            continue;
+        }
+        if (strcmp(__argv[i], "--render") == 0) {
+            g_render_traza = 1;
             continue;
         }
         if (strcmp(__argv[i], "--eventos") == 0) {
@@ -1239,6 +1319,26 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
                 else if (strcmp(v, "abajo") == 0) tecla = MOTOR_ENT_ABAJO;
                 else if (strcmp(v, "saltar") == 0) tecla = MOTOR_ENT_SALTO;
                 else if (strcmp(v, "cerrar") == 0) tecla = MOTOR_ENT_CERRAR;
+            } else if (strcmp(__argv[i - 1], "--camara") == 0) {
+                g_camara_objetivo = atoi(v);
+            } else if (strcmp(__argv[i - 1], "--zoom") == 0) {
+                int z = atoi(v);
+                if (z == 1 || z == 2 || z == 4) g_zoom_override = z;
+            } else if (strcmp(__argv[i - 1], "--limites") == 0) {
+                int a = 0, b = 0, c = 0, d = 0;
+                if (sscanf(v, "%d,%d,%d,%d", &a, &b, &c, &d) == 4) {
+                    g_limites[0] = a; g_limites[1] = b;
+                    g_limites[2] = c; g_limites[3] = d;
+                    g_limites_override = 1;
+                }
+            } else if (strcmp(__argv[i - 1], "--pixel") == 0) {
+                int px = 0, py = 0;
+                if (g_num_pixels < PIXEL_SONDAS_MAX &&
+                    sscanf(v, "%d,%d", &px, &py) == 2) {
+                    g_pixels[g_num_pixels][0] = px;
+                    g_pixels[g_num_pixels][1] = py;
+                    g_num_pixels++;
+                }
             }
         }
     }
@@ -1266,6 +1366,7 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
                     "egine", MB_ICONERROR);
         return 1;
     }
+    render_iniciar(ruta_logic3 ? ruta_logic3 : "");
 
     memset(&juego, 0, sizeof(juego));
     juego.corriendo = 1;
@@ -1346,6 +1447,13 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
      * fondo, leidos del trailer del .logic. El LOGIC3 ya los aplico. */
     if (!g_modo_vm) aplicar_ajustes();
 
+    /* Camara de la fase 30: la del LOGIC3, con las opciones de linea de
+     * comandos por encima. Sin LOGIC3 se mantiene la camara sin limites
+     * de siempre (sigue al sprite). */
+    render_camara_iniciar(g_modo_vm ? &g_l3 : NULL, &g_camara);
+    render_camara_aplicar(&g_camara, g_camara_objetivo, g_zoom_override,
+                          g_limites_override ? g_limites : NULL);
+
     if (ruta_bmp) {
         buscar_spawn();
         resultado = correr_captura(ruta_bmp, fotogramas);
@@ -1361,5 +1469,8 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         fclose(g_traza);
         g_traza = NULL;
     }
+    render_terminar();
+    motor_mapa_liberar(&juego.mapa);
+    activo_gdiplus_terminar();
     return resultado;
 }

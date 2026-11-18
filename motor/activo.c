@@ -276,8 +276,9 @@ static int extraer_pixeles(void *bmp, MotorImagen *img) {
 /* Carga un PNG (o BMP) en una MotorImagen. Devuelve 0 si falla; los
  * pixeles quedan en 0xAARRGGBB, igual que el framebuffer del editor.
  * Si el archivo vive en el proyecto incrustado se decodifica desde
- * memoria con un IStream, sin tocar el disco. */
-static int cargar_imagen(const char *ruta, MotorImagen *img) {
+ * memoria con un IStream, sin tocar el disco. La usa el mapa y, desde la
+ * fase 30, el modulo de render para los trajes de las entidades. */
+int activo_cargar_imagen(const char *ruta, MotorImagen *img) {
     WCHAR wruta[MAX_PATH * 2];
     void *bmp = NULL;
     EntradaVirtual *v;
@@ -378,36 +379,48 @@ static void ruta_exe(char *dst, int tam) {
     dst[tam - 1] = '\0';
 }
 
-/* Busca el PNG de un tile: primero junto al .mav (carpeta tiles_dir),
- * luego junto al exe (tiles del proyecto) y por ultimo en la carpeta
- * tiles del directorio de trabajo (permite lanzar el juego desde la
- * raiz del proyecto tengalo donde lo tengas). */
-static int resolver_imagen(const char *mapa_ruta, const char *tiles_dir,
-                            const char *imagen, char *dst, int tam) {
+/* Busca un activo (tile, traje, ...) con el mismo orden para todos:
+ * primero junto al archivo del proyecto y su carpeta declarada, luego en
+ * esa carpeta junto al exe y por ultimo en el directorio de trabajo. El
+ * nombre suelto se prueba porque el editor guarda los trajes como nombres
+ * simples dentro de su carpeta. */
+int activo_resolver_activo(const char *proyecto_ruta,
+                           const char *carpeta_nombre, const char *nombre,
+                           char *dst, int tam) {
     char base[MAX_PATH], carpeta[MAX_PATH], exe[MAX_PATH];
+    const char *carpeta_usar = (carpeta_nombre && carpeta_nombre[0])
+                               ? carpeta_nombre : "tiles";
 
-    ruta_carpeta(mapa_ruta, base, sizeof(base));
+    if (!nombre || !nombre[0] || !dst || tam <= 0) return 0;
+    ruta_carpeta(proyecto_ruta ? proyecto_ruta : "", base, sizeof(base));
     if (base[0]) {
-        unir_ruta(carpeta, sizeof(carpeta), base, tiles_dir);
-        unir_ruta(dst, tam, carpeta, imagen);
+        unir_ruta(carpeta, sizeof(carpeta), base, carpeta_usar);
+        unir_ruta(dst, tam, carpeta, nombre);
         if (archivo_existe(dst)) return 1;
-        unir_ruta(dst, tam, base, imagen);
+        unir_ruta(dst, tam, base, nombre);
         if (archivo_existe(dst)) return 1;
     } else {
-        unir_ruta(dst, tam, tiles_dir, imagen);
+        unir_ruta(dst, tam, carpeta_usar, nombre);
         if (archivo_existe(dst)) return 1;
     }
     ruta_exe(exe, sizeof(exe));
     ruta_carpeta(exe, base, sizeof(base));
-    unir_ruta(carpeta, sizeof(carpeta), base, "tiles");
-    unir_ruta(dst, tam, carpeta, imagen);
+    unir_ruta(carpeta, sizeof(carpeta), base, carpeta_usar);
+    unir_ruta(dst, tam, carpeta, nombre);
     if (archivo_existe(dst)) return 1;
 
     GetCurrentDirectoryA(MAX_PATH, base);
     base[MAX_PATH - 1] = '\0';
-    unir_ruta(carpeta, sizeof(carpeta), base, "tiles");
-    unir_ruta(dst, tam, carpeta, imagen);
+    unir_ruta(carpeta, sizeof(carpeta), base, carpeta_usar);
+    unir_ruta(dst, tam, carpeta, nombre);
     return archivo_existe(dst);
+}
+
+/* Busca el PNG de un tile con el orden de siempre: es el caso concreto de
+ * activo_resolver_activo con la carpeta declarada por el .mav. */
+static int resolver_imagen(const char *mapa_ruta, const char *tiles_dir,
+                           const char *imagen, char *dst, int tam) {
+    return activo_resolver_activo(mapa_ruta, tiles_dir, imagen, dst, tam);
 }
 
 /* ------------------------------------------------------------------ */
@@ -603,7 +616,7 @@ int activo_cargar_mapa(const char *ruta, MotorMapa *m) {
             char ruta_img[MAX_PATH];
             if (resolver_imagen(ruta, tiles_dir, nombres[i],
                                 ruta_img, sizeof(ruta_img)))
-                cargar_imagen(ruta_img, &m->imagenes[i]);
+                activo_cargar_imagen(ruta_img, &m->imagenes[i]);
             /* si falla, pixeles queda NULL: la celda se dibuja hueca */
         }
     }

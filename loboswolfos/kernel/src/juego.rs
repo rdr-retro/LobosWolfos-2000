@@ -158,6 +158,44 @@ fn choca_caja(x: i32, y: i32, celdas: &[MotorCelda], lado: i32) -> bool {
     false
 }
 
+/// Camara del juego (fase 30). `limites` a cero significa sin topes, igual
+/// que el motor C cuando el LOGIC3 no trae una linea `camara`. `zoom` es
+/// entero 1, 2 o 4.
+#[derive(Clone, Copy)]
+struct Camara {
+    x: i32,
+    y: i32,
+    ancho: i32,
+    alto: i32,
+    zoom: i32,
+}
+
+impl Camara {
+    /// Esquina superior izquierda en coordenadas del mundo. Sin limites
+    /// se centra en el sprite; con ellos se recorta al area declarada.
+    fn calcular(&self, jugador_x: i32, jugador_y: i32) -> (i32, i32) {
+        let zoom = if self.zoom == 2 || self.zoom == 4 { self.zoom } else { 1 };
+        let vista_ancho = (VENTANA_ANCHO / zoom).max(1);
+        let vista_alto = (VENTANA_ALTO / zoom).max(1);
+        let mut cx = jugador_x + SPRITE_LADO / 2 - vista_ancho / 2;
+        let mut cy = jugador_y + SPRITE_LADO / 2 - vista_alto / 2;
+
+        if self.ancho > 0 && self.alto > 0 {
+            if self.ancho <= vista_ancho {
+                cx = self.x + (self.ancho - vista_ancho) / 2;
+            } else {
+                cx = cx.max(self.x).min(self.x + self.ancho - vista_ancho);
+            }
+            if self.alto <= vista_alto {
+                cy = self.y + (self.alto - vista_alto) / 2;
+            } else {
+                cy = cy.max(self.y).min(self.y + self.alto - vista_alto);
+            }
+        }
+        (cx, cy)
+    }
+}
+
 struct Juego {
     mapa: MotorMapa,
     /// Proyecto sin mapa (fase 12): no se pinta nada y la pantalla queda
@@ -170,6 +208,8 @@ struct Juego {
     entrada: u32,
     /// Contador de actualizaciones (lo leen los scripts).
     fotograma: i32,
+    /// Camara de la fase 30; por defecto sin limites y 1x.
+    camara: Camara,
     corriendo: bool,
 }
 
@@ -312,7 +352,9 @@ impl Juego {
         }
     }
 
-    /// Camara centrada en el sprite + mapa + sprite con transparencia.
+    /// Camara del sprite + mapa + sprite con transparencia. La primitiva
+    /// `blit_ex` (fase 30) reuse el mismo criterio de flip, rotacion y zoom
+    /// del motor C; aqui el sprite clasico no lleva transformacion.
     fn renderizar(&self, fb: &mut [u32]) {
         /* Sin mapa no se pinta nada: pantalla negra (fase 12). */
         if self.sin_mapa {
@@ -320,8 +362,12 @@ impl Juego {
             return;
         }
 
-        let cam_x = self.x + SPRITE_LADO / 2 - VENTANA_ANCHO / 2;
-        let cam_y = self.y + SPRITE_LADO / 2 - VENTANA_ALTO / 2;
+        let (cam_x, cam_y) = self.camara.calcular(self.x, self.y);
+        let zoom = if self.camara.zoom == 2 || self.camara.zoom == 4 {
+            self.camara.zoom
+        } else {
+            1
+        };
 
         motor::limpiar(fb.as_mut_ptr(), VENTANA_ANCHO, VENTANA_ALTO, FONDO);
         motor::mapa_render(
@@ -333,15 +379,27 @@ impl Juego {
             &self.mapa,
         );
         let sprite = unsafe { &*SPRITE.get() };
-        motor::blit_alpha(
+        let lienzo = gfx::Canvas::from_buffer(
             fb.as_mut_ptr(),
             VENTANA_ANCHO,
             VENTANA_ALTO,
+            VENTANA_ANCHO as usize,
+        );
+        lienzo.blit_ex(
+            sprite.as_ptr(),
+            SPRITE_LADO as usize,
             self.x - cam_x,
             self.y - cam_y,
-            sprite.as_ptr(),
+            0,
+            0,
             SPRITE_LADO,
             SPRITE_LADO,
+            0,
+            0,
+            false,
+            false,
+            0,
+            zoom,
         );
     }
 }
@@ -430,6 +488,13 @@ pub fn arrancar(mi: &gfx::ModeInfo) -> ! {
         y: 16,
         entrada: 0,
         fotograma: 0,
+        camara: Camara {
+            x: 0,
+            y: 0,
+            ancho: 0,
+            alto: 0,
+            zoom: 1,
+        },
         corriendo: true,
     };
     // El hueco de nacimiento con margen, para no empezar pegado a un muro.
