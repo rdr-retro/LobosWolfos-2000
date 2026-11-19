@@ -2158,6 +2158,27 @@ int logic3_activo(void) {
     return g3_activo;
 }
 
+Proyecto3 *logic3_modelo_activo(void) {
+    return g3_activo ? &g3 : NULL;
+}
+
+int logic3_nuevo_editor(void) {
+    if (g3_activo) return 1;
+    logic3_olvidar();
+    logic3_iniciar(&g3);
+    if (g.ajustes.nombre[0])
+        copiar_texto(g3.nombre, sizeof(g3.nombre), g.ajustes.nombre);
+    if (g.ajustes.ancho > 0) g3.ancho = g.ajustes.ancho;
+    if (g.ajustes.alto > 0) g3.alto = g.ajustes.alto;
+    g3.limitar_cuadros = g.ajustes.limitar_cuadros ? 1 : 0;
+    if (g.ajustes.fps > 0) g3.fps = g.ajustes.fps;
+    if (g.ajustes.velocidad > 0) g3.velocidad = g.ajustes.velocidad;
+    if (g.ajustes.fondo) g3.fondo = g.ajustes.fondo;
+    g3_activo = 1;
+    g3_error[0] = 0;
+    return 1;
+}
+
 const char *logic3_ultimo_error(void) {
     return g3_error;
 }
@@ -2202,6 +2223,9 @@ int logic3_cargar_editor(const char *ruta) {
     g3 = tmp;
     g3_activo = 1;
     g3_error[0] = 0;
+    /* La seleccion y el scroll del estudio se recuerdan por archivo, sin
+     * escribirlos en LOGIC3: el formato y su CRC quedan intactos. */
+    estudio_proyecto_cambiar(ruta);
 
     /* Cabecera del proyecto. */
     copiar_texto(g.ajustes.nombre, sizeof(g.ajustes.nombre), g3.nombre);
@@ -2263,6 +2287,8 @@ int logic3_guardar_actual(const char *ruta) {
         return 0;
     }
     g3_error[0] = 0;
+    estudio_proyecto_guardar(ruta);
+    estudio_guardar_estado();
     return 1;
 }
 

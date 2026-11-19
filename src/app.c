@@ -184,6 +184,10 @@ static void accion_modo(int opcion) {
              * el lienzo del modo pintar. */
             app_alternar_editor_menus();
             break;
+        case 6:
+            /* Vista Estudio: escenario, objetos e inspector. */
+            app_alternar_estudio();
+            break;
         default:
             break;
     }
@@ -2513,6 +2517,12 @@ void app_pulsar(int x, int y, int boton) {
         return;
     }
 
+    /* Vista Estudio: paneles, toolbar, escenario e inspector propios. */
+    if (g.vista == VISTA_ESTUDIO) {
+        estudio_pulsar(x, y, boton);
+        return;
+    }
+
     /* El gestor de logica tiene su propio boton, lienzo y lista. */
     if (g.vista == VISTA_MODULOS) {
         modulos_pulsar(x, y, boton);
@@ -2582,6 +2592,10 @@ void app_soltar(int x, int y, int boton) {
     }
     g.opcion_arrastrada = -1;
     g.cubo_arrastre = -1;
+    if (g.vista == VISTA_ESTUDIO) {
+        estudio_soltar(x, y, boton);
+        return;
+    }
     if (g.vista == VISTA_MODULOS) {
         modulos_soltar(x, y);
         return;
@@ -2654,6 +2668,13 @@ void app_mover(int x, int y, int botones) {
             g.hover_media = media;
             app_invalidar();
         }
+    }
+
+    /* En el estudio solo cambia el resalte de sus propios controles. */
+    if (g.vista == VISTA_ESTUDIO) {
+        estudio_mover(x, y, botones);
+        if (y < AREA_SUP_ALTO) app_invalidar();
+        return;
     }
 
     /* En el gestor se actualiza el arrastre y el hover del boton. */
@@ -2826,6 +2847,10 @@ void app_rueda(int x, int y, int delta, int ctrl) {
     g.raton_y = y;
     if (g.ajustes_visible) return;
     if (g.guia_visible) return;
+    if (g.vista == VISTA_ESTUDIO) {
+        estudio_rueda(x, y, delta, ctrl);
+        return;
+    }
     if (g.vista == VISTA_MODULOS) {
         modulos_rueda(x, y, delta, ctrl);
         return;
@@ -2889,6 +2914,11 @@ void app_tecla(int vk, int ctrl, int shift) {
         }
         return;
     }
+    /* Vista Estudio: flechas para recorrer la lista y Supr para borrar. */
+    if (g.vista == VISTA_ESTUDIO) {
+        estudio_tecla(vk, ctrl, shift);
+        return;
+    }
     /* Editor de codigo lobo abierto: las teclas de control son suyas. */
     if (g.vista == VISTA_MODULOS) {
         if (g.funcion_abierta >= 0) funciones_codigo_tecla(vk, ctrl);
@@ -2905,6 +2935,10 @@ void app_tecla(int vk, int ctrl, int shift) {
 void app_caracter(int ch) {
     if (g.guia_visible) return;
     if (ajustes_caracter(ch)) return;
+    if (g.vista == VISTA_ESTUDIO) {
+        estudio_caracter(ch);
+        return;
+    }
     /* Editor de codigo lobo abierto: los caracteres imprimibles son
      * suyos (la fuente bitmap es ASCII, 32..126). */
     if (g.vista == VISTA_MODULOS) {
@@ -2931,7 +2965,7 @@ void app_doble_clic(int x, int y) {
         return;
     }
     if (g.vista == VISTA_MAPA || g.vista == VISTA_MODULOS ||
-        g.vista == VISTA_MENUS) return;
+        g.vista == VISTA_MENUS || g.vista == VISTA_ESTUDIO) return;
     pintura_doble_clic(x, y);
 }
 

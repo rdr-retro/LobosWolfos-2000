@@ -1,11 +1,11 @@
 # Pruebas de LobosWolfos 2000
 
-Ocho suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
+Nueve suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
 (fase 24), la VM resumible y lobo 3 (fase 25), entidades, escenas y ciclo de
 vida (fase 26), eventos, planificador y mensajes (fase 27), variables, listas
 y funciones (fase 28), colisiones, flags y fisica (fase 29), render de
-trajes, animacion, capas y camara (fase 30) y la interfaz del editor
-(fase 23). Congelan el
+trajes, animacion, capas y camara (fase 30), la vista Estudio (fase 31) y la
+interfaz del editor (fase 23). Congelan el
 comportamiento antes de cambiar el runtime en las fases siguientes.
 
 Todo es texto: los patrones de las capturas son hashes SHA-256 y
@@ -15,7 +15,7 @@ las pruebas no lo necesitan.
 ## Comandos
 
 ```bat
-build.bat prueba              compila y pasa las ocho suites
+build.bat prueba              compila y pasa las nueve suites
 build.bat prueba conformidad  solo la suite del lenguaje
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
@@ -23,6 +23,7 @@ build.bat prueba entidades    solo entidades, escenas y ciclo de vida
 build.bat prueba eventos      solo eventos, planificador y mensajes
 build.bat prueba colisiones   solo colisiones, flags y fisica
 build.bat prueba render       solo trajes, animacion, capas y camara
+build.bat prueba estudio      solo la vista Estudio
 build.bat prueba regresion    solo la regresion del editor
 build.bat prueba actualizar   reescribe los patrones con el estado actual
 ```
@@ -39,6 +40,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\eventos.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\colisiones.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\render.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\render.ps1 -Repetir
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\estudio.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\regresion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\linea_base.ps1
 ```
@@ -315,6 +317,46 @@ zoom 2. `-Repetir` ejecuta cada caso dos veces para detectar render no
 determinista. Para anadir un caso: crear el `.logic3`, sus PNG y su `.args`,
 ejecutar `pruebas\render.ps1 -Filtro <nombre>* -Actualizar`, revisar la traza
 y el hash a mano, y volver a pasarla sin `-Actualizar` y con `-Repetir`.
+
+## Vista Estudio (`estudio.ps1`)
+
+Suite de la fase 31. Congela el BMP, el volcado y cinco sondas de pixel por
+caso. Las sondas caen en `100,680` (panel izquierdo), `199,400` (separador),
+`500,401` (centro), `940,400` (separador) y `1100,680` (panel derecho), para
+verificar el layout 200/740/260. Las rutas temporales del volcado se
+sustituyen por `<CASO>`, asi que los patrones no dependen del equipo.
+
+Los patrones viven en `pruebas\estudio\esperado`:
+
+| Archivo | Contenido |
+|---|---|
+| `<nombre>.volcar` | volcado de `--volcar` normalizado |
+| `<nombre>.bmp.sha256` | hash SHA-256 de la captura |
+| `<nombre>.pixeles` | las cinco sondas `x,y=RRGGBB` |
+| `guardar.logic3` | proyecto canonico creado desde el estudio |
+| `menu_indices.volcar` | indices de ARCHIVO, MODO y AYUDA |
+
+| Caso | Flags | Cubre |
+|---|---|---|
+| `entrada` | `--estudio` | paneles, zoom 10 y proyecto LOGIC3 vacio |
+| `crear` | `--clics 52,85;52,85;148,85;148,85;148,85` | dos escenas, tres objetos y seis eventos |
+| `borrar` | crear y cuatro clics en `148,111` | vuelta a una escena sin objetos |
+| `seleccion_id` | `--abrir-logic3 ... --objeto 2` | seleccion por id y su inspector |
+| `seleccion_clic` | `--objeto 2 --clics 52,134` | el clic cambia la fila seleccionada |
+| `guardar` | crear, guardar y reabrir | proyecto LOGIC3 con 2 escenas y 3 objetos |
+| `menu_modo` | `--menu 2` | desplegable MODO con la fila nueva |
+| `menu_indices` | `--menu 1/2/9` | indices usados por las pruebas antiguas |
+
+Para regenerar o revisar:
+
+```bat
+build.bat prueba estudio
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\estudio.ps1 -Actualizar
+git diff pruebas\estudio\esperado
+```
+
+El volcado anade campos de estudio solo cuando `vista=4`, por lo que los ocho
+patrones de `regresion.ps1` siguen sin cambios.
 
 ## Regresion del editor (`regresion.ps1`)
 

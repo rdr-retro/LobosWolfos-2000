@@ -35,6 +35,12 @@ para cargar y guardar PNG.
   la cabecera al abrir un `.logic`, convierte un LOGIC2 existente y exporta de
   emergencia a LOGIC2. El motor ejecuta los scripts `codigo.lobo` de los
   eventos de fotograma con una VM resumible (fase 25).
+- Vista Estudio (fase 31): entrada **MODO > Vista Estudio**, pestana «Estudio»
+  y columnas de 200, 740 y 260 px a 1200 px de ancho. El panel izquierdo crea
+  borra y selecciona escenas y objetos, el centro muestra el escenario con
+  rejilla y el derecho inspecciona propiedades, trajes, variables y eventos.
+  La seleccion y el scroll se recuerdan por proyecto sin cambiar el formato
+  LOGIC3 ni su CRC.
 - Entidades y escenas en el motor (fase 26): cada objeto de la primera escena
   se instancia con posición, tamaño, capa, visibilidad, traje y variables
   propias; `mi.x`, `mi.y`, `mi.vida`, `mi.visible`, `mi.traje` y
@@ -495,6 +501,28 @@ El kernel (`loboswolfos/kernel`) recibe la primitiva `gfx::Canvas::blit_ex`
 con el mismo flip, rotación y zoom, y calcula la cámara con el mismo criterio
 sobre el sprite clásico. No hay entidades LOGIC3 en el kernel: el espejo se
 limita a la primitiva y a la cámara.
+
+#### Vista Estudio (fase 31)
+
+La nueva vista se abre desde **MODO > Vista Estudio** (fila 6 del desplegable),
+desde la pestana «Estudio» o con `--estudio`. Las tres columnas son fijas:
+200 px de escenas y objetos, el resto para el escenario y 260 px de inspector.
+A la resolución de referencia de 1200x700 el centro mide 740 px y el área de
+trabajo es `200,52,740,648`, igual que la barra inferior clásica.
+
+El panel izquierdo tiene los botones **Nueva esc.**, **Nuevo obj.**,
+**Importar traje** y **Borrar**. Los objetos nuevos reciben los eventos
+`inicio` y `fotograma`. Un clic en una fila selecciona la escena o el objeto y
+actualiza el inspector; el clic derecho en un objeto conmuta su bloqueo. La
+rueda y las flechas recorren la lista, y `Supr` borra la selección. El centro
+dibuja la rejilla y los objetos de la escena activa; la barra del estudio
+ofrece las vistas Escenario, Objetos, Datos, Sonidos y Play.
+
+La selección, el desplazamiento y la pestaña activa se guardan en memoria por
+ruta de proyecto y se exponen al final de `--volcar` solo cuando el estudio
+está activo: `estudio=1 paneles=200,740,260 sel_escena=... sel_objeto=...`.
+Los flags `--escena N` y `--objeto N` seleccionan por id LOGIC3. Los archivos
+LOGIC3 no cambian: el estudio reutiliza el escritor canonico y su CRC.
 
 ## Uso
 

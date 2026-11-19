@@ -93,6 +93,7 @@ Zona zona_trabajo(void) {
     /* El editor de menus usa el hueco central de los paneles del gestor
      * para mostrar el lienzo del modo pintar (fase 13). */
     if (g.vista == VISTA_MENUS) return modulos_lienzo_zona();
+    if (g.vista == VISTA_ESTUDIO) return estudio_lienzo_zona();
     return zona_trabajo_pintar();
 }
 
@@ -791,7 +792,7 @@ int menu_num_filas(int menu) {
     switch (menu) {
         case 0: return g.vista == VISTA_MAPA ? 8 : 6;
         case 1: return 2;
-        case 2: return 6;
+        case 2: return 7;
         case 3: return 5;
         case 4: return 3;
         case 8: return 2;
@@ -825,7 +826,7 @@ Zona menu_panel_zona(int menu) {
             if (interior < 40) interior = 40;
             if (ancho > interior) ancho = interior;
             return zona_hacer(etiqueta.x, zona_abajo(etiqueta), ancho,
-                              3 + MENU_FILA_ALTO * 6 + 3);
+                              3 + MENU_FILA_ALTO * 7 + 3);
         case 3:
             interior = 0;
             for (i = 0; i < 5; i++) {
@@ -1550,12 +1551,14 @@ void ui_dibujar_menu_desplegable(void) {
                 else if (i == 2) texto = "Modo tiles";
                 else if (i == 3) texto = "Editor de mapas";
                 else if (i == 4) texto = "Gestor de lógica";
-                else texto = "Editor de menus";
+                else if (i == 5) texto = "Editor de menus";
+                else texto = "Vista Estudio";
                 if (hover) dibujar_rect_z(z, MENU_BARRA_HOVER);
                 if ((i == 0 && g.vista == VISTA_PINTAR && !g.modo_tiles) ||
                     (i == 2 && g.modo_tiles) || (i == 3 && mapa) ||
                     (i == 4 && g.vista == VISTA_MODULOS) ||
-                    (i == 5 && g.vista == VISTA_MENUS)) {
+                    (i == 5 && g.vista == VISTA_MENUS) ||
+                    (i == 6 && g.vista == VISTA_ESTUDIO)) {
                     dibujar_rect(z.x + 1, z.y + 6, z.x + 4, zona_abajo(z) - 6,
                                  hover ? MENU_BARRA_HOVER_TXT : BOTON_SELECCION);
                 }
@@ -4559,6 +4562,10 @@ static void ui_dibujar_estado(void) {
     if (g.vista == VISTA_MODULOS || g.vista == VISTA_MENUS) {
         margen = modulos_panel_ancho();
         ancho = g.ancho - margen - modulos_panel_derecho_ancho();
+    } else if (g.vista == VISTA_ESTUDIO) {
+        Zona centro = estudio_lienzo_zona();
+        margen = centro.x;
+        ancho = centro.ancho;
     } else {
         margen = SIDEBAR_ANCHO;
         ancho = ancho_util();
@@ -4574,6 +4581,19 @@ static void ui_dibujar_estado(void) {
 
 void ui_dibujar(void) {
     int i;
+
+    /* Vista Estudio: columnas fijas, escenario e inspector. */
+    if (g.vista == VISTA_ESTUDIO) {
+        ui_dibujar_estudio();
+        ui_dibujar_pestanas();
+        ui_dibujar_barra_menus();
+        ui_dibujar_menu_desplegable();
+        ui_dibujar_estado();
+        ui_dibujar_confirmaciones();
+        ui_dibujar_ajustes();
+        ui_dibujar_guia();
+        return;
+    }
 
     /* Gestor de logica: paneles, lista, lienzo desplazable y boton. */
     if (g.vista == VISTA_MODULOS) {

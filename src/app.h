@@ -409,6 +409,18 @@ typedef unsigned char  u8;
 #define TAB_LADO_INSET    4
 #define TAB_RADIO_SUP     6
 
+/* Vista Estudio (fase 31): tres columnas fijas que suman el ancho nominal
+ * de 1200 px. El area central conserva el resto en ventanas mas estrechas. */
+#define ESTUDIO_IZQ_ANCHO       200
+#define ESTUDIO_DER_ANCHO       260
+#define ESTUDIO_BARRA_ALTO      28
+#define ESTUDIO_BOTON_ALTO      22
+#define ESTUDIO_FILA_ALTO       18
+#define ESTUDIO_BOTONES         4
+#define ESTUDIO_PESTANAS        5
+#define ESTUDIO_BLOQUEOS_MAX    128
+#define ESTUDIO_RECUERDOS_MAX   8
+
 /* Herramienta de texto: medidas y margenes. */
 #define TEXTO_MARGEN                 2
 #define TEXTO_ANCHO_MIN              160
@@ -750,7 +762,8 @@ typedef enum {
     VISTA_PINTAR = 0,
     VISTA_MAPA,
     VISTA_MODULOS,
-    VISTA_MENUS
+    VISTA_MENUS,
+    VISTA_ESTUDIO
 } Vista;
 
 /* Estado de una pestana. Todas las pestanas comparten el mismo documento, el
@@ -844,6 +857,17 @@ typedef struct App {
     int confirmar_tile;    /* indice del tile a borrar; -1 = ninguno */
 
     Vista vista;
+
+    /* Vista Estudio (fase 31): seleccion, desplazamiento y pestana activa.
+     * Los ids se guardan, no los indices, para sobrevivir a borrados. */
+    int estudio_escena;
+    int estudio_objeto;
+    int estudio_scroll;
+    int estudio_pestana;
+    int estudio_hover;
+    int estudio_boton_pulsado;
+    int estudio_bloqueos[ESTUDIO_BLOQUEOS_MAX + 1];
+    char estudio_ruta[MAX_PATH];
 
     /* Pestanas: la activa vive en el estado global de arriba. */
     Pestana pestanas[MAX_PESTANAS];
@@ -1276,6 +1300,27 @@ const char *pestanas_ruta(int indice);
 int  pestanas_esta_modificada(int indice);
 
 /* ------------------------------------------------------------------ */
+/* Vista Estudio (fase 31)                                             */
+/* ------------------------------------------------------------------ */
+Zona estudio_panel_izq_zona(void);
+Zona estudio_lienzo_zona(void);
+Zona estudio_panel_der_zona(void);
+Zona estudio_barra_zona(void);
+Zona estudio_barra_boton_zona(int indice);
+Zona estudio_boton_zona(int indice);
+Zona estudio_fila_zona(int fila);
+int  estudio_fila_info(int fila, int *tipo, int *indice);
+int  estudio_filas_totales(void);
+int  estudio_filas_visibles(void);
+void estudio_pulsar(int x, int y, int boton);
+void estudio_soltar(int x, int y, int boton);
+void estudio_mover(int x, int y, int botones);
+void estudio_rueda(int x, int y, int delta, int ctrl);
+void estudio_tecla(int vk, int ctrl, int shift);
+void estudio_caracter(int ch);
+void ui_dibujar_estudio(void);
+
+/* ------------------------------------------------------------------ */
 /* UI                                                                  */
 /* ------------------------------------------------------------------ */
 Zona pestanas_zona(void);
@@ -1510,6 +1555,22 @@ void logic3_olvidar(void);
 const char *logic3_ultimo_error(void);
 void logic3_contar(int *escenas, int *objetos, int *eventos,
                    int *bloques, int *variables);
+/* Mutaciones del modelo desde el estudio. No cambian el formato ni el CRC
+ * de los proyectos que no se editan. */
+int  estudio_asegurar_modelo(void);
+int  estudio_escena_nueva(void);
+int  estudio_objeto_nuevo(void);
+int  estudio_traje_importar(void);
+int  estudio_borrar_seleccion(void);
+void estudio_seleccionar_escena(int id);
+void estudio_seleccionar_objeto(int id);
+void estudio_scroll_ver(int fila);
+void estudio_fila_seleccionar(int fila);
+void estudio_alternar_bloqueo(int id);
+int  estudio_esta_bloqueado(int id);
+void estudio_proyecto_cambiar(const char *ruta);
+void estudio_proyecto_guardar(const char *ruta);
+void estudio_guardar_estado(void);
 
 /* Ajustes del proyecto (ajustes.c, fase 14) */
 void ajustes_proyecto_iniciar(void);
@@ -1567,6 +1628,7 @@ void app_menus_resolucion(void);
 void app_alternar_mapa(void);
 void app_alternar_gestor_modulos(void);
 void app_alternar_editor_menus(void);
+void app_alternar_estudio(void);
 void app_poner_herramienta(int herramienta);
 void app_agregar_color_paleta(u32 color);
 

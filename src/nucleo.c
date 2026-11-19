@@ -915,7 +915,8 @@ void app_cambiar_vista(Vista vista) {
     Vista anterior;
     if (vista == g.vista) return;
     anterior = g.vista;
-    desde_paneles = (g.vista == VISTA_MODULOS || g.vista == VISTA_MENUS);
+    desde_paneles = (g.vista == VISTA_MODULOS || g.vista == VISTA_MENUS ||
+                     g.vista == VISTA_ESTUDIO);
     saliendo_menus = (g.vista == VISTA_MENUS);
     /* Cierra la edicion en curso sobre el lienzo que se va a ocultar. */
     if (saliendo_menus || vista == VISTA_MENUS) {
@@ -1001,6 +1002,29 @@ void app_alternar_editor_menus(void) {
     app_cambiar_vista(VISTA_MENUS);
     /* El lienzo se centra en el hueco entre los paneles del editor. */
     lienzo_actualizar();
+}
+
+/* Vista Estudio: mismos paneles que el gestor, con el escenario en el centro
+ * y el inspector a la derecha. Elegirlo de nuevo vuelve a Pintar. */
+void app_alternar_estudio(void) {
+    if (g.vista == VISTA_ESTUDIO) {
+        app_cambiar_vista(VISTA_PINTAR);
+        return;
+    }
+    if (g.texto_activo) texto_confirmar();
+    if (g.curva_activa) pintura_figura_confirmar(0, 0, 0);
+    if (g.preview_activa) pintura_figura_cancelar();
+    if (g.sel.activa && g.sel.flotante)
+        seleccion_soltar(&g.sel, &g.doc, &g.deshacer);
+    g.pintando = 0;
+    g.poligono_activo = 0;
+    g.lienzo_tirador = -1;
+    g.sel_tirador = -1;
+    g.capa_menu_abierto = -1;
+    g.confirmar_borrado = 0;
+    g.confirmar_tile = -1;
+    if (!logic3_activo()) estudio_proyecto_cambiar("");
+    app_cambiar_vista(VISTA_ESTUDIO);
 }
 
 void app_poner_herramienta(int herramienta) {
@@ -1672,6 +1696,19 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
          * del proyecto recien abierto. */
         if (vista_arg && strncmp(vista_arg, "menus", 5) == 0)
             app_alternar_editor_menus();
+        /* Vista Estudio (fase 31) y seleccion inicial por id. Va despues de
+         * cargar el LOGIC3 y antes de simular clics. */
+        if (strstr(cmd, "--estudio") != NULL ||
+            (vista_arg && strncmp(vista_arg, "estudio", 7) == 0))
+            app_alternar_estudio();
+        if (g.vista == VISTA_ESTUDIO) {
+            char *escena_sel = arg_valor(cmd, "--escena");
+            char *objeto_sel = arg_valor(cmd, "--objeto");
+            if (escena_sel && escena_sel[0])
+                estudio_seleccionar_escena(atoi(escena_sel));
+            if (objeto_sel && objeto_sel[0])
+                estudio_seleccionar_objeto(atoi(objeto_sel));
+        }
         /* Editor de codigo abierto por id de funcion (fase 8): como un
          * clic en el boton de la seccion FUNCIONES. */
         {
@@ -2161,6 +2198,19 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                             g.mapa_ruta[0] ? g.mapa_ruta : "-",
                             menu_arg ? menu_arg : "-",
                             clics_arg ? clics_arg : "-");
+                    if (g.vista == VISTA_ESTUDIO) {
+                        Zona ez = estudio_lienzo_zona();
+                        fprintf(vf,
+                                "estudio=1 paneles=%d,%d,%d "
+                                "sel_escena=%d sel_objeto=%d "
+                                "scroll_estudio=%d pestana_estudio=%d "
+                                "ruta_estudio=%s\n",
+                                ESTUDIO_IZQ_ANCHO, ez.ancho,
+                                ESTUDIO_DER_ANCHO, g.estudio_escena,
+                                g.estudio_objeto, g.estudio_scroll,
+                                g.estudio_pestana,
+                                g.estudio_ruta[0] ? g.estudio_ruta : "-");
+                    }
                     fclose(vf);
                 }
             }

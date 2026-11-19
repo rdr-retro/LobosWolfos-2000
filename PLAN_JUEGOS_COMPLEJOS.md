@@ -187,7 +187,7 @@ scripts con `funcion >= 1`.
 ```text
 +----------------------------- EDITOR ------------------------------+
 | Vista Estudio (nueva)                                             |
-|  - Escenario / Objetos / Trajes / Sonidos / Datos                 |
+|  - Escenario / Objetos / Datos / Sonidos / Play                   |
 |  - Paleta de bloques  |  Lienzo de bloques  |  Inspector          |
 |  - Consola de errores, valores en vivo, perfilador, replay        |
 +------------------------------+------------------------------------+
@@ -1089,6 +1089,18 @@ inspector, crear/borrar objeto actualiza el volcado.
 
 **Criterio de salida:** se puede crear un proyecto con dos escenas y tres
 objetos desde cero y guardarlo en LOGIC3.
+
+**Estado:** cerrada. `VISTA_ESTUDIO` se anadio al final del enum para no
+desplazar las vistas 0..3, y la entrada vive en la fila 6 de MODO sin tocar
+`menu=1` ni `menu=9`. `src/estudio.c` muta el modelo LOGIC3 activo y
+`src/estudio_ui.c` dibuja las tres columnas y las zonas clicables. Los eventos
+por defecto de los objetos nuevos son `inicio` y `fotograma`. La seleccion, el
+scroll y la pestana se recuerdan por ruta de proyecto en memoria y se volcan
+solo con `vista=4`, de modo que los ocho patrones de regresion siguen intactos.
+`pruebas/estudio.ps1` congela ocho casos con BMP, volcado y cinco sondas de
+pixel de los limites 200/740/260; el caso `guardar` ademas compara el proyecto
+LOGIC3 canonico con dos escenas y tres objetos. `build.bat prueba` pasa las
+nueve suites.
 
 ### Fase 32 - Lienzo de bloques: paleta, arrastre y formas
 

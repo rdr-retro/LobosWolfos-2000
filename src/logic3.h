@@ -230,6 +230,12 @@ int logic3_cargar(Proyecto3 *p, const char *ruta, char *error, int tam_error);
 int logic3_guardar(const Proyecto3 *p, const char *ruta, char *error, int tam_error);
 int logic3_validar(const Proyecto3 *p, char *error, int tam_error);
 
+/* Modelo activo del editor, para la vista Estudio. Devuelve NULL si no hay
+ * ningun proyecto LOGIC3 cargado. `logic3_nuevo_editor` crea uno vacio con
+ * los ajustes actuales del editor. */
+Proyecto3 *logic3_modelo_activo(void);
+int logic3_nuevo_editor(void);
+
 /* CRC32 del archivo (polinomio 0xEDB88320), el mismo que se escribe en
  * la ultima linea. */
 unsigned int logic3_crc32(const void *datos, int largo);
