@@ -158,6 +158,7 @@ void estudio_proyecto_cambiar(const char *ruta) {
         memset(g.estudio_bloqueos, 0, sizeof(g.estudio_bloqueos));
     }
     validar_seleccion(logic3_modelo_activo());
+    bloques_reiniciar();
     app_invalidar();
 }
 

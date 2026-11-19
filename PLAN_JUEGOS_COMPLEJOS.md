@@ -1126,6 +1126,23 @@ reportero se acopla a una ranura; un C anida dos hijos; deshacer revierte.
 **Criterio de salida:** se puede construir el script del ejemplo del
 capitulo 4.3 solo con el raton y el teclado, y guardarlo.
 
+**Estado:** cerrada. `BLOQUES_TAB=4` coloca la pestana antes de Play y
+`ESTUDIO_PESTANAS=6` deja `ARCHIVO=1` y `AYUDA=9` intactos. `src/bloques.c`
+guarda el modelo, el historial, el catalogo y el layout; `src/bloques_ui.c`
+dibuja la paleta, el lienzo y el inspector y gestiona arrastre, acople,
+ranuras, anidamiento, teclado, rueda, duplicado y borrado. Cada mutacion
+vuelca a `p->bloques` con el escritor LOGIC3 existente: no cambian el formato
+ni el CRC. El vuelco no escribe `hijo` porque el lector actual exige tres
+tokens y el escritor emite dos; el cuerpo se infiere al importar con `padre`
+y el tipo C. La seleccion, el historial, el paneo y el zoom no se serializan.
+El volcado anade campos `lb_` solo en la pestana Bloques, asi que los volcados
+de regresion siguen intactos; sus hashes BMP se regeneraron por la barra de
+seis pestanas. `pruebas/bloques.ps1` congela nueve casos con BMP, volcado,
+cinco sondas de pixel y el LOGIC3 canonico del capitulo 4.3. `build.bat prueba`
+pasa las diez suites y 86 casos. Quedan para fases posteriores la busqueda en
+la paleta, deshabilitar bloques y la seleccion multiple; el criterio de salida
+de esta fase queda cubierto.
+
 ### Fase 33 - Compilador bloques -> lobo y visor de codigo
 
 **Objetivo:** que los bloques se ejecuten.

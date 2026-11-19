@@ -1,11 +1,11 @@
 # Pruebas de LobosWolfos 2000
 
-Nueve suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
+Diez suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
 (fase 24), la VM resumible y lobo 3 (fase 25), entidades, escenas y ciclo de
 vida (fase 26), eventos, planificador y mensajes (fase 27), variables, listas
 y funciones (fase 28), colisiones, flags y fisica (fase 29), render de
-trajes, animacion, capas y camara (fase 30), la vista Estudio (fase 31) y la
-interfaz del editor (fase 23). Congelan el
+trajes, animacion, capas y camara (fase 30), la vista Estudio (fase 31), el
+lienzo de bloques (fase 32) y la interfaz del editor (fase 23). Congelan el
 comportamiento antes de cambiar el runtime en las fases siguientes.
 
 Todo es texto: los patrones de las capturas son hashes SHA-256 y
@@ -15,7 +15,7 @@ las pruebas no lo necesitan.
 ## Comandos
 
 ```bat
-build.bat prueba              compila y pasa las nueve suites
+build.bat prueba              compila y pasa las diez suites
 build.bat prueba conformidad  solo la suite del lenguaje
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
@@ -24,6 +24,7 @@ build.bat prueba eventos      solo eventos, planificador y mensajes
 build.bat prueba colisiones   solo colisiones, flags y fisica
 build.bat prueba render       solo trajes, animacion, capas y camara
 build.bat prueba estudio      solo la vista Estudio
+build.bat prueba bloques      solo el lienzo de bloques
 build.bat prueba regresion    solo la regresion del editor
 build.bat prueba actualizar   reescribe los patrones con el estado actual
 ```
@@ -41,6 +42,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\colisiones.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\render.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\render.ps1 -Repetir
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\estudio.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\bloques.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\regresion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\linea_base.ps1
 ```
@@ -356,7 +358,52 @@ git diff pruebas\estudio\esperado
 ```
 
 El volcado anade campos de estudio solo cuando `vista=4`, por lo que los ocho
-patrones de `regresion.ps1` siguen sin cambios.
+volcados de `regresion.ps1` siguen sin cambios. Sus hashes BMP se regeneraron
+al insertar la pestana Bloques en la barra del estudio (fase 32).
+
+## Lienzo de bloques (`bloques.ps1`)
+
+Suite de la fase 32. Congela el BMP, el volcado y cinco sondas de pixel por
+caso. Las sondas caen en `100,170` (categoria), `100,212` (paleta), `300,160`
+(barra del estudio), `500,300` (lienzo) y `1100,400` (inspector). Las rutas
+temporales se sustituyen por `<CASO>`, asi que los patrones no dependen del
+equipo. La captura fuerza 1200x700 con `--captura`.
+
+Los patrones viven en `pruebas\bloques\esperado`:
+
+| Archivo | Contenido |
+|---|---|
+| `<nombre>.volcar` | volcado de `--volcar` normalizado |
+| `<nombre>.bmp.sha256` | hash SHA-256 de la captura |
+| `<nombre>.pixeles` | las cinco sondas `x,y=RRGGBB` |
+| `guardar.logic3` | proyecto canonico del script del capitulo 4.3 |
+| `menu_indices.volcar` | indices de ARCHIVO, MODO y AYUDA |
+
+| Caso | Flags | Cubre |
+|---|---|---|
+| `entrada` | `--bloques` | pestana 4, lienzo vacio y `lb_bloques=0` |
+| `arrastrar` | `--arrastre-bloque 2:100,212;400,300` | creacion por arrastre y seleccion |
+| `seleccion_id` | dos bloques y `--bloque 1000` | seleccion por id al final de los gestos |
+| `ranura` | dos gestos con `4:` | reportero acoplado a la entrada `dx` |
+| `anidar` | un C y dos hijos | `lb_cuerpo=2` dentro del mismo padre |
+| `deshacer` | crear y `--deshacer-bloque` | vuelta a cero bloques |
+| `teclado` | clic en categoria y `Intro` | creacion sin arrastre |
+| `guardar` | cinco bloques y `--guardar-logic3` | guardado, relectura y `lb_cuerpo=1` |
+| `menu_indices` | `--menu 1/2/9` | indices antiguos y ausencia de campos `lb_` |
+
+El vuelco no emite lineas `hijo`: el lector actual de LOGIC3 exige tres tokens
+y el escritor genera dos. El cuerpo se infiere al reabrir con `padre` y el
+tipo C. El campo `bloques=N` de la primera linea sigue siendo el conteo
+LOGIC3; los campos nuevos llevan prefijo `lb_` y solo aparecen en la pestana
+Bloques.
+
+Para regenerar o revisar:
+
+```bat
+build.bat prueba bloques
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\bloques.ps1 -Actualizar
+git diff pruebas\bloques\esperado
+```
 
 ## Regresion del editor (`regresion.ps1`)
 

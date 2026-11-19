@@ -14,7 +14,7 @@
 #define ESTUDIO_COLOR_TEXTO   0x00404040u
 
 static const char *ESTUDIO_PESTANA_TEXTO[ESTUDIO_PESTANAS] = {
-    "Escenario", "Objetos", "Datos", "Sonidos", "Play"
+    "Escenario", "Objetos", "Datos", "Sonidos", "Bloques", "Play"
 };
 
 static const char *ESTUDIO_BOTON_TEXTO[ESTUDIO_BOTONES] = {
@@ -395,6 +395,10 @@ void ui_dibujar_estudio(void) {
     dibujar_rect(der.x, AREA_SUP_ALTO, der.x + 1, g.alto, SEPARADOR);
 
     dibujar_toolbar(centro);
+    if (g.estudio_pestana == BLOQUES_TAB) {
+        bloques_ui_dibujar();
+        return;
+    }
     dibujar_lista_estudio(p);
     dibujar_escenario(p, centro);
     dibujar_inspector(p, der);
@@ -424,11 +428,17 @@ void estudio_pulsar(int x, int y, int boton) {
                 juego_ventana_abrir();
             } else {
                 g.estudio_pestana = i;
+                if (i == BLOQUES_TAB) bloques_importar_modelo();
                 estudio_guardar_estado();
                 app_invalidar();
             }
             return;
         }
+    }
+
+    if (g.estudio_pestana == BLOQUES_TAB) {
+        bloques_ui_pulsar(x, y, boton);
+        return;
     }
 
     if (zona_contiene(izq, x, y)) {
@@ -477,6 +487,10 @@ void estudio_pulsar(int x, int y, int boton) {
 }
 
 void estudio_soltar(int x, int y, int boton) {
+    if (g.estudio_pestana == BLOQUES_TAB) {
+        bloques_ui_soltar(x, y, boton);
+        return;
+    }
     (void)x;
     (void)y;
     (void)boton;
@@ -491,6 +505,10 @@ void estudio_mover(int x, int y, int botones) {
     Zona barra = estudio_barra_zona();
     int hover = -1, i;
     (void)botones;
+    if (g.estudio_pestana == BLOQUES_TAB && !zona_contiene(barra, x, y)) {
+        bloques_ui_mover(x, y, botones);
+        return;
+    }
     if (zona_contiene(barra, x, y)) {
         for (i = 0; i < ESTUDIO_PESTANAS; i++)
             if (zona_contiene(estudio_barra_boton_zona(i), x, y))
@@ -509,6 +527,10 @@ void estudio_rueda(int x, int y, int delta, int ctrl) {
     Zona izq = estudio_panel_izq_zona();
     int maximo = estudio_filas_totales() - estudio_filas_visibles();
     (void)ctrl;
+    if (g.estudio_pestana == BLOQUES_TAB) {
+        bloques_ui_rueda(x, y, delta);
+        return;
+    }
     if (!zona_contiene(izq, x, y)) return;
     if (maximo < 0) maximo = 0;
     if (delta > 0) g.estudio_scroll--;
@@ -535,6 +557,10 @@ static int fila_de_seleccion(void) {
 
 void estudio_tecla(int vk, int ctrl, int shift) {
     int fila, total;
+    if (g.estudio_pestana == BLOQUES_TAB) {
+        bloques_ui_tecla(vk, ctrl, shift);
+        return;
+    }
     (void)ctrl;
     (void)shift;
     if (vk == VK_DELETE) {
@@ -555,5 +581,9 @@ void estudio_tecla(int vk, int ctrl, int shift) {
 }
 
 void estudio_caracter(int ch) {
+    if (g.estudio_pestana == BLOQUES_TAB) {
+        bloques_ui_caracter(ch);
+        return;
+    }
     (void)ch;
 }

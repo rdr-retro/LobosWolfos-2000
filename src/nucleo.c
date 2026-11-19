@@ -1701,6 +1701,14 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
         if (strstr(cmd, "--estudio") != NULL ||
             (vista_arg && strncmp(vista_arg, "estudio", 7) == 0))
             app_alternar_estudio();
+        /* Lienzo de bloques (fase 32): entra por la pestana nueva sin
+         * desplazar los indices de menu usados por las pruebas. */
+        if (strstr(cmd, "--bloques") != NULL) {
+            if (g.vista != VISTA_ESTUDIO) app_alternar_estudio();
+            g.estudio_pestana = BLOQUES_TAB;
+            bloques_importar_modelo();
+            estudio_guardar_estado();
+        }
         if (g.vista == VISTA_ESTUDIO) {
             char *escena_sel = arg_valor(cmd, "--escena");
             char *objeto_sel = arg_valor(cmd, "--objeto");
@@ -1870,6 +1878,41 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 seg = p + n;
                 while (*seg == '|' || *seg == ' ' || *seg == ';') seg++;
             }
+        }
+        /* Arrastres del lienzo de bloques (fase 32). Cada gesto es
+         * "x0,y0;x1,y1" con prefijo de categoria opcional "cat:", y varios
+         * se separan con "|". Van despues de los clics para poder elegir
+         * antes la categoria de la paleta. */
+        {
+            char *barrastre = arg_valor(cmd, "--arrastre-bloque");
+            if (barrastre && g.vista == VISTA_ESTUDIO &&
+                g.estudio_pestana == BLOQUES_TAB) {
+                const char *seg = barrastre;
+                while (*seg) {
+                    int bx0 = 0, by0 = 0, bx1 = 0, by1 = 0, usados = 0;
+                    int cat = -1, leidos = 0;
+                    const char *p = seg;
+                    if (sscanf(p, "%d:%n", &cat, &leidos) == 1 && leidos > 0)
+                        p += leidos;
+                    if (sscanf(p, "%d,%d;%d,%d%n", &bx0, &by0, &bx1, &by1,
+                               &usados) != 4) break;
+                    if (cat >= 0 && cat < BLOQUES_CATEGORIAS)
+                        g.bloques_categoria = cat;
+                    bloques_ui_arrastrar(bx0, by0, bx1, by1);
+                    seg = p + usados;
+                    while (*seg == '|' || *seg == ' ' || *seg == ';') seg++;
+                }
+            }
+        }
+        if (strstr(cmd, "--deshacer-bloque") != NULL &&
+            g.vista == VISTA_ESTUDIO && g.estudio_pestana == BLOQUES_TAB)
+            bloques_deshacer();
+        /* La seleccion por id va al final: los arrastres posteriores podian
+         * dejar seleccionado el ultimo bloque creado. */
+        if (g.vista == VISTA_ESTUDIO) {
+            char *bloque_sel = arg_valor(cmd, "--bloque");
+            if (bloque_sel && bloque_sel[0])
+                bloques_seleccionar(atoi(bloque_sel));
         }
         /* Portapapeles simulado tras el arrastre: copiar/cortar la seleccion
          * y pegar el bloque flotante para comprobar que se dibuja. */
@@ -2210,6 +2253,18 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                                 g.estudio_objeto, g.estudio_scroll,
                                 g.estudio_pestana,
                                 g.estudio_ruta[0] ? g.estudio_ruta : "-");
+                    }
+                    if (g.vista == VISTA_ESTUDIO &&
+                        g.estudio_pestana == BLOQUES_TAB) {
+                        fprintf(vf,
+                                "lb_bloques=%d lb_sel=%d lb_ranuras=%d "
+                                "lb_cuerpo=%d lb_paleta=%d lb_categoria=%d "
+                                "lb_foco=%d lb_zoom=%d lb_pan=%d,%d\n",
+                                bloques_cantidad(), bloques_id_seleccionado(),
+                                bloques_num_ranuras(), bloques_num_hijos(),
+                                g.bloques_paleta_sel, g.bloques_categoria,
+                                g.bloques_foco, g.bloques_zoom,
+                                g.bloques_pan_x, g.bloques_pan_y);
                     }
                     fclose(vf);
                 }

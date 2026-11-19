@@ -41,6 +41,12 @@ para cargar y guardar PNG.
   rejilla y el derecho inspecciona propiedades, trajes, variables y eventos.
   La seleccion y el scroll se recuerdan por proyecto sin cambiar el formato
   LOGIC3 ni su CRC.
+- Lienzo de bloques (fase 32): nueva pestaña **Bloques** en la vista Estudio,
+  con paleta por categorías, formas hat/pila/C/reportero/booleano/cap,
+  arrastre con acople por imán, ranuras, anidamiento, duplicado, borrado,
+  deshacer/rehacer y navegación por teclado. Cada mutación vuelca el modelo a
+  los bloques del proyecto LOGIC3 con el escritor existente, sin tocar el
+  formato ni el CRC.
 - Entidades y escenas en el motor (fase 26): cada objeto de la primera escena
   se instancia con posición, tamaño, capa, visibilidad, traje y variables
   propias; `mi.x`, `mi.y`, `mi.vida`, `mi.visible`, `mi.traje` y
@@ -78,7 +84,8 @@ para cargar y guardar PNG.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
 - Suite de pruebas en `pruebas/`: conformidad del lenguaje lobo (trazas y
   hashes de BMP), proyecto LOGIC3, VM resumible, entidades y escenas, eventos
-  y planificador, y regresión visual del editor, con `build.bat prueba`.
+  y planificador, vista Estudio, lienzo de bloques y regresión visual del
+  editor, con `build.bat prueba`.
 - Plan de la siguiente versión en `PLAN_JUEGOS_COMPLEJOS.md`: juegos complejos
   con un editor de bloques visual (estilo Scratch), formato `LOGIC3`, varias
   escenas y objetos, eventos, variables, listas y una VM resumible. Define las
@@ -103,10 +110,10 @@ También se puede compilar desde PowerShell:
 
 ## Pruebas
 
-`build.bat prueba` compila el editor y pasa las ocho suites:
+`build.bat prueba` compila el editor y pasa las diez suites:
 
 ```bat
-build.bat prueba              conformidad + logic3 + vm + entidades + eventos + colisiones + render + regresion
+build.bat prueba              conformidad + logic3 + vm + entidades + eventos + colisiones + render + estudio + bloques + regresion
 build.bat prueba conformidad  solo el lenguaje lobo
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
@@ -114,6 +121,8 @@ build.bat prueba entidades    solo entidades, escenas y ciclo de vida
 build.bat prueba eventos      solo eventos, planificador y mensajes
 build.bat prueba colisiones   solo colisiones, flags y fisica
 build.bat prueba render       solo trajes, animacion, capas y camara
+build.bat prueba estudio      solo la vista Estudio
+build.bat prueba bloques      solo el lienzo de bloques
 build.bat prueba regresion    solo la interfaz del editor
 build.bat prueba actualizar   reescribe los patrones (revisar el diff)
 ```
@@ -516,13 +525,46 @@ El panel izquierdo tiene los botones **Nueva esc.**, **Nuevo obj.**,
 actualiza el inspector; el clic derecho en un objeto conmuta su bloqueo. La
 rueda y las flechas recorren la lista, y `Supr` borra la selección. El centro
 dibuja la rejilla y los objetos de la escena activa; la barra del estudio
-ofrece las vistas Escenario, Objetos, Datos, Sonidos y Play.
+ofrece las vistas Escenario, Objetos, Datos, Sonidos, Bloques y Play.
 
 La selección, el desplazamiento y la pestaña activa se guardan en memoria por
 ruta de proyecto y se exponen al final de `--volcar` solo cuando el estudio
 está activo: `estudio=1 paneles=200,740,260 sel_escena=... sel_objeto=...`.
 Los flags `--escena N` y `--objeto N` seleccionan por id LOGIC3. Los archivos
 LOGIC3 no cambian: el estudio reutiliza el escritor canonico y su CRC.
+
+#### Lienzo de bloques (fase 32)
+
+La barra del estudio gana una pestaña **Bloques** antes de **Play**. Se abre
+desde esa pestaña, desde **MODO > Vista Estudio** o con `--bloques`; el índice
+de la pestaña es 4 y **Play** pasa al 5. A 1200x700 la paleta ocupa la columna
+izquierda, el lienzo con rejilla la central y el inspector la derecha.
+
+La paleta agrupa diez definiciones en seis categorías: eventos, control,
+movimiento, datos, operadores y código. Hay formas hat, pila, C, reportero,
+booleano y cap. Con el botón izquierdo se arrastra una definición al lienzo o
+se mueve un bloque raíz; al soltarlo sobre una ranura o sobre el cuerpo de un
+bloque C se acopla. El botón derecho duplica el bloque bajo el cursor. La
+rueda desplaza el lienzo. `Tab` alterna el foco entre paleta y lienzo, las
+flechas recorren categorías, definiciones o bloques, `Intro` añade la
+definición activa, `Supr` borra la selección y `Ctrl+Z`/`Ctrl+Y` deshacen y
+rehacen. `Ctrl+C`/`Ctrl+V` copian y pegan. Al escribir se edita el primer
+campo del bloque seleccionado.
+
+El script del capítulo 4.3 se puede construir solo con gestos y guardar con
+**ARCHIVO > Guardar LOGIC3**. El modelo de edición vive aparte del proyecto;
+cada mutación vuelca los nodos a `p->bloques` con el escritor LOGIC3 de siempre.
+El cuerpo se infiere al reabrir con `padre` y el tipo C, así que el vuelco no
+emite líneas `hijo`: el lector actual de LOGIC3 exige tres tokens y el escritor
+genera dos. La selección, el historial, el paneo y el zoom no se serializan.
+
+El volcado añade una línea propia solo en la pestaña Bloques:
+`lb_bloques=N lb_sel=N lb_ranuras=N lb_cuerpo=N lb_paleta=N lb_categoria=N
+lb_foco=N lb_zoom=N lb_pan=X,Y`. El campo `bloques=N` de la primera línea
+sigue siendo el conteo LOGIC3. Los flags de prueba son `--bloques`,
+`--bloque N`, `--arrastre-bloque "cat:x0,y0;x1,y1|..."` (categoría opcional y
+varios gestos separados por `|`) y `--deshacer-bloque`. `--bloque N` se aplica
+después de los arrastres para que la selección por id sea la final.
 
 ## Uso
 
@@ -773,12 +815,17 @@ paquete `.wolfo` con lógica, mapas y tiles, o generarlo, sin diálogo),
 `--clics "x,y;x,y"` y `--arrastre "x0,y0;x1,y1"`
 (gestos simulados; `--arrastre` admite varios gestos separados por `|` y un
 prefijo de herramienta, como `"12:100,200;300,400|15:150,250;150,350"`),
+`--bloques` (abre la pestana Bloques del estudio), `--bloque N` (selecciona un
+bloque por id LOGIC3), `--arrastre-bloque "cat:x0,y0;x1,y1|..."` (gestos del
+lienzo, con categoria opcional) y `--deshacer-bloque` (revierte el ultimo
+cambio del modelo),
 `--copiar`, `--cortar` y `--pegar` (portapapeles tras el arrastre),
 `--vista menus` (abre directamente el editor de
 menús, después de cargar la lógica si se indica) y `--volcar ruta`
 (escribe una línea con la vista, los documentos, los ajustes del proyecto,
 la geometría del lienzo, los módulos del gestor, el mapa abierto, el paso de
-la guía y el estado de los menús para comparar pruebas),
+la guía, el estado de los menús y, en la pestana Bloques, los campos `lb_*`
+del modelo, para comparar pruebas),
 `--abrir-logic3 ruta` y `--guardar-logic3 ruta` (abren y guardan un proyecto
 LOGIC3 sin diálogo), `--convertir-logic2 ruta` (convierte el LOGIC2 en
 `ruta.logic3` y lo deja activo) y `--exportar-logic2 ruta` (exportación de
@@ -812,6 +859,7 @@ procesado en `src\nucleo.c`.
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Pestaña siguiente / anterior |
 | `Ctrl+1` … `Ctrl+9` | Ir a una pestaña |
 | `Ctrl+rueda` | Cambiar el zoom |
+| `Tab` (en Bloques) | Alternar entre paleta y lienzo |
 | `Esc` | Cancelar la acción en curso |
 | `Enter` | Confirmar la acción en curso |
 | `Supr` | Borrar la selección |
@@ -823,8 +871,10 @@ procesado en `src\nucleo.c`.
   `.wolfo`,
   `src/juego_ventana.c` la vista previa de los botones play/pausa/stop,
   `src/ajustes.c` las propiedades del proyecto, `src/logic3.c` el modelo, el
-  lector, el escritor y el migrador del formato LOGIC3 y `src/ejemplo.c` el
-  juego de ejemplo y su guía (menú AYUDA).
+  lector, el escritor y el migrador del formato LOGIC3, `src/ejemplo.c` el
+  juego de ejemplo y su guía (menú AYUDA), `src/estudio.c` y
+  `src/estudio_ui.c` la vista Estudio y `src/bloques.c` y
+  `src/bloques_ui.c` el modelo y el dibujo del lienzo de bloques.
 - `motor/` — motor egine: núcleo en ensamblador 32 bits (`nucleo32.s`),
   interfaz común (`motor.h`), carga del proyecto (`activo.c`) y `juego.c`
   (`game.exe`).

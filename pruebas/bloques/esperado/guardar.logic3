@@ -1,0 +1,19 @@
+LOGIC3
+version 3
+proyecto "Mi proyecto" 640 480 1 60 3 00000000
+carpetas "tiles" "maps" "trajes" "sonidos"
+escena 1 "Escena 1" "" 640 480 001E5A2E
+objeto 1 "Objeto 1" escena 1 x 28 y 26 w 32 h 32 visible 1 capa 0
+  evento 1 inicio
+  evento 2 fotograma
+bloque 1000 evento 1 padre 0 orden 0 tipo "eventos.inicio"
+bloque 1001 evento 1 padre 0 orden 1 tipo "control.repetir_siempre"
+bloque 1002 evento 1 padre 1001 orden 0 tipo "movimiento.mover_x"
+  campo "dx" "2"
+bloque 1003 evento 1 padre 0 orden 2 tipo "movimiento.mover_x"
+  campo "dx" "2"
+bloque 1004 evento 1 padre 0 orden 3 tipo "datos.cambiar_variable"
+  campo "variable" "vidas"
+  campo "delta" "-10"
+FIN
+CRC32 01B0A545

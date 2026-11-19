@@ -417,9 +417,24 @@ typedef unsigned char  u8;
 #define ESTUDIO_BOTON_ALTO      22
 #define ESTUDIO_FILA_ALTO       18
 #define ESTUDIO_BOTONES         4
-#define ESTUDIO_PESTANAS        5
+#define ESTUDIO_PESTANAS        6
 #define ESTUDIO_BLOQUEOS_MAX    128
 #define ESTUDIO_RECUERDOS_MAX   8
+
+/* Lienzo de bloques (fase 32). El tab se inserta antes de Play para no
+ * desplazar los indices de menu usados por las pruebas. */
+#define BLOQUES_TAB             4
+#define BLOQUES_MAX             256
+#define BLOQUES_HISTORIAL_MAX   16
+#define BLOQUES_CATEGORIAS      6
+#define BLOQUES_DEFS            10
+#define BLOQUES_NOMBRE_MAX      32
+#define BLOQUES_CAMPO_MAX       24
+#define BLOQUES_SLOT_MAX        16
+#define BLOQUES_RANURAS_MAX     4
+#define BLOQUES_ANCHO           150
+#define BLOQUES_ALTO           26
+#define BLOQUES_ID_INICIAL      1000
 
 /* Herramienta de texto: medidas y margenes. */
 #define TEXTO_MARGEN                 2
@@ -454,6 +469,15 @@ static __inline Zona zona_hacer(int x, int y, int ancho, int alto) {
     Zona z; z.x = x; z.y = y; z.ancho = ancho; z.alto = alto; return z;
 }
 static __inline Zona zona_vacia(void) { return zona_hacer(0, 0, 0, 0); }
+
+/* Caja calculada por el layout del lienzo de bloques (fase 32). */
+typedef struct {
+    int id;
+    Zona z;
+    Zona slots[BLOQUES_RANURAS_MAX];
+    char nombres[BLOQUES_RANURAS_MAX][BLOQUES_SLOT_MAX];
+    int num_slots;
+} BloqueCaja;
 
 typedef struct Lienzo {
     int x0, y0, x1, y1;
@@ -868,6 +892,19 @@ typedef struct App {
     int estudio_boton_pulsado;
     int estudio_bloqueos[ESTUDIO_BLOQUEOS_MAX + 1];
     char estudio_ruta[MAX_PATH];
+
+    /* Lienzo de bloques (fase 32): estado de edicion, no serializado. */
+    int bloques_sel;
+    int bloques_paleta_sel;
+    int bloques_categoria;
+    int bloques_foco;       /* 0 = paleta, 1 = lienzo */
+    int bloques_hover;      /* id bajo el cursor, o -1 */
+    int bloques_arrastre;   /* id que se arrastra, o -1 */
+    int bloques_desde_paleta; /* definicion arrastrada, o -1 */
+    int bloques_drag_x, bloques_drag_y;
+    int bloques_zoom;
+    int bloques_pan_x, bloques_pan_y;
+    int bloques_modelo_cargado;
 
     /* Pestanas: la activa vive en el estado global de arriba. */
     Pestana pestanas[MAX_PESTANAS];
@@ -1320,6 +1357,16 @@ void estudio_tecla(int vk, int ctrl, int shift);
 void estudio_caracter(int ch);
 void ui_dibujar_estudio(void);
 
+/* Interaccion del lienzo de bloques (fase 32). */
+void bloques_ui_dibujar(void);
+void bloques_ui_pulsar(int x, int y, int boton);
+void bloques_ui_soltar(int x, int y, int boton);
+void bloques_ui_mover(int x, int y, int botones);
+void bloques_ui_rueda(int x, int y, int delta);
+void bloques_ui_tecla(int vk, int ctrl, int shift);
+void bloques_ui_caracter(int ch);
+void bloques_ui_arrastrar(int x0, int y0, int x1, int y1);
+
 /* ------------------------------------------------------------------ */
 /* UI                                                                  */
 /* ------------------------------------------------------------------ */
@@ -1571,6 +1618,42 @@ int  estudio_esta_bloqueado(int id);
 void estudio_proyecto_cambiar(const char *ruta);
 void estudio_proyecto_guardar(const char *ruta);
 void estudio_guardar_estado(void);
+
+/* Lienzo de bloques (fase 32). El modelo se mantiene aparte del LOGIC3 y se
+ * vuelca a `p->bloques` en cada mutacion; el escritor de LOGIC3 no cambia. */
+void bloques_iniciar(void);
+void bloques_reiniciar(void);
+void bloques_importar_modelo(void);
+void bloques_volcar_modelo(void);
+int  bloques_cantidad(void);
+int  bloques_num_ranuras(void);
+int  bloques_num_hijos(void);
+int  bloques_id_seleccionado(void);
+int  bloques_crear(int def, int x, int y);
+int  bloques_duplicar(int id);
+int  bloques_acoplar(int id, int padre, const char *slot);
+int  bloques_mover_a(int id, int x, int y);
+int  bloques_borrar(int id);
+void bloques_seleccionar(int id);
+void bloques_deshacer(void);
+void bloques_rehacer(void);
+const char *bloques_nombre_def(int def);
+int  bloques_def_cantidad(void);
+int  bloques_def_categoria(int def);
+int  bloques_def_forma(int def);
+unsigned int bloques_def_color(int def);
+const char *bloques_categoria_nombre(int cat);
+const char *bloques_def_slot(int def, int indice);
+const char *bloques_def_campo(int def, int indice);
+int  bloques_layout(int x, int y, int ancho, int alto,
+                    BloqueCaja *cajas, int max);
+int  bloques_nodo_id(int indice);
+int  bloques_nodo_def(int id);
+int  bloques_nodo_padre(int id);
+const char *bloques_nodo_slot(int id);
+const char *bloques_nodo_campo(int id, int campo);
+void bloques_campo_anadir(int id, int campo, int ch);
+void bloques_nodo_posicion(int id, int *x, int *y);
 
 /* Ajustes del proyecto (ajustes.c, fase 14) */
 void ajustes_proyecto_iniciar(void);
