@@ -1,0 +1,13 @@
+# Fase 37: boton izquierdo, rueda, posicion y cursor dentro.
+entero senal = 0
+si raton_boton(1)
+    senal = senal + 1
+fin
+si raton_rueda() > 0
+    senal = senal + 10
+fin
+si raton_dentro()
+    senal = senal + 100
+fin
+x = raton_x() + raton_y() + senal
+y = senal

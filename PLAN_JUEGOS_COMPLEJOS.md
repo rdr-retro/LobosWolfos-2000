@@ -1313,6 +1313,26 @@ prueba` pasa las catorce suites y 117 casos.
 **Criterio de salida:** un script responde a `a`, clic izquierdo y rueda de
 forma determinista en captura.
 
+**Estado (19-11-2026): completada.** `motor/entrada.c` y `motor/entrada.h`
+aportan 32 ranuras de teclado, flancos pulsada/soltada/mantenida y estado de
+raton (x, y, dx, dy, botones, rueda, dentro). Los opcodes nuevos 64..71 se
+anaden al final del enum, sin tocar los bits legacy 0x01..0x20 ni el formato
+LOGIC3. `tecla_pulsada("a")` resuelve la ranura en compilacion y
+`raton_boton(1)` consume su argumento en ejecucion. Las salidas nuevas estan
+detras de `--entrada-teclas`, `--entrada-raton` y `--volcar-entrada`; en captura
+headless no se sondea Win32, por lo que los valores de la CLI se respetan y
+solo se cierran los flancos por fotograma. La vista previa del editor lee el
+teclado y el raton reales, pero su captura fuerza entrada neutra. La paridad
+BIOS queda cubierta en `input.rs` (scancodes set 1 de A..Z y enter) y
+`mouse.rs` (posicion, botones, rueda y dentro); `juego.rs` construye
+`lobo::EntradaExt` y cierra flancos tras cada fotograma. El kernel Rust pasa
+`cargo +nightly-x86_64-pc-windows-gnu check -Z build-std=core --target
+x86_64-unknown-none`. Nueva suite `pruebas/entrada.ps1` con cuatro casos
+(`tecla`, `raton`, `captura`, `neutro`) que congelan trazas, volcados y el hash
+BMP `75ef355ef2b423095d71a6baf9b961d00982d5f87d7564f86f335570d7f967da`,
+ademas de repetir la captura para comprobar determinismo. `build.bat prueba`
+pasa las quince suites y 121 casos.
+
 ### Fase 38 - HUD, texto, UI y dialogos
 
 **Objetivo:** interfaz dentro del juego.

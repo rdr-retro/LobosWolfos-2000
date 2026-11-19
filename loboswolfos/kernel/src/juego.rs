@@ -196,6 +196,24 @@ impl Camara {
     }
 }
 
+/* Fase 37: retrato de teclado y raton que ven los scripts de un fotograma.
+ * Los contadores dx/dy y la rueda se consumen aqui, igual que en game.exe. */
+fn entrada_ext_actual() -> lobo::EntradaExt {
+    let (raton_x, raton_y) = mouse::posicion();
+    let (raton_dx, raton_dy, _movimiento_botones) = mouse::tomar();
+    lobo::EntradaExt {
+        teclas: input::entrada_ext_actual(),
+        anterior: input::entrada_ext_anterior(),
+        raton_x,
+        raton_y,
+        raton_dx,
+        raton_dy,
+        raton_rueda: mouse::tomar_rueda(),
+        raton_botones: mouse::botones(),
+        raton_dentro: mouse::dentro(),
+    }
+}
+
 struct Juego {
     mapa: MotorMapa,
     /// Proyecto sin mapa (fase 12): no se pinta nada y la pantalla queda
@@ -239,6 +257,7 @@ impl Juego {
                 vel: SPRITE_VEL,
                 fotograma: self.fotograma,
                 entrada: e, /* LOBO_TECLA_* == MOTOR_ENT_* */
+                ext: entrada_ext_actual(), /* fase 37 */
             };
             /* El mapa se copia a datos sueltos para que el cierre de
              * choca() no tome prestado el Juego mientras corren. */
@@ -528,8 +547,8 @@ pub fn arrancar(mi: &gfx::ModeInfo) -> ! {
             }
             serie |= bits;
         }
-        // El juego no usa el raton, pero hay que seguir drenando el
-        // controlador PS/2 para que sus paquetes no llenen el bufer.
+        // Fase 37: los scripts pueden leer botones, rueda y posicion; aun
+        // asi hay que drenar el controlador para que no llene su bufer.
         mouse::poll();
 
         let ahora = pit::ticks();
@@ -548,6 +567,7 @@ pub fn arrancar(mi: &gfx::ModeInfo) -> ! {
                 juego.entrada = mantenida | if primero { pulso } else { 0 };
                 primero = false; // un toque suelto vale un solo fotograma
                 juego.actualizar();
+                input::siguiente_ext(); // cierra los flancos del fotograma
                 actualizado = true;
             }
         } else {

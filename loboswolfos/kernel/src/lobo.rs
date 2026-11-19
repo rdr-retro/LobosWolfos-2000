@@ -84,6 +84,17 @@ pub const LOBO_SALTO: u8 = 20; /* valor: instruccion destino */
 pub const LOBO_SALTO_FALSO: u8 = 21; /* valor: destino si el tope es 0 */
 pub const LOBO_POP: u8 = 22; /* descarta el tope (expr suelta) */
 
+/* Fase 37: entrada extendida. Se anaden al final para conservar la
+ * numeracion de los opcodes antiguos (espejo de motor/lobo.h). */
+pub const LOBO_TECLA_PULSADA: u8 = 64;
+pub const LOBO_TECLA_MANTENIDA: u8 = 65;
+pub const LOBO_TECLA_SOLTADA: u8 = 66;
+pub const LOBO_RATON_BOTON: u8 = 67;
+pub const LOBO_RATON_X: u8 = 68;
+pub const LOBO_RATON_Y: u8 = 69;
+pub const LOBO_RATON_RUEDA: u8 = 70;
+pub const LOBO_RATON_DENTRO: u8 = 71;
+
 /* ------------------------------------------------------------------ */
 /* Programas, estado y maquinas                                        */
 /* ------------------------------------------------------------------ */
@@ -112,6 +123,34 @@ impl LoboPrograma {
     };
 }
 
+/// Entrada extendida de la fase 37: 32 teclas con flancos y raton.
+#[derive(Clone, Copy)]
+pub struct EntradaExt {
+    pub teclas: u32,
+    pub anterior: u32,
+    pub raton_x: i32,
+    pub raton_y: i32,
+    pub raton_dx: i32,
+    pub raton_dy: i32,
+    pub raton_rueda: i32,
+    pub raton_botones: u8,
+    pub raton_dentro: bool,
+}
+
+impl EntradaExt {
+    pub const NEUTRA: EntradaExt = EntradaExt {
+        teclas: 0,
+        anterior: 0,
+        raton_x: 0,
+        raton_y: 0,
+        raton_dx: 0,
+        raton_dy: 0,
+        raton_rueda: 0,
+        raton_botones: 0,
+        raton_dentro: false,
+    };
+}
+
 /// Lo que el juego expone a los scripts: posicion del sprite,
 /// velocidad, contador de fotogramas y bits de entrada.
 pub struct LoboEstado {
@@ -121,6 +160,35 @@ pub struct LoboEstado {
     pub fotograma: i32,
     /// Bits LOBO_TECLA_* (== MOTOR_ENT_*).
     pub entrada: u32,
+    /// Fase 37: entrada extendida; neutra en motores sin teclado/raton.
+    pub ext: EntradaExt,
+}
+
+/// Valor de una instruccion de entrada extendida.
+fn entrada_valor(estado: &LoboEstado, op: u8, valor: i32) -> i32 {
+    let e = &estado.ext;
+    let bit = if valor >= 0 && valor < crate::input::MOTOR_TECLAS_MAX {
+        1u32 << (valor as u32)
+    } else {
+        0
+    };
+    match op {
+        LOBO_TECLA_PULSADA => (bit != 0 && e.teclas & bit != 0 && e.anterior & bit == 0) as i32,
+        LOBO_TECLA_MANTENIDA => (bit != 0 && e.teclas & bit != 0) as i32,
+        LOBO_TECLA_SOLTADA => (bit != 0 && e.teclas & bit == 0 && e.anterior & bit != 0) as i32,
+        LOBO_RATON_BOTON => {
+            if valor >= 1 && valor <= 3 {
+                (e.raton_botones & (1u8 << (valor - 1) as u32) != 0) as i32
+            } else {
+                0
+            }
+        }
+        LOBO_RATON_X => e.raton_x,
+        LOBO_RATON_Y => e.raton_y,
+        LOBO_RATON_RUEDA => e.raton_rueda,
+        LOBO_RATON_DENTRO => e.raton_dentro as i32,
+        _ => 0,
+    }
 }
 
 /// Estado persistente de un script entre fotogramas.
@@ -233,6 +301,8 @@ fn escribir_error(error: &mut [u8], linea: i32, mensaje: &str) {
 const TOK_NUM: u8 = 0;
 const TOK_ID: u8 = 1;
 const TOK_OP: u8 = 2;
+/// Texto entre comillas (fase 37): nombre de tecla de las nativas nuevas.
+const TOK_TXT: u8 = 3;
 
 #[derive(Clone, Copy)]
 struct LoboToken {
@@ -267,9 +337,9 @@ fn alfanum(c: u8) -> bool {
 }
 
 /// Parte una linea en tokens. Devuelve el numero de tokens; los
-/// operadores de dos caracteres se juntan en uno (==, !=, <=, >=) y el
-/// `#` corta la linea. -1: nombre demasiado largo; -2: caracter
-/// inesperado.
+/// operadores de dos caracteres se juntan en uno (==, !=, <=, >=), el
+/// `#` corta la linea y las comillas dan un token de texto. -1: nombre
+/// demasiado largo; -2: caracter inesperado; -3: comillas sin cerrar.
 fn tokenizar(linea: &[u8], tokens: &mut [LoboToken]) -> isize {
     let mut n = 0usize;
     let mut i = 0usize;
@@ -281,6 +351,39 @@ fn tokenizar(linea: &[u8], tokens: &mut [LoboToken]) -> isize {
         }
         if c == b'#' {
             break; // comentario hasta el final de la linea
+        }
+        if c == b'"' {
+            /* Texto entre comillas con los escapes \" \\ \n y \t (fase 37). */
+            i += 1;
+            let mut j = 0usize;
+            while i < linea.len() && linea[i] != b'"' {
+                let mut ch = linea[i];
+                if ch == b'\\' && i + 1 < linea.len() {
+                    i += 1;
+                    ch = match linea[i] {
+                        b'n' => b'\n',
+                        b't' => b'\t',
+                        other => other,
+                    };
+                }
+                if j < LOBO_NOMBRE_MAX - 1 {
+                    tokens[n].texto[j] = ch;
+                }
+                j += 1;
+                i += 1;
+            }
+            if i >= linea.len() {
+                return -3; // falta cerrar las comillas
+            }
+            i += 1; // la comilla de cierre
+            if j >= LOBO_NOMBRE_MAX {
+                return -1;
+            }
+            tokens[n].texto[j] = 0;
+            tokens[n].tipo = TOK_TXT;
+            tokens[n].numero = 0;
+            n += 1;
+            continue;
         }
         if c.is_ascii_digit() {
             let mut v: i32 = 0;
@@ -433,12 +536,46 @@ fn nombre_conocido(nombre: &[u8; LOBO_NOMBRE_MAX]) -> (i32, bool, bool) {
         return (LOBO_TECLA_CERRAR, true, false);
     }
     if nombre_es(nombre, b"choca") {
-        return (0, false, true);
+        return (LOBO_CHOCAR as i32, false, true);
     }
     if nombre_es(nombre, b"cerrar") {
-        return (0, false, true);
+        return (LOBO_CERRAR as i32, false, true);
+    }
+    /* Fase 37: entradas extendidas. El valor devuelto es el opcode. */
+    if nombre_es(nombre, b"tecla_pulsada") {
+        return (LOBO_TECLA_PULSADA as i32, false, true);
+    }
+    if nombre_es(nombre, b"tecla_mantenida") {
+        return (LOBO_TECLA_MANTENIDA as i32, false, true);
+    }
+    if nombre_es(nombre, b"tecla_soltada") {
+        return (LOBO_TECLA_SOLTADA as i32, false, true);
+    }
+    if nombre_es(nombre, b"raton_boton") {
+        return (LOBO_RATON_BOTON as i32, false, true);
+    }
+    if nombre_es(nombre, b"raton_x") {
+        return (LOBO_RATON_X as i32, false, true);
+    }
+    if nombre_es(nombre, b"raton_y") {
+        return (LOBO_RATON_Y as i32, false, true);
+    }
+    if nombre_es(nombre, b"raton_rueda") {
+        return (LOBO_RATON_RUEDA as i32, false, true);
+    }
+    if nombre_es(nombre, b"raton_dentro") {
+        return (LOBO_RATON_DENTRO as i32, false, true);
     }
     (-1, false, false)
+}
+
+/// Longitud util de un token de texto (sin el relleno de ceros).
+fn texto_largo(texto: &[u8; LOBO_NOMBRE_MAX]) -> usize {
+    let mut n = texto.len();
+    while n > 0 && texto[n - 1] == 0 {
+        n -= 1;
+    }
+    n
 }
 
 impl<'a> LoboParser<'a> {
@@ -517,7 +654,7 @@ impl<'a> LoboParser<'a> {
         -1
     }
 
-    /// Primario: numero, variable, tecla o llamada a funcion integrada.
+    /// Primario: numero, variable, tecla, texto o llamada integrada.
     fn primario(&mut self) -> bool {
         if self.fin_tokens() {
             self.error("se esperaba una expresion");
@@ -528,21 +665,76 @@ impl<'a> LoboParser<'a> {
             self.pos += 1;
             return self.emitir(LOBO_NUM, t.numero);
         }
+        if t.tipo == TOK_TXT {
+            self.error("el texto solo es valido como argumento de tecla");
+            return false;
+        }
         if t.tipo == TOK_ID {
             self.pos += 1;
             let (conocido, es_tecla, es_funcion) = nombre_conocido(&t.texto);
             if es_funcion {
-                /* llamada: choca(x, y) o cerrar() */
+                /* llamada: choca(x, y), cerrar() o entrada de la fase 37 */
                 if !self.comer_op(b"(") {
                     self.error("se esperaba ( despues del nombre");
                     return false;
                 }
-                if nombre_es(&t.texto, b"cerrar") {
+                if conocido == LOBO_CERRAR as i32 {
                     if !self.comer_op(b")") {
                         self.error("cerrar() no lleva argumentos");
                         return false;
                     }
                     return self.emitir(LOBO_CERRAR, 0);
+                }
+                /* tecla_pulsada("a") y hermanas: el texto se resuelve a una
+                 * ranura de 0 a 31 antes de emitir la instruccion. */
+                if conocido == LOBO_TECLA_PULSADA as i32
+                    || conocido == LOBO_TECLA_MANTENIDA as i32
+                    || conocido == LOBO_TECLA_SOLTADA as i32
+                {
+                    let slot = if !self.fin_tokens()
+                        && self.tokens[self.pos].tipo == TOK_TXT
+                    {
+                        let txt = self.tokens[self.pos].texto;
+                        self.pos += 1;
+                        crate::input::slot_nombre(&txt[..texto_largo(&txt)])
+                    } else {
+                        -1
+                    };
+                    if slot < 0 {
+                        self.error("la tecla debe ser un nombre entre comillas");
+                        return false;
+                    }
+                    if !self.comer_op(b")") {
+                        self.error("se esperaba ) para cerrar la llamada");
+                        return false;
+                    }
+                    return self.emitir(conocido as u8, slot);
+                }
+                /* raton_x(), raton_y(), raton_rueda(), raton_dentro() */
+                if conocido == LOBO_RATON_X as i32
+                    || conocido == LOBO_RATON_Y as i32
+                    || conocido == LOBO_RATON_RUEDA as i32
+                    || conocido == LOBO_RATON_DENTRO as i32
+                {
+                    if !self.comer_op(b")") {
+                        self.error("esta funcion no lleva argumentos");
+                        return false;
+                    }
+                    return self.emitir(conocido as u8, 0);
+                }
+                /* raton_boton(n): el valor se apila y la instruccion lo consume. */
+                if conocido == LOBO_RATON_BOTON as i32 {
+                    if !self.expresion() {
+                        return false;
+                    }
+                    if !self.comer_op(b")") {
+                        self.error("se esperaba ) para cerrar la llamada");
+                        return false;
+                    }
+                    return self.emitir(LOBO_RATON_BOTON, 0);
+                }
+                if conocido != LOBO_CHOCAR as i32 {
+                    return false;
                 }
                 if !self.expresion() {
                     return false;
@@ -736,6 +928,8 @@ impl<'a> LoboParser<'a> {
             if n < 0 {
                 self.error(if n == -1 {
                     "nombre demasiado largo"
+                } else if n == -3 {
+                    "falta cerrar las comillas"
                 } else {
                     "caracter inesperado"
                 });
@@ -999,6 +1193,8 @@ pub fn parsear(texto: &[u8], programa: &mut LoboPrograma, error: &mut [u8]) -> b
         if n < 0 {
             p.error(if n == -1 {
                 "nombre demasiado largo"
+            } else if n == -3 {
+                "falta cerrar las comillas"
             } else {
                 "caracter inesperado"
             });
@@ -1113,6 +1309,33 @@ pub fn ejecutar<F: FnMut(i32, i32) -> bool>(
                     return;
                 }
                 pila[np] = (estado.entrada & in_.valor as u32 != 0) as i32;
+                np += 1;
+            }
+            /* Fase 37: misma maquina de pila que motor/lobo.c. Las teclas
+             * llevan la ranura en el propio opcode; raton_boton la consume
+             * del tope porque su argumento es una expresion. */
+            LOBO_TECLA_PULSADA
+            | LOBO_TECLA_MANTENIDA
+            | LOBO_TECLA_SOLTADA
+            | LOBO_RATON_X
+            | LOBO_RATON_Y
+            | LOBO_RATON_RUEDA
+            | LOBO_RATON_DENTRO => {
+                if np >= LOBO_PILA_MAX {
+                    maquina.agotado = true;
+                    return;
+                }
+                pila[np] = entrada_valor(estado, in_.op, in_.valor);
+                np += 1;
+            }
+            LOBO_RATON_BOTON => {
+                if np < 1 || np >= LOBO_PILA_MAX {
+                    maquina.agotado = true;
+                    return;
+                }
+                np -= 1;
+                let valor = pila[np];
+                pila[np] = entrada_valor(estado, in_.op, valor);
                 np += 1;
             }
             LOBO_CHOCAR => {

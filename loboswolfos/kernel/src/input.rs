@@ -15,6 +15,110 @@ static SHIFT: AtomicBool = AtomicBool::new(false);
 static EXTENDED: AtomicBool = AtomicBool::new(false);
 
 /* ------------------------------------------------------------------ */
+/* Entrada extendida (fase 37)                                          */
+/* ------------------------------------------------------------------ */
+
+/// Ranuras de las 32 teclas, en el mismo orden que `motor/entrada.h`.
+pub const ENT_IZQUIERDA: i32 = 0;
+pub const ENT_DERECHA: i32 = 1;
+pub const ENT_ARRIBA: i32 = 2;
+pub const ENT_ABAJO: i32 = 3;
+pub const ENT_ESPACIO: i32 = 4;
+pub const ENT_ENTER: i32 = 5;
+pub const ENT_A: i32 = 6;
+pub const MOTOR_TECLAS_MAX: i32 = 32;
+
+static TECLAS_EXT: AtomicU32 = AtomicU32::new(0);
+static ANTERIOR_EXT: AtomicU32 = AtomicU32::new(0);
+
+/// Ranura asociada a un bit legacy MOTOR_ENT_*, o -1 si no tiene.
+fn slot_legacy(bit: u32) -> i32 {
+    match bit {
+        MOTOR_ENT_IZQUIERDA => ENT_IZQUIERDA,
+        MOTOR_ENT_DERECHA => ENT_DERECHA,
+        MOTOR_ENT_ARRIBA => ENT_ARRIBA,
+        MOTOR_ENT_ABAJO => ENT_ABAJO,
+        MOTOR_ENT_SALTO => ENT_ESPACIO,
+        _ => -1,
+    }
+}
+
+/// Cambia una ranura de la entrada extendida.
+pub fn poner_slot(slot: i32, pulsado: bool) {
+    if slot < 0 || slot >= MOTOR_TECLAS_MAX {
+        return;
+    }
+    let bit = 1u32 << (slot as u32);
+    if pulsado {
+        TECLAS_EXT.fetch_or(bit, Ordering::Relaxed);
+    } else {
+        TECLAS_EXT.fetch_and(!bit, Ordering::Relaxed);
+    }
+}
+
+/// Mascara actual de teclas sostenidas.
+pub fn entrada_ext_actual() -> u32 {
+    TECLAS_EXT.load(Ordering::Relaxed)
+}
+
+/// Mascara del fotograma anterior (para calcular flancos).
+pub fn entrada_ext_anterior() -> u32 {
+    ANTERIOR_EXT.load(Ordering::Relaxed)
+}
+
+/// Cierra un fotograma: la mascara actual pasa a ser la anterior.
+pub fn siguiente_ext() {
+    ANTERIOR_EXT.store(entrada_ext_actual(), Ordering::Relaxed);
+}
+
+fn bit_slot(slot: i32) -> u32 {
+    if slot < 0 || slot >= MOTOR_TECLAS_MAX {
+        0
+    } else {
+        1u32 << (slot as u32)
+    }
+}
+
+pub fn entrada_ext_mantenida(slot: i32) -> bool {
+    let b = bit_slot(slot);
+    b != 0 && entrada_ext_actual() & b != 0
+}
+
+pub fn entrada_ext_pulsada(slot: i32) -> bool {
+    let b = bit_slot(slot);
+    b != 0 && entrada_ext_actual() & b != 0 && entrada_ext_anterior() & b == 0
+}
+
+pub fn entrada_ext_soltada(slot: i32) -> bool {
+    let b = bit_slot(slot);
+    b != 0 && entrada_ext_actual() & b == 0 && entrada_ext_anterior() & b != 0
+}
+
+/// Ranura de una letra a..z (o A..Z).
+pub fn slot_letra(ch: u8) -> i32 {
+    let minus = ch.to_ascii_lowercase();
+    if minus.is_ascii_lowercase() {
+        ENT_A + (minus - b'a') as i32
+    } else {
+        -1
+    }
+}
+
+/// Resuelve el nombre entre comillas de una nativa de la fase 37.
+pub fn slot_nombre(nombre: &[u8]) -> i32 {
+    match nombre {
+        b"izquierda" => ENT_IZQUIERDA,
+        b"derecha" => ENT_DERECHA,
+        b"arriba" => ENT_ARRIBA,
+        b"abajo" => ENT_ABAJO,
+        b"espacio" | b"salto" => ENT_ESPACIO,
+        b"enter" | b"intro" => ENT_ENTER,
+        [ch] => slot_letra(*ch),
+        _ => -1,
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* Entrada del motor (fase 6)                                           */
 /* ------------------------------------------------------------------ */
 
@@ -33,10 +137,18 @@ static PULSOS: AtomicU32 = AtomicU32::new(0);
 fn apretar(bit: u32) {
     ENTRADA.fetch_or(bit, Ordering::Relaxed);
     PULSOS.fetch_or(bit, Ordering::Relaxed);
+    let slot = slot_legacy(bit);
+    if slot >= 0 {
+        poner_slot(slot, true);
+    }
 }
 
 fn soltar(bit: u32) {
     ENTRADA.fetch_and(!bit, Ordering::Relaxed);
+    let slot = slot_legacy(bit);
+    if slot >= 0 {
+        poner_slot(slot, false);
+    }
 }
 
 /// Bits MOTOR_ENT_* de las teclas del juego mantenidas ahora mismo.
@@ -112,6 +224,39 @@ pub fn recoger() {
     }
 }
 
+/// Letra del scancode set 1 (sin el bit de suelta), si es una letra.
+fn letra_scancode(make: u8) -> Option<u8> {
+    Some(match make {
+        0x1E => b'a',
+        0x30 => b'b',
+        0x2E => b'c',
+        0x20 => b'd',
+        0x12 => b'e',
+        0x21 => b'f',
+        0x22 => b'g',
+        0x23 => b'h',
+        0x17 => b'i',
+        0x24 => b'j',
+        0x25 => b'k',
+        0x26 => b'l',
+        0x32 => b'm',
+        0x31 => b'n',
+        0x18 => b'o',
+        0x19 => b'p',
+        0x10 => b'q',
+        0x13 => b'r',
+        0x1F => b's',
+        0x14 => b't',
+        0x16 => b'u',
+        0x2F => b'v',
+        0x11 => b'w',
+        0x2D => b'x',
+        0x15 => b'y',
+        0x2C => b'z',
+        _ => return None,
+    })
+}
+
 /// Traduce un codigo de barrido (set 1) a ASCII.
 fn translate(scancode: u8) -> Option<u8> {
     // Bytes que no son pulsaciones: ACK (0xFA), autotest correcto (0xAA), eco
@@ -163,6 +308,15 @@ fn translate(scancode: u8) -> Option<u8> {
         0x01 => apretar(MOTOR_ENT_CERRAR),       // Escape
         0x81 => soltar(MOTOR_ENT_CERRAR),
         _ => {}
+    }
+
+    /* Fase 37: toda letra tiene ranura propia, no solo WASD. El bit 7 del
+     * scancode indica que se suelta; las flechas ya las actualizo `apretar`. */
+    if let Some(letra) = letra_scancode(scancode & 0x7F) {
+        poner_slot(slot_letra(letra), scancode & 0x80 == 0);
+    }
+    if scancode == 0x1C || scancode == 0x9C {
+        poner_slot(ENT_ENTER, scancode == 0x1C);
     }
 
     let shift = SHIFT.load(Ordering::Relaxed);

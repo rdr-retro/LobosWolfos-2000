@@ -13,11 +13,22 @@
 use crate::cpu::inb;
 use crate::sync::SyncCell;
 
+/// Tamano de la pantalla del juego: el cursor se limita a esta caja.
+const PANTALLA_ANCHO: i32 = 640;
+const PANTALLA_ALTO: i32 = 480;
+
 /// Estado interno del raton.
 struct Estado {
     dx: i32,
     dy: i32,
     botones: u8,
+    /// Posicion absoluta del cursor (fase 37), centrada al arrancar.
+    x: i32,
+    y: i32,
+    /// Pasos de rueda pendientes (fase 37).
+    rueda: i32,
+    /// 1 si el ultimo movimiento dejo el cursor dentro de la pantalla.
+    dentro: bool,
     paquete: [u8; 3],
     indice: usize,
 }
@@ -28,6 +39,10 @@ impl Estado {
             dx: 0,
             dy: 0,
             botones: 0,
+            x: PANTALLA_ANCHO / 2,
+            y: PANTALLA_ALTO / 2,
+            rueda: 0,
+            dentro: true,
             paquete: [0; 3],
             indice: 0,
         }
@@ -78,8 +93,19 @@ fn aplicar(st: &mut Estado) {
     if b0 & 0x20 != 0 {
         dy |= 0xFF00;
     }
-    st.dx += dx as i16 as i32;
-    st.dy -= dy as i16 as i32; // el eje Y del raton crece hacia arriba
+    let mov_x = dx as i16 as i32;
+    // El eje Y del raton crece hacia arriba; `wrapping_neg` evita un desborde
+    // con i16::MIN (un movimiento imposible, pero el kernel no puede panicar).
+    let mov_y = (dy as i16).wrapping_neg() as i32;
+
+    let nx = st.x + mov_x;
+    let ny = st.y + mov_y;
+    st.dentro = nx >= 0 && nx < PANTALLA_ANCHO && ny >= 0 && ny < PANTALLA_ALTO;
+    st.x = nx.clamp(0, PANTALLA_ANCHO - 1);
+    st.y = ny.clamp(0, PANTALLA_ALTO - 1);
+
+    st.dx += mov_x;
+    st.dy += mov_y;
     st.botones = b0 & 0x07;
 }
 
@@ -107,4 +133,37 @@ pub fn tomar() -> (i32, i32, u8) {
     st.dx = 0;
     st.dy = 0;
     r
+}
+
+/* ------------------------------------------------------------------ */
+/* Estado que ven los scripts (fase 37)                                 */
+/* ------------------------------------------------------------------ */
+
+/// Posicion absoluta del cursor dentro de la pantalla del juego.
+pub fn posicion() -> (i32, i32) {
+    let st = estado();
+    (st.x, st.y)
+}
+
+/// Botones pulsados ahora (bit 0 izquierdo, 1 derecho, 2 central).
+pub fn botones() -> u8 {
+    estado().botones
+}
+
+/// 1 si el cursor esta dentro de la pantalla del juego.
+pub fn dentro() -> bool {
+    estado().dentro
+}
+
+/// Pasos de rueda pendientes; se borran al leer, como en `tomar`.
+pub fn tomar_rueda() -> i32 {
+    let st = estado();
+    let r = st.rueda;
+    st.rueda = 0;
+    r
+}
+
+/// Anade pasos de rueda (lo llamara el driver que los descifre).
+pub fn alimentar_rueda(pasos: i32) {
+    estado().rueda = estado().rueda.wrapping_add(pasos);
 }

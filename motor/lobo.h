@@ -1,5 +1,9 @@
 /* lobo.h - lenguaje de los botones FUNCIONES (fase 8) y lobo 3 (fase 25).
  *
+ * Fase 37: se anaden teclas con flancos y estado de raton al final del
+ * estado y al final de la numeracion de opcodes, para no romper los
+ * programas ya compilados ni las trazas de las suites anteriores.
+ *
  * lobo es el lenguaje propio de LobosWolfos 2000: el codigo que se
  * escribe dentro de los botones FUNCIONES del gestor de logica y que
  * viaja como texto en el .logic del proyecto (formato LOGIC2) o en los
@@ -238,7 +242,16 @@ enum {
     LOBO_TOCA,          /* toca(id): 1 si la entidad actual toca a id */
     LOBO_TOCA_TAG,      /* valor: indice de texto; toca_tag("tag") */
     LOBO_DISTANCIA,     /* distancia(id): distancia Manhattan al id */
-    LOBO_CAJA_DE        /* caja_de(id, i): x/y/w/h de otra entidad */
+    LOBO_CAJA_DE,       /* caja_de(id, i): x/y/w/h de otra entidad */
+    /* --- fase 37: entrada extendida --- */
+    LOBO_TECLA_PULSADA, /* valor: ranura; apila 1 en el flanco pulsar */
+    LOBO_TECLA_MANTENIDA, /* valor: ranura; apila 1 si se mantiene */
+    LOBO_TECLA_SOLTADA, /* valor: ranura; apila 1 en el flanco soltar */
+    LOBO_RATON_BOTON,   /* valor: 1 izq, 2 der, 3 medio; apila 0/1 */
+    LOBO_RATON_X,       /* posicion x del cursor */
+    LOBO_RATON_Y,       /* posicion y del cursor */
+    LOBO_RATON_RUEDA,   /* pasos de rueda acumulados */
+    LOBO_RATON_DENTRO   /* 1 si el cursor esta sobre la ventana */
 };
 
 /* Una instruccion del programa compilado. */
@@ -331,6 +344,8 @@ typedef struct LoboEstado {
     int (*caja_de)(void *ctx, int entidad, int id, int indice);
     void *ctx_colisiones;
     int vel_x, vel_y, gravedad, rebote, friccion, en_suelo;
+    /* --- fase 37: entrada extendida, NULL en motores sin raton --- */
+    struct MotorEntrada *entrada_ext;
 } LoboEstado;
 
 /* Un frame de llamada: donde volver y el estado que hay que restaurar. */

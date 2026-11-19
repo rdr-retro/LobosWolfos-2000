@@ -16,6 +16,7 @@
 #include "app.h"
 #include "../motor/motor.h"
 #include "../motor/colisiones.h"
+#include "../motor/entrada.h"
 
 #define JV_ANCHO      640
 #define JV_ALTO       480
@@ -48,6 +49,8 @@ static char g_mapa_usado[MAX_PATH];
 static u32 g_sprite[JV_SPRITE_LADO * JV_SPRITE_LADO];
 static int g_x, g_y;           /* posicion del sprite en el mundo */
 static unsigned g_entrada;     /* bits MOTOR_ENT_* */
+static MotorEntrada g_entrada_ext; /* fase 37: 32 teclas, flancos y raton */
+static int g_rueda_acum;
 static int g_fotograma;
 
 /* ------------------------------------------------------------------ */
@@ -201,6 +204,7 @@ static int jv_actualizar(void) {
         st.vel = jv_velocidad;
         st.fotograma = g_fotograma;
         st.entrada = g_entrada; /* LOBO_TECLA_* == MOTOR_ENT_* */
+        st.entrada_ext = &g_entrada_ext; /* fase 37 */
         st.choca = jv_lobo_choca;
         st.ctx = NULL;
         for (i = 0; i < g_num_scripts; i++) {
@@ -290,6 +294,49 @@ static unsigned jv_leer_teclado(void) {
     return e;
 }
 
+/* Fase 37: rellena la entrada extendida con el estado real de Win32. */
+static void jv_leer_entrada_ext(void) {
+    MotorEntrada *e = &g_entrada_ext;
+    POINT pt;
+    int i, nx, ny;
+
+    pt.x = 0;
+    pt.y = 0;
+    motor_entrada_poner(e, ENT_IZQUIERDA, GetAsyncKeyState(VK_LEFT) & 0x8000);
+    motor_entrada_poner(e, ENT_DERECHA,  GetAsyncKeyState(VK_RIGHT) & 0x8000);
+    motor_entrada_poner(e, ENT_ARRIBA,   GetAsyncKeyState(VK_UP) & 0x8000);
+    motor_entrada_poner(e, ENT_ABAJO,    GetAsyncKeyState(VK_DOWN) & 0x8000);
+    motor_entrada_poner(e, ENT_ESPACIO,  GetAsyncKeyState(VK_SPACE) & 0x8000);
+    motor_entrada_poner(e, ENT_ENTER,    GetAsyncKeyState(VK_RETURN) & 0x8000);
+    for (i = ENT_A; i < MOTOR_TECLAS_MAX; i++)
+        motor_entrada_poner(e, i,
+                            GetAsyncKeyState('A' + (i - ENT_A)) & 0x8000);
+
+    nx = e->raton_x;
+    ny = e->raton_y;
+    if (g_hwnd && GetCursorPos(&pt)) {
+        ScreenToClient(g_hwnd, &pt);
+        nx = (int)pt.x;
+        ny = (int)pt.y;
+    }
+    e->raton_dx = nx - e->raton_x;
+    e->raton_dy = ny - e->raton_y;
+    e->raton_x = nx;
+    e->raton_y = ny;
+    e->raton_botones = 0;
+    if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) e->raton_botones |= 1u;
+    if (GetAsyncKeyState(VK_RBUTTON) & 0x8000) e->raton_botones |= 2u;
+    if (GetAsyncKeyState(VK_MBUTTON) & 0x8000) e->raton_botones |= 4u;
+    e->raton_rueda = g_rueda_acum;
+    g_rueda_acum = 0;
+    if (g_hwnd) {
+        RECT rc;
+        e->raton_dentro = GetClientRect(g_hwnd, &rc) &&
+                          pt.x >= rc.left && pt.x < rc.right &&
+                          pt.y >= rc.top && pt.y < rc.bottom;
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /* Carga y liberacion de los recursos del juego                        */
 /* ------------------------------------------------------------------ */
@@ -370,6 +417,8 @@ static int jv_cargar_proyecto(int avisar) {
     g_y = 16;
     g_fotograma = 0;
     g_entrada = 0;
+    motor_entrada_iniciar(&g_entrada_ext);
+    g_rueda_acum = 0;
     jv_buscar_spawn();
     jv_scripts_preparar(avisar);
     return 1;
@@ -394,11 +443,17 @@ static LRESULT CALLBACK jv_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_KEYDOWN:
         if (wp == VK_ESCAPE) juego_ventana_detener();
         return 0;
+    case WM_MOUSEWHEEL:
+        /* Fase 37: los pasos se consumen en el siguiente fotograma. */
+        g_rueda_acum += (int)(short)HIWORD(wp) / WHEEL_DELTA;
+        return 0;
     case WM_TIMER:
         if (wp == 1 && g_estado == JUEGO_VENTANA_JUGANDO) {
             int sigue;
             g_entrada = jv_leer_teclado();
+            jv_leer_entrada_ext();
             sigue = jv_actualizar();
+            motor_entrada_siguiente(&g_entrada_ext);
             jv_renderizar();
             jv_blit(hwnd);
             if (!sigue) juego_ventana_detener();
@@ -512,6 +567,8 @@ void juego_ventana_pausar(void) {
     if (g_estado != JUEGO_VENTANA_JUGANDO) return;
     g_estado = JUEGO_VENTANA_PAUSA;
     g_entrada = 0;
+    motor_entrada_iniciar(&g_entrada_ext);
+    g_rueda_acum = 0;
     app_estado("Vista previa en pausa.");
     app_invalidar();
 }
@@ -520,6 +577,8 @@ void juego_ventana_reanudar(void) {
     if (g_estado != JUEGO_VENTANA_PAUSA) return;
     g_estado = JUEGO_VENTANA_JUGANDO;
     g_entrada = 0;
+    motor_entrada_iniciar(&g_entrada_ext);
+    g_rueda_acum = 0;
     app_estado("Vista previa en marcha.");
     app_invalidar();
 }
@@ -564,10 +623,14 @@ int juego_ventana_capturar(const char *ruta, int fotogramas) {
     }
 
     g_estado = JUEGO_VENTANA_JUGANDO;
+    /* La captura es determinista: entrada extendida siempre neutra. */
+    motor_entrada_iniciar(&g_entrada_ext);
+    g_rueda_acum = 0;
     for (i = 0; i < fotogramas; i++) {
         int sigue;
         g_entrada = 0;
         sigue = jv_actualizar();
+        motor_entrada_siguiente(&g_entrada_ext);
         jv_renderizar();
         if (!sigue) break;
     }

@@ -31,6 +31,7 @@
  */
 
 #include "lobo.h"
+#include "entrada.h"
 #include <stdlib.h>
 
 /* Hooks del depurador (fase 34). Son opcionales: mientras no se
@@ -45,6 +46,24 @@ void lobo_depurador_instruccion(void (*fn)(int pc, int error)) {
 
 void lobo_depurador_parada(int (*fn)(void)) {
     g_hook_debe_parar = fn;
+}
+
+/* Fase 37: valor de una instruccion de entrada extendida. Con `entrada_ext`
+ * a NULL (motores sin raton, --vm-test antiguo) todo devuelve 0, asi que
+ * los programas que no usan estas teclas no cambian. */
+static int lobo_entrada_valor(const LoboEstado *estado, int op, int valor) {
+    const MotorEntrada *e = estado ? estado->entrada_ext : NULL;
+    switch (op) {
+    case LOBO_TECLA_PULSADA:   return motor_entrada_pulsada(e, valor);
+    case LOBO_TECLA_MANTENIDA: return motor_entrada_mantenida(e, valor);
+    case LOBO_TECLA_SOLTADA:   return motor_entrada_soltada(e, valor);
+    case LOBO_RATON_BOTON:     return motor_entrada_raton_boton(e, valor);
+    case LOBO_RATON_X:         return e ? e->raton_x : 0;
+    case LOBO_RATON_Y:         return e ? e->raton_y : 0;
+    case LOBO_RATON_RUEDA:     return e ? e->raton_rueda : 0;
+    case LOBO_RATON_DENTRO:    return e ? e->raton_dentro : 0;
+    default: return 0;
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -459,8 +478,19 @@ static int lobo_nombre_conocido(const char *nombre, int *es_tecla,
     if (lobo_igual(nombre, "tecla_cerrar")) return LOBO_TECLA_CERRAR;
     *es_tecla = 0;
     *es_funcion = 1;
-    if (lobo_igual(nombre, "choca")) return 0;
-    if (lobo_igual(nombre, "cerrar")) return 0;
+    if (lobo_igual(nombre, "choca")) return LOBO_CHOCAR;
+    if (lobo_igual(nombre, "cerrar")) return LOBO_CERRAR;
+    /* Fase 37: entradas extendidas. El valor devuelto es el opcode que
+     * debe emitir el parser; las teclas con flanco resuelven su ranura
+     * en compilacion a partir del texto entre comillas. */
+    if (lobo_igual(nombre, "tecla_pulsada")) return LOBO_TECLA_PULSADA;
+    if (lobo_igual(nombre, "tecla_mantenida")) return LOBO_TECLA_MANTENIDA;
+    if (lobo_igual(nombre, "tecla_soltada")) return LOBO_TECLA_SOLTADA;
+    if (lobo_igual(nombre, "raton_boton")) return LOBO_RATON_BOTON;
+    if (lobo_igual(nombre, "raton_x")) return LOBO_RATON_X;
+    if (lobo_igual(nombre, "raton_y")) return LOBO_RATON_Y;
+    if (lobo_igual(nombre, "raton_rueda")) return LOBO_RATON_RUEDA;
+    if (lobo_igual(nombre, "raton_dentro")) return LOBO_RATON_DENTRO;
     *es_funcion = 0;
     return -1;
 }
@@ -1192,18 +1222,59 @@ static int lobo_primario(LoboParser *p) {
         }
         conocido = lobo_nombre_conocido(nombre, &es_tecla, &es_funcion);
         if (es_funcion) {
-            /* llamada: choca(x, y) o cerrar() */
+            /* llamada: choca(x, y), cerrar() o una entrada de la fase 37 */
             if (!lobo_comer_op(p, "(")) {
                 lobo_error(p, "se esperaba ( despues del nombre");
                 return 0;
             }
-            if (lobo_igual(nombre, "cerrar")) {
+            if (conocido == LOBO_CERRAR) {
                 if (!lobo_comer_op(p, ")")) {
                     lobo_error(p, "cerrar() no lleva argumentos");
                     return 0;
                 }
                 return lobo_emitir(p, LOBO_CERRAR, 0);
             }
+            /* tecla_pulsada("a") y hermanas: nombre entre comillas, resuelto
+             * a una ranura de 0 a 31 antes de emitir la instruccion. */
+            if (conocido == LOBO_TECLA_PULSADA ||
+                conocido == LOBO_TECLA_MANTENIDA ||
+                conocido == LOBO_TECLA_SOLTADA) {
+                int slot = -1;
+                if (p->pos < p->num_tokens &&
+                    p->tokens[p->pos].tipo == TOK_TXT) {
+                    slot = motor_entrada_slot(p->tokens[p->pos].texto);
+                    p->pos++;
+                }
+                if (slot < 0) {
+                    lobo_error(p, "la tecla debe ser un nombre entre comillas");
+                    return 0;
+                }
+                if (!lobo_comer_op(p, ")")) {
+                    lobo_error(p, "se esperaba ) para cerrar la llamada");
+                    return 0;
+                }
+                return lobo_emitir(p, conocido, slot);
+            }
+            /* raton_x(), raton_y(), raton_rueda(), raton_dentro() */
+            if (conocido == LOBO_RATON_X || conocido == LOBO_RATON_Y ||
+                conocido == LOBO_RATON_RUEDA ||
+                conocido == LOBO_RATON_DENTRO) {
+                if (!lobo_comer_op(p, ")")) {
+                    lobo_error(p, "esta funcion no lleva argumentos");
+                    return 0;
+                }
+                return lobo_emitir(p, conocido, 0);
+            }
+            /* raton_boton(n): el numero se apila y la instruccion lo consume. */
+            if (conocido == LOBO_RATON_BOTON) {
+                if (!lobo_expresion(p)) return 0;
+                if (!lobo_comer_op(p, ")")) {
+                    lobo_error(p, "se esperaba ) para cerrar la llamada");
+                    return 0;
+                }
+                return lobo_emitir(p, LOBO_RATON_BOTON, 0);
+            }
+            if (conocido != LOBO_CHOCAR) return 0;
             if (!lobo_expresion(p)) return 0;
             if (!lobo_comer_op(p, ",")) {
                 lobo_error(p, "choca necesita dos argumentos");
@@ -2354,6 +2425,23 @@ void lobo_ejecutar(const LoboPrograma *programa, LoboEstado *estado,
             if (np >= LOBO_PILA_MAX) { maquina->agotado = 1; return; }
             pila[np++] = (estado->entrada & (unsigned)in->valor) != 0;
             break;
+        /* Fase 37: entrada extendida. */
+        case LOBO_TECLA_PULSADA:
+        case LOBO_TECLA_MANTENIDA:
+        case LOBO_TECLA_SOLTADA:
+        case LOBO_RATON_X:
+        case LOBO_RATON_Y:
+        case LOBO_RATON_RUEDA:
+        case LOBO_RATON_DENTRO:
+            if (np >= LOBO_PILA_MAX) { maquina->agotado = 1; return; }
+            pila[np++] = lobo_entrada_valor(estado, in->op, in->valor);
+            break;
+        case LOBO_RATON_BOTON:
+            if (np < 1) { maquina->agotado = 1; return; }
+            b = pila[--np];
+            if (np >= LOBO_PILA_MAX) { maquina->agotado = 1; return; }
+            pila[np++] = lobo_entrada_valor(estado, in->op, b);
+            break;
         case LOBO_CHOCAR:
             if (np < 2) { maquina->agotado = 1; return; }
             b = pila[--np];
@@ -2589,6 +2677,20 @@ int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
         break;
     case LOBO_TECLA:
         lobo_vm_push(maquina, (estado->entrada & (unsigned)in->valor) != 0, &ok);
+        break;
+    /* Fase 37: entrada extendida. */
+    case LOBO_TECLA_PULSADA:
+    case LOBO_TECLA_MANTENIDA:
+    case LOBO_TECLA_SOLTADA:
+    case LOBO_RATON_X:
+    case LOBO_RATON_Y:
+    case LOBO_RATON_RUEDA:
+    case LOBO_RATON_DENTRO:
+        lobo_vm_push(maquina, lobo_entrada_valor(estado, in->op, in->valor), &ok);
+        break;
+    case LOBO_RATON_BOTON:
+        a = lobo_vm_pop(maquina, &ok);
+        if (ok) lobo_vm_push(maquina, lobo_entrada_valor(estado, in->op, a), &ok);
         break;
     case LOBO_CHOCAR:
         b = lobo_vm_pop(maquina, &ok);

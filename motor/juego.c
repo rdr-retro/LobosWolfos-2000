@@ -28,6 +28,7 @@
 #include <string.h>
 #include "motor.h"
 #include "lobo.h"
+#include "entrada.h"
 #include "logic3_motor.h"
 #include "entidades.h"
 #include "eventos.h"
@@ -57,6 +58,15 @@ typedef struct Juego {
 } Juego;
 
 static Juego juego;
+
+/* Fase 37: entrada extendida. Solo se expone a los scripts cuando se ha
+ * pedido de forma explicita en la linea de comandos, para no cambiar las
+ * capturas ni las trazas de las suites anteriores. */
+static MotorEntrada g_entrada_ext;
+static int g_entrada_extactiva;
+static const char *g_ruta_volcar_entrada;
+static HWND g_ventana_ext;
+static int g_rueda_acum;
 
 /* Ajustes del proyecto aplicados al motor (fase 14). */
 static int g_ancho = VENTANA_ANCHO;
@@ -526,6 +536,7 @@ static void estado_preparar(LoboEstado *st) {
     st->vel = g_velocidad;
     st->fotograma = juego.fotograma;
     st->entrada = juego.entrada; /* LOBO_TECLA_* == MOTOR_ENT_* */
+    st->entrada_ext = g_entrada_extactiva ? &g_entrada_ext : NULL;
     st->memoria = &g_memoria;
     st->choca = lobo_choca;
     st->ctx = NULL;
@@ -947,6 +958,10 @@ static LRESULT CALLBACK proc_ventana(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
     case WM_KEYDOWN:
         if (wp == VK_ESCAPE) DestroyWindow(hwnd);
         return 0;
+    case WM_MOUSEWHEEL:
+        /* Fase 37: acumula pasos de rueda hasta el siguiente fotograma. */
+        g_rueda_acum += (int)(short)HIWORD(wp) / WHEEL_DELTA;
+        return 0;
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;
@@ -967,6 +982,51 @@ static unsigned leer_teclado(void) {
     if (GetAsyncKeyState(VK_SPACE) & 0x8000) e |= MOTOR_ENT_SALTO;
     if (GetAsyncKeyState(VK_ESCAPE) & 0x8000) e |= MOTOR_ENT_CERRAR;
     return e;
+}
+
+/* Fase 37: rellena las 32 ranuras y el raton desde Win32. Solo corre cuando
+ * se pidio la entrada extendida, para no alterar ningun juego antiguo. */
+static void leer_entrada_ext(void) {
+    MotorEntrada *e = &g_entrada_ext;
+    POINT pt;
+    int i, nx, ny;
+
+    if (!g_entrada_extactiva) return;
+    pt.x = 0;
+    pt.y = 0;
+    motor_entrada_poner(e, ENT_IZQUIERDA, GetAsyncKeyState(VK_LEFT) & 0x8000);
+    motor_entrada_poner(e, ENT_DERECHA,  GetAsyncKeyState(VK_RIGHT) & 0x8000);
+    motor_entrada_poner(e, ENT_ARRIBA,   GetAsyncKeyState(VK_UP) & 0x8000);
+    motor_entrada_poner(e, ENT_ABAJO,    GetAsyncKeyState(VK_DOWN) & 0x8000);
+    motor_entrada_poner(e, ENT_ESPACIO,  GetAsyncKeyState(VK_SPACE) & 0x8000);
+    motor_entrada_poner(e, ENT_ENTER,    GetAsyncKeyState(VK_RETURN) & 0x8000);
+    for (i = ENT_A; i < MOTOR_TECLAS_MAX; i++)
+        motor_entrada_poner(e, i,
+                            GetAsyncKeyState('A' + (i - ENT_A)) & 0x8000);
+
+    nx = e->raton_x;
+    ny = e->raton_y;
+    if (g_ventana_ext && GetCursorPos(&pt)) {
+        ScreenToClient(g_ventana_ext, &pt);
+        nx = (int)pt.x;
+        ny = (int)pt.y;
+    }
+    e->raton_dx = nx - e->raton_x;
+    e->raton_dy = ny - e->raton_y;
+    e->raton_x = nx;
+    e->raton_y = ny;
+    e->raton_botones = 0;
+    if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) e->raton_botones |= 1u;
+    if (GetAsyncKeyState(VK_RBUTTON) & 0x8000) e->raton_botones |= 2u;
+    if (GetAsyncKeyState(VK_MBUTTON) & 0x8000) e->raton_botones |= 4u;
+    e->raton_rueda = g_rueda_acum;
+    g_rueda_acum = 0;
+    if (g_ventana_ext) {
+        RECT rc;
+        e->raton_dentro = GetClientRect(g_ventana_ext, &rc) &&
+                          pt.x >= rc.left && pt.x < rc.right &&
+                          pt.y >= rc.top && pt.y < rc.bottom;
+    }
 }
 
 static int correr_ventana(HINSTANCE instancia) {
@@ -998,6 +1058,7 @@ static int correr_ventana(HINSTANCE instancia) {
                          rect.right - rect.left, rect.bottom - rect.top,
                          NULL, NULL, instancia, NULL);
     if (!hwnd) return 1;
+    g_ventana_ext = hwnd;
 
     /* framebuffer: DIB de 32 bits top-down, igual que el editor */
     pantalla = GetDC(NULL);
@@ -1030,7 +1091,9 @@ static int correr_ventana(HINSTANCE instancia) {
             DispatchMessageA(&msg);
         }
         juego.entrada = leer_teclado();
+        leer_entrada_ext();
         actualizar();
+        if (g_entrada_extactiva) motor_entrada_siguiente(&g_entrada_ext);
         if (!juego.corriendo) break;
         traza_fotograma();
         renderizar();
@@ -1173,7 +1236,9 @@ static int correr_captura(const char *ruta_bmp, int fotogramas) {
         if (depurador_tiene_replay()) entrada = depurador_entrada(i, entrada);
         juego.entrada = entrada;
         if (g_grabar_replay) depurador_grabar_entrada(i, entrada);
+        /* En captura la CLI fija la entrada: no se sondea Win32. */
         actualizar();
+        if (g_entrada_extactiva) motor_entrada_siguiente(&g_entrada_ext);
         traza_fotograma();
         renderizar();
         i++; /* las pausas no consumen fotogramas del guion */
@@ -1259,7 +1324,9 @@ static int correr_volcar(const char *ruta, int fotogramas) {
         if (depurador_tiene_replay()) entrada = depurador_entrada(i, entrada);
         juego.entrada = entrada;
         if (g_grabar_replay) depurador_grabar_entrada(i, entrada);
+        /* En --volcar tampoco hay ventana: respeta la entrada de la CLI. */
         actualizar();
+        if (g_entrada_extactiva) motor_entrada_siguiente(&g_entrada_ext);
         traza_fotograma();
         i++;
     }
@@ -1336,6 +1403,7 @@ static int correr_vm_test(const char *ruta_lobo, const char *ruta_traza,
     st.y = 16;
     st.vel = SPRITE_VEL;
     st.entrada = tecla;
+    st.entrada_ext = g_entrada_extactiva ? &g_entrada_ext : NULL;
     st.memoria = &memoria;
     st.choca = lobo_choca;
     st.ctx = NULL;
@@ -1365,8 +1433,11 @@ static int correr_vm_test(const char *ruta_lobo, const char *ruta_traza,
                     i + 1, st.vel_x, st.vel_y, st.x, st.y, suelo);
             (void)suelo;
         }
+        if (g_entrada_extactiva) motor_entrada_siguiente(&g_entrada_ext);
     }
     fclose(traza);
+    if (g_ruta_volcar_entrada)
+        motor_entrada_volcar(&g_entrada_ext, g_ruta_volcar_entrada);
     lobo_programa_liberar(&programa);
     return resultado;
 }
@@ -1397,7 +1468,10 @@ static int opcion(const char *nombre) {
            strcmp(nombre, "--volcar-debug") == 0 ||
            strcmp(nombre, "--replay") == 0 ||
            strcmp(nombre, "--grabar-replay") == 0 ||
-           strcmp(nombre, "--semilla") == 0;
+           strcmp(nombre, "--semilla") == 0 ||
+           strcmp(nombre, "--entrada-teclas") == 0 ||
+           strcmp(nombre, "--entrada-raton") == 0 ||
+           strcmp(nombre, "--volcar-entrada") == 0;
 }
 
 int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show) {
@@ -1412,6 +1486,7 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     (void)prev; (void)cmdline; (void)show;
 
     depurador_iniciar();
+    motor_entrada_iniciar(&g_entrada_ext);
     for (i = 1; i < __argc; i++) {
         if (strcmp(__argv[i], "--entidades") == 0) {
             g_entidades = 1;
@@ -1495,6 +1570,22 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
                 g_grabar_replay = v;
             } else if (strcmp(__argv[i - 1], "--semilla") == 0) {
                 g_semilla = atoi(v);
+            } else if (strcmp(__argv[i - 1], "--entrada-teclas") == 0) {
+                g_entrada_extactiva = 1;
+                motor_entrada_fijar(&g_entrada_ext, v);
+            } else if (strcmp(__argv[i - 1], "--entrada-raton") == 0) {
+                int rx = 0, ry = 0, bot = 0, rueda = 0, dentro = 0;
+                g_entrada_extactiva = 1;
+                if (sscanf(v, "%d,%d,%d,%d,%d", &rx, &ry, &bot, &rueda,
+                           &dentro) >= 2) {
+                    g_entrada_ext.raton_x = rx;
+                    g_entrada_ext.raton_y = ry;
+                    g_entrada_ext.raton_botones = (unsigned)bot;
+                    g_entrada_ext.raton_rueda = rueda;
+                    g_entrada_ext.raton_dentro = dentro;
+                }
+            } else if (strcmp(__argv[i - 1], "--volcar-entrada") == 0) {
+                g_ruta_volcar_entrada = v;
             } else if (strcmp(__argv[i - 1], "--observar") == 0) {
                 depurador_observar(v);
             } else if (strcmp(__argv[i - 1], "--break") == 0) {
@@ -1679,6 +1770,10 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         buscar_spawn();
         resultado = correr_ventana(instancia);
     }
+    /* Fase 37: el volcado de entrada se escribe al final del guion, tanto en
+     * captura como en --volcar. --vm-test ya lo hace en su propio banco. */
+    if (g_ruta_volcar_entrada)
+        motor_entrada_volcar(&g_entrada_ext, g_ruta_volcar_entrada);
     if (g_grabar_replay) depurador_guardar_replay(g_grabar_replay);
     if (g_ruta_debug) depurador_volcar(g_ruta_debug, &g_memoria, &g_l3, 1);
     if (g_ordenes) {

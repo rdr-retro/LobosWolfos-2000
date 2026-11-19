@@ -1,0 +1,10 @@
+# Fase 37: flanco de pulsacion y estado mantenido de la tecla a.
+entero senal = 0
+si tecla_pulsada("a")
+    senal = senal + 1
+fin
+si tecla_mantenida("a")
+    senal = senal + 10
+fin
+x = 16 + senal
+y = senal
