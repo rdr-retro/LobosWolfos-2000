@@ -105,6 +105,7 @@ La experiencia objetivo:
 | Editor de codigo lobo | `src/app.c` (`funciones_codigo_*`) | 10 lineas visibles, sin undo ni seleccion |
 | Lenguaje lobo | `motor/lobo.c`, `loboswolfos/kernel/src/lobo.rs` | Enteros, `si`/`mientras`, 6 teclas; VM con `esperar`, funciones, listas, `mi` y entidades (fases 25-26) |
 | Runtime Windows | `motor/juego.c`, `motor/activo.c`, `motor/nucleo32.s`, `motor/entidades.c` | Un lobo, un mapa, 256 entidades y 60 FPS |
+| Depurador | `motor/depurador.c`, `motor/panel_debug.c` | Pausa, paso, breakpoints, observados, consola y replay (fase 34) |
 | Runtime BIOS | `loboswolfos/kernel/src/*.rs` | Reimplementacion paralela en Rust |
 | Vista previa | `src/juego_ventana.c` | Usa el mismo blob y motor que `game.exe` |
 | Proyecto LOGIC3 | `src/logic3.c`, `src/logic3.h`, `motor/logic3_motor.c` | Modelo, lector, escritor y migrador (fase 24); el runtime lee escenas, objetos y scripts (fases 25-26) |
@@ -1200,6 +1201,19 @@ que comprueba que bloques y lobo manual producen la misma traza (`18 16`).
 
 **Criterio de salida:** se puede pausar un juego, ver `vidas=2`, avanzar un
 bloque y comprobar que cambia a `1`.
+
+**Estado (19-11-2026): completada.** `motor/depurador.c` guarda pausa, paso por
+bloque o instruccion, breakpoints de bloque y evento, observadores, consola
+circular, grabacion y reproduccion de replay y el comparador de trazas. Los
+hooks de `motor/lobo.c` y `motor/eventos.c` solo cortan la ejecucion cuando
+el depurador esta activo, y `motor/juego.c` anade los flags nuevos sin tocar
+las opciones de las fases anteriores. `motor/panel_debug.c` dibuja sobre la vista
+Play un panel con fuente bitmap 5x7, bloque resaltado, observados y consola,
+solo con `--panel-debug`. El criterio se verifica en
+`pruebas/depurador/esperado/paso_instruccion.debug`: `vidas=2` en la primera
+parada y `vidas=1` despues de tres instrucciones. `pruebas/depurador.ps1`
+congela nueve casos sin reutilizar las rutas de las once suites anteriores;
+`build.bat prueba` pasa las doce suites y 103 casos.
 
 ### Fase 35 - Editor de variables, listas, trajes y sonidos
 

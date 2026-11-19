@@ -1,0 +1,9 @@
+pausa 0 1 1 0 3 0
+obs vidas=2
+consola depurador listo
+consola paso de instruccion completado
+pausa 2 1 1 0 8 0
+obs vidas=1
+consola depurador listo
+consola paso de instruccion completado
+fin

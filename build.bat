@@ -105,6 +105,7 @@ if /i "%~2"=="render" goto pruebas_render
 if /i "%~2"=="estudio" goto pruebas_estudio
 if /i "%~2"=="bloques" goto pruebas_bloques
 if /i "%~2"=="compilador" goto pruebas_compilador
+if /i "%~2"=="depurador" goto pruebas_depurador
 
 echo.
 echo === Suite de conformidad del lenguaje ===
@@ -145,6 +146,10 @@ if errorlevel 1 exit /b 1
 echo.
 echo === Compilador bloques - lobo ===
 %PS% "%AQUI%pruebas\compilador.ps1"
+if errorlevel 1 exit /b 1
+echo.
+echo === Depurador y replay ===
+%PS% "%AQUI%pruebas\depurador.ps1"
 if errorlevel 1 exit /b 1
 echo.
 echo === Regresion visual del editor ===
@@ -191,6 +196,10 @@ exit /b %ERRORLEVEL%
 %PS% "%AQUI%pruebas\compilador.ps1"
 exit /b %ERRORLEVEL%
 
+:pruebas_depurador
+%PS% "%AQUI%pruebas\depurador.ps1"
+exit /b %ERRORLEVEL%
+
 :pruebas_regresion
 %PS% "%AQUI%pruebas\regresion.ps1"
 exit /b %ERRORLEVEL%
@@ -215,6 +224,8 @@ if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\bloques.ps1" -Actualizar
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\compilador.ps1" -Actualizar
+if errorlevel 1 exit /b 1
+%PS% "%AQUI%pruebas\depurador.ps1" -Actualizar
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\regresion.ps1" -Actualizar
 exit /b %ERRORLEVEL%

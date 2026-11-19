@@ -52,6 +52,11 @@ para cargar y guardar PNG.
   error. `Convertir a codigo` sustituye el lienzo por un unico bloque
   `codigo.lobo`, de forma irreversible, y el motor ejecuta la misma traza que
   el lobo escrito a mano.
+- Depurador del motor (fase 34): pausa, paso por bloque y por instruccion,
+  breakpoints por bloque y evento, variables observadas con su valor en vivo,
+  consola de errores en runtime, panel visual en la vista Play y replay
+  determinista con comparador de trazas. Todo detras de flags nuevos: sin
+  `--depurar` ni `--panel-debug`, el motor y las capturas siguen igual.
 - Entidades y escenas en el motor (fase 26): cada objeto de la primera escena
   se instancia con posición, tamaño, capa, visibilidad, traje y variables
   propias; `mi.x`, `mi.y`, `mi.vida`, `mi.visible`, `mi.traje` y
@@ -89,8 +94,8 @@ para cargar y guardar PNG.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
 - Suite de pruebas en `pruebas/`: conformidad del lenguaje lobo (trazas y
   hashes de BMP), proyecto LOGIC3, VM resumible, entidades y escenas, eventos
-  y planificador, vista Estudio, lienzo de bloques y regresión visual del
-  editor, con `build.bat prueba`.
+  y planificador, vista Estudio, lienzo de bloques, compilador, depurador y
+  regresión visual del editor, con `build.bat prueba`.
 - Plan de la siguiente versión en `PLAN_JUEGOS_COMPLEJOS.md`: juegos complejos
   con un editor de bloques visual (estilo Scratch), formato `LOGIC3`, varias
   escenas y objetos, eventos, variables, listas y una VM resumible. Define las
@@ -115,10 +120,10 @@ También se puede compilar desde PowerShell:
 
 ## Pruebas
 
-`build.bat prueba` compila el editor y pasa las once suites:
+`build.bat prueba` compila el editor y pasa las doce suites:
 
 ```bat
-build.bat prueba              conformidad + logic3 + vm + entidades + eventos + colisiones + render + estudio + bloques + compilador + regresion
+build.bat prueba              conformidad + logic3 + vm + entidades + eventos + colisiones + render + estudio + bloques + compilador + depurador + regresion
 build.bat prueba conformidad  solo el lenguaje lobo
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
@@ -129,6 +134,7 @@ build.bat prueba render       solo trajes, animacion, capas y camara
 build.bat prueba estudio      solo la vista Estudio
 build.bat prueba bloques      solo el lienzo de bloques
 build.bat prueba compilador   solo el compilador bloques -> lobo
+build.bat prueba depurador    solo el depurador y el replay
 build.bat prueba regresion    solo la interfaz del editor
 build.bat prueba actualizar   reescribe los patrones (revisar el diff)
 ```
@@ -206,6 +212,33 @@ cuando `detener todo` congela el despacho o un mensaje queda en espera) y el
 resumen `eventos final: N avisos A ejecutados E`. Con `--volcar` añade
 `eventos N avisos A ejecutados E`. Sin `--eventos` la traza es igual que en
 las fases anteriores.
+
+### Depurador (fase 34)
+
+`--depurar` activa el núcleo de `motor/depurador.c` sin cambiar el juego por
+defecto. `--paso bloque` y `--paso instruccion:N` avanzan un bloque o N
+instrucciones y vuelven a pausar. `--break B:id` y `--break E:tipo` rompen
+por bloque o por evento. `--observar nombre[:indice]` añade una variable a
+la lista observada (para una global usa `vidas:0`, porque el lector del
+motor guarda el nombre `global`). `--ordenes ruta` ejecuta una orden por
+línea mientras el juego está detenido: `pausar`, `continuar`, `paso`,
+`paso_instruccion N`, `observar nombre`, `volcar`, `break_bloque N`,
+`break_evento N` y `semilla N`. `--volcar-debug ruta` escribe cada parada
+con `pausa f b e s pc err`, las observadas y la consola. Los errores en
+runtime se anotan como `consola error en pc N`.
+
+`--panel-debug` dibuja sobre la vista Play un panel con la fuente bitmap 5x7:
+bloque, evento, script, PC, observados y las últimas líneas de la consola,
+con el bloque en ejecución resaltado. Activa también `--depurar`; sin esta
+opción las capturas de las fases anteriores son byte a byte idénticas.
+
+`--grabar-replay ruta` guarda la semilla y una máscara de entrada por
+fotograma; `--replay ruta` la reproduce sin reloj real. `--semilla N` fija la
+semilla base y `--mensaje texto` inyecta un mensaje. `--comparar A B --traza
+salida` escribe `sin divergencias` o `divergencia N lineaA lineaB` en una
+sola línea; lo usa la suite `pruebas\depurador.ps1`. Ninguna salida nueva
+aparece si no se pide con uno de estos flags, así que las once suites
+anteriores conservan sus patrones.
 
 `motor/prueba.c` es un banco de pruebas de consola del núcleo; se compila
 aparte siguiendo las instrucciones de su cabecera y se ejecuta desde la raíz

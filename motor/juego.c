@@ -33,6 +33,8 @@
 #include "eventos.h"
 #include "colisiones.h"
 #include "render.h"
+#include "depurador.h"
+#include "panel_debug.h"
 
 #define VENTANA_ANCHO 640
 #define VENTANA_ALTO  480
@@ -68,6 +70,15 @@ static u32 g_fondo = 0x00000000u;
 static struct {
     int vel_x, vel_y, gravedad, rebote, friccion, en_suelo;
 } g_fisica;
+
+/* Depurador (fase 34). Todas las rutas son NULL hasta que se pasan por
+ * linea de comandos; asi las trazas de las fases anteriores no cambian. */
+static FILE *g_ordenes = NULL;
+static const char *g_ruta_debug = NULL;
+static const char *g_grabar_replay = NULL;
+static const char *g_comparar_a = NULL;
+static const char *g_comparar_b = NULL;
+static int g_semilla = 12345;
 
 static void aplicar_ajustes(void) {
     g_ancho = activo_proyecto_ancho();
@@ -906,6 +917,12 @@ static void renderizar(void) {
     }
     if (juego.mapa_usado[0]) dibujar_entidades(cam_x, cam_y, zoom);
 
+    /* Panel del depurador sobre la vista Play. Solo con --panel-debug,
+     * para que las capturas de las suites anteriores no cambien. */
+    if (panel_debug_esta_activo())
+        panel_debug_dibujar(juego.fb, juego.fb_ancho, juego.fb_alto,
+                            &g_memoria, &g_l3);
+
     if (g_render_traza && g_traza)
         fprintf(g_traza,
                 "render cam %d %d zoom %d blits %d recortados %d "
@@ -1040,27 +1057,126 @@ static int correr_ventana(HINSTANCE instancia) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Depurador: hooks, ordenes y replay (fase 34)                         */
+/* ------------------------------------------------------------------ */
+
+static void cb_depurador_instruccion(int pc, int error) {
+    depurador_instruccion(pc, error);
+}
+
+static int cb_depurador_parada(void) {
+    return depurador_cortar_instrucciones();
+}
+
+/* Aplica la semilla del depurador a todas las maquinas del proyecto. */
+static void aplicar_semilla_debug(int valor) {
+    int i, n = eventos_num(&g_eventos);
+    for (i = 0; i < n && i < EVENTOS_SCRIPTS_MAX; i++)
+        g_eventos.scripts[i].maquina.semilla = valor;
+}
+
+/* Ejecuta la siguiente orden del guion. Devuelve 0 al agotarse. */
+static int procesar_orden_debug(void) {
+    char linea[DEPURADOR_ORDEN_MAX];
+    char *p, *fin;
+    int n;
+
+    if (!g_ordenes) return 0;
+    while (fgets(linea, sizeof(linea), g_ordenes)) {
+        p = linea;
+        while (*p == ' ' || *p == '\t') p++;
+        if (!*p || *p == '\r' || *p == '\n' || *p == '#') continue;
+        fin = p + strlen(p);
+        while (fin > p && (fin[-1] == '\r' || fin[-1] == '\n')) *--fin = '\0';
+        if (strncmp(p, "pausar", 6) == 0) {
+            depurador_pausar();
+        } else if (strncmp(p, "continuar", 9) == 0) {
+            depurador_paso(DEPURADOR_PASO_LIBRE, 0);
+            depurador_reanudar();
+        } else if (strncmp(p, "paso_instruccion", 16) == 0) {
+            n = 1;
+            sscanf(p + 16, "%d", &n);
+            depurador_paso(DEPURADOR_PASO_INSTRUCCION, n);
+            depurador_reanudar();
+        } else if (strncmp(p, "paso", 4) == 0) {
+            depurador_paso(DEPURADOR_PASO_BLOQUE, 1);
+            depurador_reanudar();
+        } else if (strncmp(p, "observar", 8) == 0) {
+            p += 8;
+            while (*p == ' ' || *p == '\t') p++;
+            depurador_observar(p);
+        } else if (strncmp(p, "volcar", 6) == 0) {
+            depurador_volcar(g_ruta_debug, &g_memoria, &g_l3, 0);
+        } else if (strncmp(p, "break_bloque", 12) == 0) {
+            n = 0;
+            sscanf(p + 12, "%d", &n);
+            depurador_break_bloque(n);
+        } else if (strncmp(p, "break_evento", 12) == 0) {
+            n = 0;
+            sscanf(p + 12, "%d", &n);
+            depurador_break_evento(n);
+        } else if (strncmp(p, "semilla", 7) == 0) {
+            n = 12345;
+            sscanf(p + 7, "%d", &n);
+            depurador_semilla(n);
+            aplicar_semilla_debug(n);
+        } else {
+            depurador_consola(p);
+        }
+        return 1;
+    }
+    return 0;
+}
+
+/* Ejecuta las ordenes previas al primer fotograma hasta encontrar una
+ * pausa. Sin esto, la orden `pausar` no tendria efecto hasta el segundo
+ * fotograma y no se podria observar el estado inicial. */
+static void ordenes_iniciales_debug(void) {
+    if (!depurador_esta_activo() || !g_ordenes) return;
+    while (!depurador_esta_pausado() && procesar_orden_debug()) {}
+}
+
+/* Mantiene el depurador detenido mientras haya ordenes pendientes. */
+static void atender_pausa_debug(void) {
+    if (!depurador_esta_activo() || !depurador_esta_pausado()) return;
+    if (procesar_orden_debug()) {
+        if (depurador_esta_pausado()) return;
+    } else {
+        /* Sin guion: volcar el break y seguir ejecutando. */
+        depurador_volcar(g_ruta_debug, &g_memoria, &g_l3, 0);
+        depurador_paso(DEPURADOR_PASO_LIBRE, 0);
+        depurador_reanudar();
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* Modo captura (sin ventana, determinista)                            */
 /* ------------------------------------------------------------------ */
 
 static int correr_captura(const char *ruta_bmp, int fotogramas) {
-    int i;
+    int i = 0;
     juego.fb = (u32 *)malloc((size_t)g_ancho * g_alto * sizeof(u32));
     if (!juego.fb) return 1;
     juego.fb_ancho = g_ancho;
     juego.fb_alto = g_alto;
     if (g_mensaje_ini[0])
         eventos_mensaje(&g_eventos, 0, NULL, g_mensaje_ini);
-    for (i = 0; i < fotogramas && juego.corriendo; i++) {
-        if (g_tecla_guion) {
-            if (g_evento_duracion > 0 && juego.fotograma >= g_evento_duracion)
-                juego.entrada = 0;
-            else
-                juego.entrada = g_tecla_guion;
-        }
+    while (i < fotogramas && juego.corriendo) {
+        unsigned entrada;
+        atender_pausa_debug();
+        if (depurador_esta_pausado()) continue;
+        depurador_fotograma(juego.fotograma);
+        entrada = g_tecla_guion;
+        if (entrada && g_evento_duracion > 0 &&
+            juego.fotograma >= g_evento_duracion)
+            entrada = 0;
+        if (depurador_tiene_replay()) entrada = depurador_entrada(i, entrada);
+        juego.entrada = entrada;
+        if (g_grabar_replay) depurador_grabar_entrada(i, entrada);
         actualizar();
         traza_fotograma();
         renderizar();
+        i++; /* las pausas no consumen fotogramas del guion */
     }
     if (g_entidades && g_traza)
         fprintf(g_traza, "entidades final: %d avisos %d creadas %d\n",
@@ -1128,18 +1244,24 @@ static int volcar_estado(const char *ruta) {
 /* Corre N fotogramas sin ventana y volca el estado final (--volcar sin
  * --captura). */
 static int correr_volcar(const char *ruta, int fotogramas) {
-    int i;
+    int i = 0;
     if (g_mensaje_ini[0])
         eventos_mensaje(&g_eventos, 0, NULL, g_mensaje_ini);
-    for (i = 0; i < fotogramas && juego.corriendo; i++) {
-        if (g_tecla_guion) {
-            if (g_evento_duracion > 0 && juego.fotograma >= g_evento_duracion)
-                juego.entrada = 0;
-            else
-                juego.entrada = g_tecla_guion;
-        }
+    while (i < fotogramas && juego.corriendo) {
+        unsigned entrada;
+        atender_pausa_debug();
+        if (depurador_esta_pausado()) continue;
+        depurador_fotograma(juego.fotograma);
+        entrada = g_tecla_guion;
+        if (entrada && g_evento_duracion > 0 &&
+            juego.fotograma >= g_evento_duracion)
+            entrada = 0;
+        if (depurador_tiene_replay()) entrada = depurador_entrada(i, entrada);
+        juego.entrada = entrada;
+        if (g_grabar_replay) depurador_grabar_entrada(i, entrada);
         actualizar();
         traza_fotograma();
+        i++;
     }
     if (g_entidades && g_traza)
         fprintf(g_traza, "entidades final: %d avisos %d creadas %d\n",
@@ -1267,19 +1389,29 @@ static int opcion(const char *nombre) {
            strcmp(nombre, "--camara") == 0 ||
            strcmp(nombre, "--zoom") == 0 ||
            strcmp(nombre, "--limites") == 0 ||
-           strcmp(nombre, "--pixel") == 0;
+           strcmp(nombre, "--pixel") == 0 ||
+           strcmp(nombre, "--ordenes") == 0 ||
+           strcmp(nombre, "--paso") == 0 ||
+           strcmp(nombre, "--break") == 0 ||
+           strcmp(nombre, "--observar") == 0 ||
+           strcmp(nombre, "--volcar-debug") == 0 ||
+           strcmp(nombre, "--replay") == 0 ||
+           strcmp(nombre, "--grabar-replay") == 0 ||
+           strcmp(nombre, "--semilla") == 0;
 }
 
 int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show) {
     const char *ruta_logica = NULL, *ruta_mapa = NULL, *ruta_bmp = NULL;
     const char *ruta_logic3 = NULL, *ruta_vm_test = NULL;
     const char *ruta_traza = NULL, *ruta_volcar = NULL;
+    const char *ruta_ordenes = NULL, *ruta_replay = NULL;
     int fotogramas = 60;
     unsigned tecla = 0;
     int i;
     int resultado;
     (void)prev; (void)cmdline; (void)show;
 
+    depurador_iniciar();
     for (i = 1; i < __argc; i++) {
         if (strcmp(__argv[i], "--entidades") == 0) {
             g_entidades = 1;
@@ -1295,6 +1427,20 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         }
         if (strcmp(__argv[i], "--eventos") == 0) {
             g_eventos_traza = 1;
+            continue;
+        }
+        if (strcmp(__argv[i], "--depurar") == 0) {
+            depurador_activar(1);
+            continue;
+        }
+        if (strcmp(__argv[i], "--panel-debug") == 0) {
+            panel_debug_activar(1);
+            depurador_activar(1);
+            continue;
+        }
+        if (strcmp(__argv[i], "--comparar") == 0 && i + 2 < __argc) {
+            g_comparar_a = __argv[++i];
+            g_comparar_b = __argv[++i];
             continue;
         }
         if (opcion(__argv[i]) && i + 1 < __argc) {
@@ -1339,6 +1485,32 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
                     g_pixels[g_num_pixels][1] = py;
                     g_num_pixels++;
                 }
+            } else if (strcmp(__argv[i - 1], "--ordenes") == 0) {
+                ruta_ordenes = v;
+            } else if (strcmp(__argv[i - 1], "--volcar-debug") == 0) {
+                g_ruta_debug = v;
+            } else if (strcmp(__argv[i - 1], "--replay") == 0) {
+                ruta_replay = v;
+            } else if (strcmp(__argv[i - 1], "--grabar-replay") == 0) {
+                g_grabar_replay = v;
+            } else if (strcmp(__argv[i - 1], "--semilla") == 0) {
+                g_semilla = atoi(v);
+            } else if (strcmp(__argv[i - 1], "--observar") == 0) {
+                depurador_observar(v);
+            } else if (strcmp(__argv[i - 1], "--break") == 0) {
+                int n = 0;
+                if (v[0] == 'b' || v[0] == 'B')
+                    sscanf(v + 1, ":%d", &n), depurador_break_bloque(n);
+                else if (v[0] == 'e' || v[0] == 'E')
+                    sscanf(v + 1, ":%d", &n), depurador_break_evento(n);
+            } else if (strcmp(__argv[i - 1], "--paso") == 0) {
+                int n = 1;
+                if (strncmp(v, "instruccion", 11) == 0) {
+                    sscanf(v + 11, ":%d", &n);
+                    depurador_paso(DEPURADOR_PASO_INSTRUCCION, n);
+                } else {
+                    depurador_paso(DEPURADOR_PASO_BLOQUE, 1);
+                }
             }
         }
     }
@@ -1349,6 +1521,41 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     g_tecla_guion = tecla;
     if (ruta_traza) {
         g_traza = fopen(ruta_traza, "wt"); /* si falla: sin traza */
+    }
+
+    /* Depurador: la grabacion y el replay activan el modo depuracion. */
+    if (ruta_replay) {
+        char msg[DEPURADOR_NOMBRE_MAX];
+        int sem = g_semilla;
+        msg[0] = '\0';
+        if (depurador_cargar_replay(ruta_replay, msg, sizeof(msg), &sem) == 0) {
+            depurador_activar(1);
+            if (msg[0]) copiar_texto(g_mensaje_ini, sizeof(g_mensaje_ini), msg);
+            g_semilla = sem;
+        }
+    }
+    depurador_semilla(g_semilla);
+    if (ruta_ordenes) {
+        g_ordenes = fopen(ruta_ordenes, "rt");
+        if (g_ordenes) depurador_activar(1);
+    }
+    if (g_grabar_replay) {
+        depurador_replay_grabar(1);
+        depurador_activar(1);
+    }
+    if (g_ruta_debug) depurador_activar(1);
+
+    /* Comparacion de dos trazas de replay, sin GDI+ ni proyecto. */
+    if (g_comparar_a && g_comparar_b) {
+        const char *salida = ruta_traza ? ruta_traza : "comparar.txt";
+        int r;
+        if (g_traza) {
+            fclose(g_traza);
+            g_traza = NULL;
+        }
+        r = depurador_comparar(g_comparar_a, g_comparar_b, salida);
+        depurador_terminar();
+        return r == 2 ? 1 : 0;
     }
 
     /* Banco de la VM: no necesita GDI+ ni proyecto. */
@@ -1417,6 +1624,12 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
          * eventos fotograma: un script cada uno, con la VM resumible */
         entidades_preparar();
         scripts_preparar_l3(ruta_bmp == NULL && ruta_volcar == NULL);
+        if (depurador_esta_activo()) {
+            lobo_depurador_instruccion(cb_depurador_instruccion);
+            lobo_depurador_parada(cb_depurador_parada);
+            aplicar_semilla_debug(g_semilla);
+            depurador_consola("depurador listo");
+        }
     } else if (ruta_mapa) {
         if (!activo_cargar_mapa(ruta_mapa, &juego.mapa)) {
             char msg[512];
@@ -1454,6 +1667,7 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     render_camara_aplicar(&g_camara, g_camara_objetivo, g_zoom_override,
                           g_limites_override ? g_limites : NULL);
 
+    ordenes_iniciales_debug();
     if (ruta_bmp) {
         buscar_spawn();
         resultado = correr_captura(ruta_bmp, fotogramas);
@@ -1465,10 +1679,17 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         buscar_spawn();
         resultado = correr_ventana(instancia);
     }
+    if (g_grabar_replay) depurador_guardar_replay(g_grabar_replay);
+    if (g_ruta_debug) depurador_volcar(g_ruta_debug, &g_memoria, &g_l3, 1);
+    if (g_ordenes) {
+        fclose(g_ordenes);
+        g_ordenes = NULL;
+    }
     if (g_traza) {
         fclose(g_traza);
         g_traza = NULL;
     }
+    depurador_terminar();
     render_terminar();
     motor_mapa_liberar(&juego.mapa);
     activo_gdiplus_terminar();

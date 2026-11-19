@@ -1,13 +1,14 @@
 # Pruebas de LobosWolfos 2000
 
-Once suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
+Doce suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
 (fase 24), la VM resumible y lobo 3 (fase 25), entidades, escenas y ciclo de
 vida (fase 26), eventos, planificador y mensajes (fase 27), variables, listas
 y funciones (fase 28), colisiones, flags y fisica (fase 29), render de
 trajes, animacion, capas y camara (fase 30), la vista Estudio (fase 31), el
-lienzo de bloques (fase 32), el compilador bloques -> lobo (fase 33) y la
-interfaz del editor (fase 23). Congelan el
-comportamiento antes de cambiar el runtime en las fases siguientes.
+lienzo de bloques (fase 32), el compilador bloques -> lobo (fase 33), el
+depurador y el replay (fase 34) y la interfaz del editor (fase 23). Congelan el
+comportamiento antes de cambiar el runtime en las fases siguientes. En total,
+103 casos: las once suites anteriores aportan 94 y la nueva aporta 9.
 
 Todo es texto: los patrones de las capturas son hashes SHA-256 y
 volcados de estado, no imagenes. `recursos/ascii.png` no se versiona y
@@ -16,7 +17,7 @@ las pruebas no lo necesitan.
 ## Comandos
 
 ```bat
-build.bat prueba              compila y pasa las once suites
+build.bat prueba              compila y pasa las doce suites
 build.bat prueba conformidad  solo la suite del lenguaje
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
@@ -27,6 +28,7 @@ build.bat prueba render       solo trajes, animacion, capas y camara
 build.bat prueba estudio      solo la vista Estudio
 build.bat prueba bloques      solo el lienzo de bloques
 build.bat prueba compilador   solo el compilador bloques -> lobo
+build.bat prueba depurador    solo el depurador y el replay
 build.bat prueba regresion    solo la regresion del editor
 build.bat prueba actualizar   reescribe los patrones con el estado actual
 ```
@@ -46,6 +48,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\render.ps1 -Repetir
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\estudio.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\bloques.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\compilador.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\depurador.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\regresion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\linea_base.ps1
 ```
@@ -446,6 +449,46 @@ Para regenerar o revisar:
 build.bat prueba compilador
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\compilador.ps1 -Actualizar
 git diff pruebas\compilador\esperado
+```
+
+## Depurador y replay (`depurador.ps1`)
+
+Suite de la fase 34. Congela los puntos de parada, la consola, el replay y
+el resultado del comparador. Sus fixtures y patrones viven en
+`pruebas\depurador\` y `pruebas\depurador\esperado\`:
+
+| Archivo | Contenido |
+|---|---|
+| `pausa.logic3` | dos bloques (`inicio` y `fotograma`) con `vidas` |
+| `paso.logic3` | un solo bloque de `fotograma` con tres instrucciones |
+| `teclas.logic3` | proyecto determinista usado al grabar y reproducir |
+| `error.logic3` | programa con un error en runtime |
+| `ordenes_pausa.txt` / `ordenes_error.txt` | guiones de ordenes del depurador |
+| `<nombre>.debug` | `pausa ...`, `obs ...` y `consola ...` de cada parada |
+| `<nombre>.replay` / `<nombre>.traza` | entrada grabada y traza reproducida |
+| `<nombre>.txt` | `sin divergencias` o `divergencia N lineaA lineaB` |
+| `panel.pixeles` | seis sondas `x,y=RRGGBB` del panel visual |
+| `menu_indices.volcar` | indices de ARCHIVO, MODO y AYUDA |
+
+| Caso | Cubre |
+|---|---|
+| `pausa` | `vidas=2` en la primera parada y `vidas=1` tras dos pasos |
+| `paso_instruccion` | tres instrucciones llevan de `vidas=2` a `vidas=1` |
+| `break_bloque` | `--break B:2` detiene en el bloque 2 |
+| `break_evento` | `--break E:2` detiene en el evento 2 |
+| `error_runtime` | `consola error en pc 1` en la VM |
+| `replay` | la traza reproducida es identica a la grabada |
+| `comparar` | sin divergencias y primera divergencia en una sola linea |
+| `panel` | pixeles del panel solo con `--panel-debug` |
+| `menu_indices` | ARCHIVO=1, MODO=2 y AYUDA=9 siguen en su sitio |
+
+Toda salida nueva va detras de los flags del depurador, asi que los patrones
+de las once suites anteriores no cambian. Para regenerar o revisar:
+
+```bat
+build.bat prueba depurador
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\depurador.ps1 -Actualizar
+git diff pruebas\depurador\esperado
 ```
 
 ## Regresion del editor (`regresion.ps1`)

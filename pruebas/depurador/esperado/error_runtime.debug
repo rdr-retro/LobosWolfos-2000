@@ -1,0 +1,9 @@
+pausa 0 0 0 0 0 0
+obs vidas=0
+consola depurador listo
+pausa 1 1 1 0 2 1
+obs vidas=0
+consola depurador listo
+consola error en pc 1
+consola error en pc 1
+fin

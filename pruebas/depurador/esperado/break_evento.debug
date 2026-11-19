@@ -1,0 +1,13 @@
+pausa 0 2 2 1 6 0
+consola depurador listo
+consola break evento 2
+pausa 1 2 2 1 6 0
+consola depurador listo
+consola break evento 2
+consola break evento 2
+pausa 2 2 2 1 6 0
+consola depurador listo
+consola break evento 2
+consola break evento 2
+consola break evento 2
+fin

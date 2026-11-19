@@ -386,6 +386,10 @@ void lobo_ejecutar(const LoboPrograma *programa, LoboEstado *estado,
 int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
               LoboMaquina *maquina);
 
+/* Hooks opcionales del depurador (fase 34). Registrar NULL los desactiva. */
+void lobo_depurador_instruccion(void (*fn)(int pc, int error));
+void lobo_depurador_parada(int (*fn)(void));
+
 /* Ejecuta el fotograma de un script en la VM: descuenta la espera,
  * reengancha el evento de fotograma si termino y corre hasta un evento
  * o hasta agotar LOBO_PASOS_VM_MAX. Devuelve 1 si llego a un evento,

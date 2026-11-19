@@ -1,0 +1,18 @@
+pausa 0 0 0 0 0 0
+obs vidas=0
+consola depurador listo
+pausa 0 1 1 0 2 0
+obs vidas=2
+consola depurador listo
+consola paso de bloque completado
+pausa 1 2 2 1 6 0
+obs vidas=1
+consola depurador listo
+consola paso de bloque completado
+consola paso de bloque completado
+pausa 3 2 2 1 6 0
+obs vidas=-1
+consola depurador listo
+consola paso de bloque completado
+consola paso de bloque completado
+fin

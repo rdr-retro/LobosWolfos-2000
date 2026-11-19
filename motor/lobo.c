@@ -33,6 +33,20 @@
 #include "lobo.h"
 #include <stdlib.h>
 
+/* Hooks del depurador (fase 34). Son opcionales: mientras no se
+ * registran, las llamadas de abajo no cuestan nada y la VM se comporta
+ * exactamente como en las fases 25 a 33. */
+static void (*g_hook_instruccion)(int pc, int error) = NULL;
+static int (*g_hook_debe_parar)(void) = NULL;
+
+void lobo_depurador_instruccion(void (*fn)(int pc, int error)) {
+    g_hook_instruccion = fn;
+}
+
+void lobo_depurador_parada(int (*fn)(void)) {
+    g_hook_debe_parar = fn;
+}
+
 /* ------------------------------------------------------------------ */
 /* Utilidades de texto propias (sin libc, para portar igual en Rust)   */
 /* ------------------------------------------------------------------ */
@@ -2564,6 +2578,7 @@ int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
         return LOBO_PASO_EVENTO;
     }
     in = &programa->insts[maquina->pc++];
+    if (g_hook_instruccion) g_hook_instruccion(maquina->pc - 1, 0);
 
     switch (in->op) {
     case LOBO_NUM:
@@ -3114,6 +3129,7 @@ int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
         maquina->np = 0;
         maquina->num_frames = 0;
         maquina->estado = LOBO_VM_TERMINADO;
+        if (g_hook_instruccion) g_hook_instruccion(maquina->pc - 1, 1);
         return LOBO_PASO_ERROR;
     }
     return LOBO_PASO_SIGUE;
@@ -3143,6 +3159,7 @@ int lobo_vm_fotograma(const LoboPrograma *programa, LoboEstado *estado,
     while (--pasos >= 0) {
         int r = lobo_paso(programa, estado, maquina);
         if (r != LOBO_PASO_SIGUE) return 1;
+        if (g_hook_debe_parar && g_hook_debe_parar()) return 1;
     }
     maquina->agotado = 1;
     return 0;
@@ -3155,6 +3172,7 @@ static int lobo_vm_correr(const LoboPrograma *programa, LoboEstado *estado,
     while (--pasos >= 0) {
         int r = lobo_paso(programa, estado, maquina);
         if (r != LOBO_PASO_SIGUE) return 1;
+        if (g_hook_debe_parar && g_hook_debe_parar()) return 1;
     }
     maquina->agotado = 1;
     return 0;

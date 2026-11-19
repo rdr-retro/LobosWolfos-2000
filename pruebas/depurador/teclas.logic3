@@ -1,0 +1,12 @@
+LOGIC3
+version 3
+proyecto "Depurador teclas" 320 240 1 60 4 00112233
+carpetas "tiles" "maps" "trajes" "sonidos"
+variable global "vidas" entero 2
+escena 1 "Escena" "" 320 240 00112233
+objeto 1 "Escena" escena 1 x 0 y 0 w 320 h 240 visible 1 capa 0
+  traje 0 "" 0 0 0 0
+  evento 1 fotograma
+bloque 1 evento 1 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "x = tecla_derecha * 3\n"
+FIN

@@ -1,0 +1,4 @@
+pausar
+observar vidas:0
+volcar
+continuar

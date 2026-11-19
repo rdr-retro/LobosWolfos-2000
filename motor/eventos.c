@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "eventos.h"
+#include "depurador.h"
 #include "entidades.h"
 
 /* ------------------------------------------------------------------ */
@@ -278,10 +279,13 @@ static int lanzar(Eventos *ev, LoboEstado *estado, int indice, int ent,
     traza_evento(ev, s, indice, ent, nota);
     s->maquina.entidad = ent;
     estado->fotograma = ev->fotograma;
+    (void)depurador_antes_bloque(s->bloque, s->evento, indice);
     if (repetir)
         lobo_vm_fotograma(&s->programa, estado, &s->maquina);
     else
         lobo_vm_evento(&s->programa, estado, &s->maquina);
+    (void)depurador_despues_bloque(s->bloque, s->evento, indice,
+                                   s->maquina.pc, s->maquina.agotado);
     if (s->maquina.detener_todo) ev->detener_todo = 1;
     if (s->maquina.cerrar) ev->cerrar = 1;
     return 1;
@@ -292,7 +296,10 @@ static void reanudar(Eventos *ev, LoboEstado *estado, int indice, int ent) {
     EventoScript *s = &ev->scripts[indice];
     s->maquina.entidad = ent;
     estado->fotograma = ev->fotograma;
+    (void)depurador_antes_bloque(s->bloque, s->evento, indice);
     lobo_vm_reanudar(&s->programa, estado, &s->maquina);
+    (void)depurador_despues_bloque(s->bloque, s->evento, indice,
+                                   s->maquina.pc, s->maquina.agotado);
     if (s->maquina.detener_todo) ev->detener_todo = 1;
     if (s->maquina.cerrar) ev->cerrar = 1;
 }
@@ -332,7 +339,7 @@ void eventos_fotograma(Eventos *ev, LoboEstado *estado, int fotograma,
     estado->entrada = entrada;
 
     /* Escena detenida por `detener todo`: no se despacha nada mas. */
-    if (ev->detener_todo) goto fin;
+    if (ev->detener_todo || depurador_esta_pausado()) goto fin;
 
     /* 1. Eventos de sistema: inicio y escena la primera vez (o al
      * reiniciar). Se disparan una sola vez por entrada en escena. */
@@ -348,9 +355,9 @@ void eventos_fotograma(Eventos *ev, LoboEstado *estado, int fotograma,
             ent = entidad_de_objeto(s->objeto, ev->escena);
             if (ent <= 0) continue;
             if (!lanzar(ev, estado, i, ent, 0, "")) goto fin;
-            if (ev->detener_todo) break;
+            if (ev->detener_todo || depurador_esta_pausado()) break;
         }
-        if (ev->detener_todo) goto fin;
+        if (ev->detener_todo || depurador_esta_pausado()) goto fin;
     }
 
     /* Las esperas de los scripts de un disparo siguen contando aunque no
@@ -365,7 +372,7 @@ void eventos_fotograma(Eventos *ev, LoboEstado *estado, int fotograma,
         ent = entidad_de_objeto(s->objeto, ev->escena);
         if (ent <= 0) continue;
         reanudar(ev, estado, i, ent);
-        if (ev->detener_todo) goto fin;
+        if (ev->detener_todo || depurador_esta_pausado()) goto fin;
     }
 
     /* 3. fotograma de las entidades activas, en orden de capa e id (los
@@ -377,7 +384,7 @@ void eventos_fotograma(Eventos *ev, LoboEstado *estado, int fotograma,
         ent = entidad_de_objeto(s->objeto, ev->escena);
         if (ent <= 0) continue;
         if (!lanzar(ev, estado, i, ent, 1, "")) goto fin;
-        if (ev->detener_todo) goto fin;
+        if (ev->detener_todo || depurador_esta_pausado()) goto fin;
     }
 
     /* 4. tecla mantenida y flancos de pulsar/soltar. */
@@ -415,7 +422,7 @@ void eventos_fotograma(Eventos *ev, LoboEstado *estado, int fotograma,
                 if (!lanzar(ev, estado, i, ent, 0, nota)) goto fin;
             }
         }
-        if (ev->detener_todo) goto fin;
+        if (ev->detener_todo || depurador_esta_pausado()) goto fin;
     }
 
     /* 5. cada N: el contador empieza en N y dispara en N, 2N, 3N... */
@@ -433,7 +440,7 @@ void eventos_fotograma(Eventos *ev, LoboEstado *estado, int fotograma,
         _snprintf(nota, sizeof(nota), "%d", s->cada);
         nota[sizeof(nota) - 1] = '\0';
         if (!lanzar(ev, estado, i, ent, 0, nota)) return;
-        if (ev->detener_todo) goto fin;
+        if (ev->detener_todo || depurador_esta_pausado()) goto fin;
     }
 
     /* 6. tocar: colision AABB con cooldown para no repetir cada fotograma. */
@@ -457,7 +464,7 @@ void eventos_fotograma(Eventos *ev, LoboEstado *estado, int fotograma,
         nota[sizeof(nota) - 1] = '\0';
         if (!lanzar(ev, estado, i, ent, 0, nota)) return;
         s->cooldown = EVENTOS_TOCAR_ESPERA;
-        if (ev->detener_todo) goto fin;
+        if (ev->detener_todo || depurador_esta_pausado()) goto fin;
     }
 
     /* 7. recibir de la cola. Si el unico receptor esta esperando, el
@@ -483,7 +490,7 @@ void eventos_fotograma(Eventos *ev, LoboEstado *estado, int fotograma,
                 sin_presupuesto = 1;
                 break;
             }
-            if (ev->detener_todo) goto fin;
+            if (ev->detener_todo || depurador_esta_pausado()) goto fin;
         }
         if (sin_presupuesto) goto fin;      /* se pospone al siguiente */
         if (hay_receptor && !hay_listo) goto fin; /* espera al receptor */
@@ -506,7 +513,7 @@ void eventos_fotograma(Eventos *ev, LoboEstado *estado, int fotograma,
             _snprintf(nota, sizeof(nota), "%d", e->id);
             nota[sizeof(nota) - 1] = '\0';
             if (!lanzar(ev, estado, j, e->id, 0, nota)) goto fin;
-            if (ev->detener_todo) goto fin;
+            if (ev->detener_todo || depurador_esta_pausado()) goto fin;
         }
     }
 
