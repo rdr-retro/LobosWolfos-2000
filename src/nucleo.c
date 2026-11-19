@@ -1945,6 +1945,64 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                              reemplazo[0] ? reemplazo : NULL);
             }
         }
+        /* Fase 36: productividad del estudio. Todas las entradas y salidas
+         * son nuevas; las suites anteriores no las usan. */
+        {
+            char *prod = arg_valor(cmd, "--productividad-marcar");
+            if (prod && prod[0] && g.vista == VISTA_ESTUDIO)
+                productividad_registrar(prod);
+        }
+        if (strstr(cmd, "--productividad-deshacer") != NULL &&
+            g.vista == VISTA_ESTUDIO)
+            productividad_deshacer();
+        if (strstr(cmd, "--productividad-rehacer") != NULL &&
+            g.vista == VISTA_ESTUDIO)
+            productividad_rehacer();
+        if (strstr(cmd, "--productividad-copiar") != NULL &&
+            g.vista == VISTA_ESTUDIO)
+            productividad_objeto_copiar();
+        {
+            char *prod = arg_valor(cmd, "--productividad-pegar");
+            if (prod && g.vista == VISTA_ESTUDIO)
+                productividad_objeto_pegar(prod[0] ? prod : NULL);
+        }
+        {
+            char *prod = arg_valor(cmd, "--productividad-duplicar");
+            if (prod && g.vista == VISTA_ESTUDIO)
+                productividad_objeto_duplicar(prod[0] ? prod : NULL);
+        }
+        {
+            char *prod = arg_valor(cmd, "--productividad-buscar");
+            if (prod && prod[0] && g.vista == VISTA_ESTUDIO)
+                productividad_buscar(prod);
+        }
+        {
+            char *prod = arg_valor(cmd, "--productividad-lote");
+            if (prod && prod[0] && g.vista == VISTA_ESTUDIO) {
+                char *c[2];
+                int cantidad = 1;
+                if (partir_argumento(prod, c, 2) >= 1) {
+                    cantidad = atoi(c[0]);
+                    productividad_duplicar_seleccion(cantidad, c[1]);
+                }
+            }
+        }
+        {
+            char *prod = arg_valor(cmd, "--productividad-snippet");
+            if (prod && prod[0] && g.vista == VISTA_ESTUDIO)
+                productividad_snippet_crear(prod);
+        }
+        {
+            char *prod = arg_valor(cmd, "--productividad-ayuda");
+            if (prod && prod[0] && g.vista == VISTA_ESTUDIO)
+                app_estado("%s", productividad_ayuda(prod));
+        }
+        if (strstr(cmd, "--productividad-avanzado") != NULL &&
+            g.vista == VISTA_ESTUDIO)
+            productividad_modo_avanzado(1);
+        if (strstr(cmd, "--productividad-principiante") != NULL &&
+            g.vista == VISTA_ESTUDIO)
+            productividad_modo_avanzado(0);
         /* Teclado simulado en el editor de codigo (fase 8): el texto se
          * escribe caracter a caracter, con \n \t \b \\ como escapes y
          * cada \n como salto de linea. Va despues de --clics para poder
@@ -2511,6 +2569,21 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 }
                 vd_ruta[n] = 0;
                 datos_volcar(vd_ruta);
+            }
+        }
+        /* Fase 36: volcado propio, detrás de un flag nuevo. */
+        {
+            char *pv = arg_valor(cmd, "--volcar-productividad");
+            if (pv) {
+                char pv_ruta[MAX_PATH];
+                int n = 0;
+                while (pv[n] && pv[n] != ' ' && pv[n] != '\t' &&
+                       n < MAX_PATH - 1) {
+                    pv_ruta[n] = pv[n];
+                    n++;
+                }
+                pv_ruta[n] = 0;
+                productividad_volcar(pv_ruta);
             }
         }
         /* Vuelca el lobo generado (fase 33) como texto plano. */

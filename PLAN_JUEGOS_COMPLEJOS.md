@@ -1274,6 +1274,27 @@ sondas de pixel; `build.bat prueba` pasa las trece suites y 110 casos.
 **Criterio de salida:** duplicar un objeto con sus scripts y variables
 cuesta menos de 10 segundos y no rompe ids.
 
+**Estado (19-11-2026): completada.** `src/productividad.c` concentra todo el
+estado nuevo fuera de `App` y del archivo LOGIC3. El deshacer/rehacer global
+guarda copias profundas del modelo del estudio, con historial de 12 estados
+que se descarta al cambiar de proyecto. El portapapeles copia un objeto con
+sus trajes, variables y eventos; al pegar o duplicar se reasignan los ids de
+evento y de los bloques que apuntan a ellos, y el objeto recibe un id libre.
+La busqueda recorre variables, listas, eventos, bloques y trajes; la
+duplicacion en lote admite hasta 32 copias. Hay cuatro snippets iniciales,
+ayuda contextual por bloque, modo principiante/avanzado y metricas de
+escenas, objetos, eventos, bloques, variables, listas, elementos y memoria.
+Las entradas y salidas nuevas van detras de flags nuevos (`--productividad-marcar`,
+`--productividad-deshacer`, `--productividad-rehacer`, `--productividad-copiar`,
+`--productividad-pegar`, `--productividad-duplicar`, `--productividad-buscar`,
+`--productividad-lote`, `--productividad-snippet`, `--productividad-ayuda`,
+`--productividad-avanzado`, `--productividad-principiante` y
+`--volcar-productividad`). El criterio se verifica guardando un proyecto con
+un objeto y su variable `salud`: el duplicado conserva la variable y recibe
+el id 2, sin colisiones. Nueva suite `pruebas/productividad.ps1` con siete
+casos que congelan volcado, hash BMP y tres sondas de pixel; `build.bat
+prueba` pasa las catorce suites y 117 casos.
+
 ### Fase 37 - Entrada extendida
 
 **Objetivo:** teclado completo, raton y flancos.

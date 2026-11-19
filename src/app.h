@@ -1693,6 +1693,28 @@ int  sonido_validar_wav(const char *ruta, int *frecuencia, int *canales,
                         int *bits, int *bytes);
 int  sonido_reproducir(const char *ruta);
 
+/* Productividad del editor (productividad.c, fase 36). Estado de editor,
+ * nunca serializado en LOGIC3. */
+void productividad_registrar(const char *etiqueta);
+int  productividad_deshacer(void);
+int  productividad_rehacer(void);
+void productividad_reiniciar(void);
+int  productividad_objeto_copiar(void);
+int  productividad_objeto_pegar(const char *nombre);
+int  productividad_objeto_duplicar(const char *nombre);
+int  productividad_buscar(const char *texto);
+int  productividad_duplicar_seleccion(int cantidad, const char *prefijo);
+int  productividad_snippet_obtener(int indice, char *dst, int tam);
+int  productividad_snippet_crear(const char *texto);
+const char *productividad_ayuda(const char *bloque);
+void productividad_modo_avanzado(int activo);
+int  productividad_modo(void);
+void productividad_metricas(int *escenas, int *objetos, int *eventos,
+                            int *bloques, int *variables, int *listas,
+                            int *elementos, int *bytes);
+void productividad_volcar(const char *ruta);
+const char *productividad_ultimo_error(void);
+
 /* Lienzo de bloques (fase 32). El modelo se mantiene aparte del LOGIC3 y se
  * vuelca a `p->bloques` en cada mutacion; el escritor de LOGIC3 no cambia. */
 void bloques_iniciar(void);
