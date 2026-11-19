@@ -1,0 +1,15 @@
+# Fase 38: los nueve builtins del HUD sin callbacks (banco --vm-test).
+# Cada llamada debe dejar un valor en la pila y no cambiar x ni y.
+entero a = hud_vidas(3)
+entero b = hud_puntos(1250)
+entero c = hud_dialogo(0, "Hola")
+entero d = hud_dialogo(1, "Llave")
+entero e = hud_dialogo(2, "FIN")
+entero f = hud_texto(8, 30, "Texto", 16777215, 1)
+entero g = hud_rect(8, 40, 20, 10, 16711680)
+entero h = hud_barra(8, 60, 40, 8, 3, 4, 65280)
+entero i = hud_imagen(1, 8, 80)
+entero j = hud_boton(1, 8, 100, 40, 12, "Pulsar")
+entero k = hud_plantilla(0)
+x = a + b + c + d + e + f + g + h + i + j + k
+y = 16

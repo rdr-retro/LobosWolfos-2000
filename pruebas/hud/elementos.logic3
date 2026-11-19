@@ -1,0 +1,11 @@
+LOGIC3
+version 3
+proyecto "Fase 38 elementos" 320 200 1 60 3 00112233
+carpetas "tiles" "maps" "trajes" "sonidos"
+escena 1 "Escena" "" 320 200 00112233
+objeto 1 "Lobo" escena 1 x 16 y 16 w 24 h 24 visible 1 capa 0
+  traje 0 "" 0 0 0 0
+  evento 1 fotograma
+bloque 1 evento 1 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "hud_vidas(2)\nhud_puntos(99)\nhud_dialogo(0, \"Pausa\")\nhud_dialogo(1, \"Opciones\")\nhud_dialogo(2, \"Salir\")\nhud_texto(8, 30, \"HUD\", 16777215, 2)\nhud_rect(210, 30, 40, 14, 16711680)\nhud_barra(210, 50, 40, 8, 3, 4, 65280)\nhud_imagen(1, 260, 30)\nhud_boton(1, 250, 40, 40, 14, \"OK\")\nhud_plantilla(1)\nx = x + 2\ny = 16\n"
+FIN

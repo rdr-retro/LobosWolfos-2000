@@ -1,0 +1,14 @@
+vm: 1 scripts
+vm: script 0 bloque 1 objeto 1 evento 1
+1 18 16
+vm 0:2:24:0
+2 20 16
+vm 0:2:24:0
+3 22 16
+vm 0:2:24:0
+4 24 16
+vm 0:2:24:0
+pixel 8 0 C010141C
+pixel 8 152 FFD8D8D8
+pixel 160 100 FFC84A4A
+pixel 16 159 FFFFC040

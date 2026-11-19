@@ -491,6 +491,17 @@ static int lobo_nombre_conocido(const char *nombre, int *es_tecla,
     if (lobo_igual(nombre, "raton_y")) return LOBO_RATON_Y;
     if (lobo_igual(nombre, "raton_rueda")) return LOBO_RATON_RUEDA;
     if (lobo_igual(nombre, "raton_dentro")) return LOBO_RATON_DENTRO;
+    /* Fase 38: HUD. El valor devuelto es el opcode que debe emitir el
+     * parser; el numero de argumentos se deduce de el. */
+    if (lobo_igual(nombre, "hud_vidas")) return LOBO_HUD_VIDAS;
+    if (lobo_igual(nombre, "hud_puntos")) return LOBO_HUD_PUNTOS;
+    if (lobo_igual(nombre, "hud_dialogo")) return LOBO_HUD_DIALOGO;
+    if (lobo_igual(nombre, "hud_texto")) return LOBO_HUD_TEXTO;
+    if (lobo_igual(nombre, "hud_rect")) return LOBO_HUD_RECT;
+    if (lobo_igual(nombre, "hud_barra")) return LOBO_HUD_BARRA;
+    if (lobo_igual(nombre, "hud_imagen")) return LOBO_HUD_IMAGEN;
+    if (lobo_igual(nombre, "hud_boton")) return LOBO_HUD_BOTON;
+    if (lobo_igual(nombre, "hud_plantilla")) return LOBO_HUD_PLANTILLA;
     *es_funcion = 0;
     return -1;
 }
@@ -972,6 +983,41 @@ static int lobo_llamada_redondear(LoboParser *p) {
     return lobo_emitir(p, LOBO_REDONDEAR, 0);
 }
 
+/* Fase 38: numero de argumentos de cada built-in del HUD. */
+static int lobo_hud_argumentos(int op) {
+    switch (op) {
+    case LOBO_HUD_VIDAS:
+    case LOBO_HUD_PUNTOS:
+    case LOBO_HUD_PLANTILLA: return 1;
+    case LOBO_HUD_DIALOGO: return 2;
+    case LOBO_HUD_IMAGEN: return 3;
+    case LOBO_HUD_TEXTO:
+    case LOBO_HUD_RECT: return 5;
+    case LOBO_HUD_BOTON: return 6;
+    case LOBO_HUD_BARRA: return 7;
+    default: return 0;
+    }
+}
+
+/* Lee n expresiones separadas por comas y cierra el parentesis. Los valores
+ * quedan apilados de izquierda a derecha; la instruccion los consume al
+ * reverso, que es el orden que esperan los callbacks del HUD. */
+static int lobo_llamada_hud(LoboParser *p, int op, int n) {
+    int i;
+    for (i = 0; i < n; i++) {
+        if (i && !lobo_comer_op(p, ",")) {
+            lobo_error(p, "se esperaba , entre argumentos del HUD");
+            return 0;
+        }
+        if (!lobo_expresion(p)) return 0;
+    }
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar la llamada del HUD");
+        return 0;
+    }
+    return lobo_emitir(p, op, 0);
+}
+
 /* aleatorio(a, b): extremos incluidos, semilla por maquina. */
 static int lobo_llamada_aleatorio(LoboParser *p) {
     if (!lobo_expresion(p)) return 0;
@@ -1274,6 +1320,11 @@ static int lobo_primario(LoboParser *p) {
                 }
                 return lobo_emitir(p, LOBO_RATON_BOTON, 0);
             }
+            /* Fase 38: vidas, puntos, dialogo y elementos del HUD. */
+            if (conocido >= LOBO_HUD_VIDAS &&
+                conocido <= LOBO_HUD_PLANTILLA)
+                return lobo_llamada_hud(p, conocido,
+                                        lobo_hud_argumentos(conocido));
             if (conocido != LOBO_CHOCAR) return 0;
             if (!lobo_expresion(p)) return 0;
             if (!lobo_comer_op(p, ",")) {
@@ -3219,6 +3270,113 @@ int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
                              ? estado->caja_de(estado->ctx_colisiones,
                                                maquina->entidad, a, b)
                              : 0, &ok);
+        break;
+    /* --- fase 38: HUD, texto, UI y dialogos --- */
+    case LOBO_HUD_VIDAS: {
+        int anterior = 0;
+        a = lobo_vm_pop(maquina, &ok);
+        if (ok && estado->hud_vidas)
+            anterior = estado->hud_vidas(estado->ctx_hud, a);
+        if (ok) lobo_vm_push(maquina, anterior, &ok);
+        break;
+    }
+    case LOBO_HUD_PUNTOS: {
+        int anterior = 0;
+        a = lobo_vm_pop(maquina, &ok);
+        if (ok && estado->hud_puntos)
+            anterior = estado->hud_puntos(estado->ctx_hud, a);
+        if (ok) lobo_vm_push(maquina, anterior, &ok);
+        break;
+    }
+    case LOBO_HUD_DIALOGO: {
+        const char *texto;
+        a = lobo_vm_pop(maquina, &ok); /* texto */
+        b = lobo_vm_pop(maquina, &ok); /* linea */
+        texto = lobo_texto_resolver(programa, estado->memoria, a);
+        if (ok && estado->hud_dialogo && texto)
+            estado->hud_dialogo(estado->ctx_hud, b, texto);
+        if (ok) lobo_vm_push(maquina, 0, &ok);
+        break;
+    }
+    case LOBO_HUD_TEXTO: {
+        const char *texto;
+        int e, f, h;
+        e = lobo_vm_pop(maquina, &ok); /* escala */
+        f = lobo_vm_pop(maquina, &ok); /* color */
+        h = lobo_vm_pop(maquina, &ok); /* texto */
+        b = lobo_vm_pop(maquina, &ok); /* y */
+        a = lobo_vm_pop(maquina, &ok); /* x */
+        texto = lobo_texto_resolver(programa, estado->memoria, h);
+        if (ok && estado->hud_texto && texto)
+            estado->hud_texto(estado->ctx_hud, a, b, texto,
+                              (unsigned)f, e);
+        if (ok) lobo_vm_push(maquina, 1, &ok);
+        break;
+    }
+    case LOBO_HUD_RECT: {
+        int c, d, e;
+        e = lobo_vm_pop(maquina, &ok); /* color */
+        d = lobo_vm_pop(maquina, &ok); /* h */
+        c = lobo_vm_pop(maquina, &ok); /* w */
+        b = lobo_vm_pop(maquina, &ok); /* y */
+        a = lobo_vm_pop(maquina, &ok); /* x */
+        if (ok && estado->hud_rect)
+            estado->hud_rect(estado->ctx_hud, a, b, c, d, (unsigned)e);
+        if (ok) lobo_vm_push(maquina, 1, &ok);
+        break;
+    }
+    case LOBO_HUD_BARRA: {
+        int c, d, e, f, g;
+        g = lobo_vm_pop(maquina, &ok); /* color */
+        f = lobo_vm_pop(maquina, &ok); /* max */
+        e = lobo_vm_pop(maquina, &ok); /* valor */
+        d = lobo_vm_pop(maquina, &ok); /* h */
+        c = lobo_vm_pop(maquina, &ok); /* w */
+        b = lobo_vm_pop(maquina, &ok); /* y */
+        a = lobo_vm_pop(maquina, &ok); /* x */
+        if (ok && estado->hud_barra)
+            estado->hud_barra(estado->ctx_hud, a, b, c, d, e, f,
+                              (unsigned)g);
+        if (ok) lobo_vm_push(maquina, 1, &ok);
+        break;
+    }
+    case LOBO_HUD_IMAGEN:
+        b = lobo_vm_pop(maquina, &ok); /* y */
+        a = lobo_vm_pop(maquina, &ok); /* x */
+        {
+            int id = lobo_vm_pop(maquina, &ok);
+            if (ok && estado->hud_imagen)
+                estado->hud_imagen(estado->ctx_hud, id, a, b);
+        }
+        if (ok) lobo_vm_push(maquina, 1, &ok);
+        break;
+    case LOBO_HUD_BOTON: {
+        const char *texto;
+        int c, d, e, f;
+        a = lobo_vm_pop(maquina, &ok); /* etiqueta */
+        f = lobo_vm_pop(maquina, &ok); /* h */
+        e = lobo_vm_pop(maquina, &ok); /* w */
+        d = lobo_vm_pop(maquina, &ok); /* y */
+        c = lobo_vm_pop(maquina, &ok); /* x */
+        {
+            int id = lobo_vm_pop(maquina, &ok);
+            b = id;
+            texto = lobo_texto_resolver(programa, estado->memoria, a);
+            if (ok && estado->hud_boton && texto) {
+                int pulsado = estado->hud_boton(estado->ctx_hud, b, c, d,
+                                                e, f, texto);
+                lobo_vm_push(maquina, pulsado, &ok);
+                break;
+            }
+        }
+        if (ok) lobo_vm_push(maquina, 0, &ok);
+        break;
+    }
+    case LOBO_HUD_PLANTILLA:
+        a = lobo_vm_pop(maquina, &ok);
+        if (ok && estado->hud_plantilla)
+            estado->hud_plantilla(estado->ctx_hud, a);
+        if (ok) lobo_vm_push(maquina, 0, &ok);
         break;
     default:
         ok = 0;

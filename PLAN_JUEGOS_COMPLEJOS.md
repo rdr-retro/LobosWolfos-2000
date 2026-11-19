@@ -1351,6 +1351,32 @@ pasa las quince suites y 121 casos.
 **Criterio de salida:** una captura muestra vidas, puntuacion y un dialogo
 de tres lineas sin tapar el mundo.
 
+**Estado (19-11-2026): completada.** `motor/hud.c` y `motor/hud.h` aportan la
+fuente bitmap 5x7 con escala 2, el mapeo de vocales acentuadas y ene a sus
+letras base, la franja superior de vidas y puntos, el panel inferior de tres
+lineas, los elementos texto/rect/barra/imagen/boton y las plantillas de pausa
+y fin. Los opcodes 72..80 se anaden al final del enum, sin mover los numeros
+0..71 ni el formato LOGIC3. Los builtins se llaman `hud_vidas`, `hud_puntos`,
+`hud_dialogo`, `hud_texto`, `hud_rect`, `hud_barra`, `hud_imagen`, `hud_boton`
+y `hud_plantilla`; los nombres cortos quedan libres para los scripts antiguos
+que ya declaran variables `vidas`, `puntos` y `puntuacion`. Los cinco bloques
+`hud.*` viven en la categoria CODIGO, detras de `codigo.lobo`, para conservar
+la fila 0 en y=212 que usan las suites de bloques y compilador. Las salidas
+nuevas estan detras de `--hud`, `--vidas`, `--puntos`, `--dialogo` y
+`--volcar-hud`; sin esos flags las capturas y trazas anteriores son byte a
+byte identicas. El HUD se dibuja despues del panel del depurador, sobre una
+captura determinista, y el volcado congela `hud: activo`, vidas, puntos, tres
+lineas, elemento por elemento y plantilla. La paridad BIOS esta en
+`lobo.rs` (opcodes y texto constante minimo), `gfx.rs` (fuente 5x7 y dibujo del
+HUD) y `juego.rs` (flancos por fotograma y llamada tras dibujar el mundo); el
+kernel Rust pasa `cargo +nightly-x86_64-pc-windows-gnu check -Z
+build-std=core --target x86_64-unknown-none`. Nueva suite `pruebas/hud.ps1`
+con cinco casos (`builtins`, `cli`, `script`, `elementos`, `neutro`) que
+congelan trazas, volcados y los hashes BMP `ec60aac214d7bc0400b5fa2f44eb51d1223ce452eb3f779d8d2f3b0a66cf309b`
+y `eadb658ed4f62323a1cb690075e547525b659e239c69e923f86b08dffcfdcc09`, ademas
+de cuatro sondas de pixel que verifican que el mundo sigue visible en el
+centro. `build.bat prueba` pasa las dieciseis suites y 126 casos.
+
 ### Fase 39 - Audio
 
 **Objetivo:** sonido y musica simple.

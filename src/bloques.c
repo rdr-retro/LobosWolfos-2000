@@ -76,7 +76,19 @@ static const DefBloque DEFS[BLOQUES_DEFS] = {
     { "operadores.mayor", "mayor que", 4, FORMA_BOOLEANO, 0x00C05080u,
       { 1, 1 }, { "a", "b" }, { "", "" } },
     { "codigo.lobo", "codigo lobo", 5, FORMA_CAP, 0x00505058u,
-      { 1, 0 }, { "codigo", "" }, { "", "" } }
+      { 1, 0 }, { "codigo", "" }, { "", "" } },
+    /* Fase 38: bloques del HUD, todos en la categoria CODIGO y detras de
+     * codigo.lobo para no desplazar las filas de las suites anteriores. */
+    { "hud.vidas", "hud vidas", 5, FORMA_PILA, 0x002E6E8Eu,
+      { 1, 0 }, { "vidas", "" }, { "vidas", "" } },
+    { "hud.puntos", "hud puntos", 5, FORMA_PILA, 0x002E6E8Eu,
+      { 1, 0 }, { "puntos", "" }, { "puntos", "" } },
+    { "hud.dialogo", "hud dialogo", 5, FORMA_PILA, 0x002E6E8Eu,
+      { 1, 1 }, { "linea", "texto" }, { "texto", "" } },
+    { "hud.texto", "hud texto", 5, FORMA_PILA, 0x002E6E8Eu,
+      { 1, 1 }, { "texto", "y" }, { "texto", "" } },
+    { "hud.plantilla", "hud plantilla", 5, FORMA_PILA, 0x002E6E8Eu,
+      { 1, 0 }, { "cual", "" }, { "cual", "" } }
 };
 
 static NodoBloque nodos[BLOQUES_MAX];

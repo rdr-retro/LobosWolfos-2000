@@ -437,7 +437,7 @@ typedef unsigned char  u8;
 #define BLOQUES_MAX             256
 #define BLOQUES_HISTORIAL_MAX   16
 #define BLOQUES_CATEGORIAS      6
-#define BLOQUES_DEFS            10
+#define BLOQUES_DEFS            15
 #define BLOQUES_NOMBRE_MAX      32
 #define BLOQUES_CAMPO_MAX       24
 #define BLOQUES_SLOT_MAX        16

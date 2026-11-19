@@ -251,14 +251,18 @@ impl Juego {
              * Los scripts ven una copia del estado y al final solo se
              * traen de vuelta x e y (vel y fotograma son de entrada, no
              * de vuelta: como juego.c). */
+            let ext = entrada_ext_actual(); /* fase 37: mismo retrato que los scripts */
             let mut st = lobo::LoboEstado {
                 x: self.x,
                 y: self.y,
                 vel: SPRITE_VEL,
                 fotograma: self.fotograma,
                 entrada: e, /* LOBO_TECLA_* == MOTOR_ENT_* */
-                ext: entrada_ext_actual(), /* fase 37 */
+                ext,
             };
+            /* Fase 38: cierra el fotograma del HUD (clic y avance de
+             * dialogo) con la misma entrada que van a ver los scripts. */
+            lobo::hud_fotograma(&ext);
             /* El mapa se copia a datos sueltos para que el cierre de
              * choca() no tome prestado el Juego mientras corren. */
             let celdas_ptr = self.mapa.celdas;
@@ -378,6 +382,13 @@ impl Juego {
         /* Sin mapa no se pinta nada: pantalla negra (fase 12). */
         if self.sin_mapa {
             motor::limpiar(fb.as_mut_ptr(), VENTANA_ANCHO, VENTANA_ALTO, 0);
+            let lienzo = gfx::Canvas::from_buffer(
+                fb.as_mut_ptr(),
+                VENTANA_ANCHO,
+                VENTANA_ALTO,
+                VENTANA_ANCHO as usize,
+            );
+            gfx::dibujar_hud(&lienzo, &lobo::hud_estado());
             return;
         }
 
@@ -420,6 +431,15 @@ impl Juego {
             0,
             zoom,
         );
+        /* Fase 38: la capa del HUD va justo despues del mundo. Si ningun
+         * script ha pedido HUD, dibujar_hud no toca el framebuffer. */
+        let lienzo = gfx::Canvas::from_buffer(
+            fb.as_mut_ptr(),
+            VENTANA_ANCHO,
+            VENTANA_ALTO,
+            VENTANA_ANCHO as usize,
+        );
+        gfx::dibujar_hud(&lienzo, &lobo::hud_estado());
     }
 }
 
@@ -485,6 +505,7 @@ fn bits_de_serie(tecla: u8) -> u32 {
 /// principal hasta que se pida cerrar (Escape).
 pub fn arrancar(mi: &gfx::ModeInfo) -> ! {
     sprite_crear();
+    lobo::hud_limpiar(); // fase 38: estado del HUD limpio al arrancar
     let Some(mapa) = activo::cargar_todo() else {
         println!("egine: sin proyecto que cargar; el kernel se queda en modo texto.");
         crate::bucle_texto()

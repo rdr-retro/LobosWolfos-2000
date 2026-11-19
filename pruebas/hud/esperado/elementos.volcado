@@ -1,0 +1,15 @@
+hud: activo 1
+hud: vidas 2
+hud: puntos 99
+hud: dialogo 3
+hud: linea 0 Pausa
+hud: linea 1 Opciones
+hud: linea 2 Salir
+hud: actual 0
+hud: elementos 5
+hud: elem 0 0 8 30 0 0 0 HUD
+hud: elem 1 1 210 30 40 14 0 
+hud: elem 2 2 210 50 40 8 0 
+hud: elem 3 3 260 30 0 0 0 
+hud: elem 4 4 250 40 40 14 0 OK
+hud: plantilla 1

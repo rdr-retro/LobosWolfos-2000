@@ -21,6 +21,11 @@
  *                     fotograma con el estado de cada script
  *   --vm-test ruta    compila un .lobo en modo VM y volca su estado paso
  *                     a paso (para depurar la maquina sin proyecto)
+ *   --hud             muestra vidas, puntuacion y dialogo sobre el mundo
+ *   --vidas N         vidas iniciales del HUD (activa el HUD)
+ *   --puntos N        puntuacion inicial del HUD (activa el HUD)
+ *   --dialogo a|b|c   tres lineas del dialogo (activa el HUD)
+ *   --volcar-hud ruta volca el estado final del HUD
  */
 #include <windows.h>
 #include <stdio.h>
@@ -36,6 +41,7 @@
 #include "render.h"
 #include "depurador.h"
 #include "panel_debug.h"
+#include "hud.h"
 
 #define VENTANA_ANCHO 640
 #define VENTANA_ALTO  480
@@ -67,6 +73,12 @@ static int g_entrada_extactiva;
 static const char *g_ruta_volcar_entrada;
 static HWND g_ventana_ext;
 static int g_rueda_acum;
+
+/* Fase 38: HUD. Igual que la entrada extendida, no se dibuja ni se volca
+ * nada hasta pedir --hud o --volcar-hud, para que las capturas antiguas
+ * sigan siendo byte a byte identicas. */
+static int g_hud_activo;
+static const char *g_ruta_volcar_hud;
 
 /* Ajustes del proyecto aplicados al motor (fase 14). */
 static int g_ancho = VENTANA_ANCHO;
@@ -134,6 +146,23 @@ static void copiar_texto(char *dst, int tam, const char *src) {
     if (tam <= 0) return;
     for (i = 0; i < tam - 1 && src && src[i]; i++) dst[i] = src[i];
     dst[i] = '\0';
+}
+
+/* Reparte `--dialogo linea1|linea2|linea3` en las tres lineas del HUD. */
+static void fijar_dialogo_cli(const char *valor) {
+    char linea[HUD_TEXTO_MAX];
+    int n = 0, i = 0;
+    if (!valor) return;
+    for (;;) {
+        int j = 0;
+        while (valor[i] && valor[i] != '|' && j < HUD_TEXTO_MAX - 1)
+            linea[j++] = valor[i++];
+        linea[j] = '\0';
+        if (n < HUD_DIALOGO_LINEAS) motor_hud_dialogo(n, linea);
+        n++;
+        if (!valor[i]) break;
+        i++; /* barra vertical */
+    }
 }
 
 /* Carpeta de una ruta (sin la barra final). */
@@ -527,6 +556,77 @@ static void remapear_programa_cb(void *ctx, LoboPrograma *p) {
     lobo_remap_programa(p);
 }
 
+/* --- fase 38: callbacks del HUD ------------------------------------ */
+
+static int cb_hud_vidas(void *ctx, int valor) {
+    int anterior = motor_hud_leer_vidas();
+    (void)ctx;
+    motor_hud_vidas(valor);
+    return anterior;
+}
+
+static int cb_hud_puntos(void *ctx, int valor) {
+    int anterior = motor_hud_leer_puntos();
+    (void)ctx;
+    motor_hud_puntos(valor);
+    return anterior;
+}
+
+static int cb_hud_dialogo(void *ctx, int linea, const char *texto) {
+    (void)ctx;
+    motor_hud_dialogo(linea, texto);
+    return 0;
+}
+
+static int cb_hud_texto(void *ctx, int x, int y, const char *texto,
+                        unsigned color, int escala) {
+    (void)ctx;
+    return motor_hud_texto(x, y, texto, (u32)color, escala);
+}
+
+static int cb_hud_rect(void *ctx, int x, int y, int w, int h,
+                       unsigned color) {
+    (void)ctx;
+    return motor_hud_rect(x, y, w, h, (u32)color);
+}
+
+static int cb_hud_barra(void *ctx, int x, int y, int w, int h, int valor,
+                        int max, unsigned color) {
+    (void)ctx;
+    return motor_hud_barra(x, y, w, h, valor, max, (u32)color);
+}
+
+/* La llamada del script solo registra la imagen; el dibujo se resuelve
+ * desde motor_hud_dibujar, cuando el framebuffer ya esta listo. */
+static int cb_hud_imagen(void *ctx, int id, int x, int y) {
+    (void)ctx;
+    return motor_hud_imagen(id, x, y);
+}
+
+static int cb_hud_imagen_dibujar(void *ctx, int id, int x, int y) {
+    Entidad *e = entidad_buscar(id);
+    RenderSeleccion sel;
+    RenderInfo info;
+    (void)ctx;
+    if (!e || !e->visible || !juego.fb) return 0;
+    memset(&info, 0, sizeof(info));
+    if (!render_seleccionar(&g_l3, e, juego.fotograma, &sel)) return 0;
+    return render_dibujar(juego.fb, juego.fb_ancho, juego.fb_alto,
+                          &sel, x, y, 1, &info);
+}
+
+static int cb_hud_boton(void *ctx, int id, int x, int y, int w, int h,
+                        const char *etiqueta) {
+    (void)ctx;
+    return motor_hud_boton(id, x, y, w, h, etiqueta);
+}
+
+static int cb_hud_plantilla(void *ctx, int cual) {
+    (void)ctx;
+    motor_hud_plantilla(cual);
+    return 0;
+}
+
 /* Estado compartido por los scripts de un fotograma: posicion del lobo,
  * teclas, memoria de la VM y callbacks de entidades. */
 static void estado_preparar(LoboEstado *st) {
@@ -561,6 +661,18 @@ static void estado_preparar(LoboEstado *st) {
     st->rebote = g_fisica.rebote;
     st->friccion = g_fisica.friccion;
     st->en_suelo = g_fisica.en_suelo;
+    if (g_hud_activo) {
+        st->hud_vidas = cb_hud_vidas;
+        st->hud_puntos = cb_hud_puntos;
+        st->hud_dialogo = cb_hud_dialogo;
+        st->hud_texto = cb_hud_texto;
+        st->hud_rect = cb_hud_rect;
+        st->hud_barra = cb_hud_barra;
+        st->hud_imagen = cb_hud_imagen;
+        st->hud_boton = cb_hud_boton;
+        st->hud_plantilla = cb_hud_plantilla;
+        st->ctx_hud = NULL;
+    }
 }
 
 /* Copia la fisica escrita por los scripts al estado global y da un paso
@@ -934,6 +1046,11 @@ static void renderizar(void) {
         panel_debug_dibujar(juego.fb, juego.fb_ancho, juego.fb_alto,
                             &g_memoria, &g_l3);
 
+    /* HUD sobre todo lo demas: la franja superior y el dialogo inferior
+     * dejan el mundo visible en el centro de la pantalla (fase 38). */
+    if (g_hud_activo)
+        motor_hud_dibujar(juego.fb, juego.fb_ancho, juego.fb_alto);
+
     if (g_render_traza && g_traza)
         fprintf(g_traza,
                 "render cam %d %d zoom %d blits %d recortados %d "
@@ -1092,6 +1209,7 @@ static int correr_ventana(HINSTANCE instancia) {
         }
         juego.entrada = leer_teclado();
         leer_entrada_ext();
+        motor_hud_fotograma(g_entrada_extactiva ? &g_entrada_ext : NULL);
         actualizar();
         if (g_entrada_extactiva) motor_entrada_siguiente(&g_entrada_ext);
         if (!juego.corriendo) break;
@@ -1237,6 +1355,7 @@ static int correr_captura(const char *ruta_bmp, int fotogramas) {
         juego.entrada = entrada;
         if (g_grabar_replay) depurador_grabar_entrada(i, entrada);
         /* En captura la CLI fija la entrada: no se sondea Win32. */
+        motor_hud_fotograma(g_entrada_extactiva ? &g_entrada_ext : NULL);
         actualizar();
         if (g_entrada_extactiva) motor_entrada_siguiente(&g_entrada_ext);
         traza_fotograma();
@@ -1325,6 +1444,7 @@ static int correr_volcar(const char *ruta, int fotogramas) {
         juego.entrada = entrada;
         if (g_grabar_replay) depurador_grabar_entrada(i, entrada);
         /* En --volcar tampoco hay ventana: respeta la entrada de la CLI. */
+        motor_hud_fotograma(g_entrada_extactiva ? &g_entrada_ext : NULL);
         actualizar();
         if (g_entrada_extactiva) motor_entrada_siguiente(&g_entrada_ext);
         traza_fotograma();
@@ -1471,7 +1591,11 @@ static int opcion(const char *nombre) {
            strcmp(nombre, "--semilla") == 0 ||
            strcmp(nombre, "--entrada-teclas") == 0 ||
            strcmp(nombre, "--entrada-raton") == 0 ||
-           strcmp(nombre, "--volcar-entrada") == 0;
+           strcmp(nombre, "--volcar-entrada") == 0 ||
+           strcmp(nombre, "--vidas") == 0 ||
+           strcmp(nombre, "--puntos") == 0 ||
+           strcmp(nombre, "--dialogo") == 0 ||
+           strcmp(nombre, "--volcar-hud") == 0;
 }
 
 int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show) {
@@ -1487,6 +1611,7 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
 
     depurador_iniciar();
     motor_entrada_iniciar(&g_entrada_ext);
+    motor_hud_limpiar();
     for (i = 1; i < __argc; i++) {
         if (strcmp(__argv[i], "--entidades") == 0) {
             g_entidades = 1;
@@ -1511,6 +1636,11 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         if (strcmp(__argv[i], "--panel-debug") == 0) {
             panel_debug_activar(1);
             depurador_activar(1);
+            continue;
+        }
+        if (strcmp(__argv[i], "--hud") == 0) {
+            g_hud_activo = 1;
+            motor_hud_activar(1);
             continue;
         }
         if (strcmp(__argv[i], "--comparar") == 0 && i + 2 < __argc) {
@@ -1586,6 +1716,20 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
                 }
             } else if (strcmp(__argv[i - 1], "--volcar-entrada") == 0) {
                 g_ruta_volcar_entrada = v;
+            } else if (strcmp(__argv[i - 1], "--vidas") == 0) {
+                g_hud_activo = 1;
+                motor_hud_activar(1);
+                motor_hud_vidas(atoi(v));
+            } else if (strcmp(__argv[i - 1], "--puntos") == 0) {
+                g_hud_activo = 1;
+                motor_hud_activar(1);
+                motor_hud_puntos(atoi(v));
+            } else if (strcmp(__argv[i - 1], "--dialogo") == 0) {
+                g_hud_activo = 1;
+                motor_hud_activar(1);
+                fijar_dialogo_cli(v);
+            } else if (strcmp(__argv[i - 1], "--volcar-hud") == 0) {
+                g_ruta_volcar_hud = v;
             } else if (strcmp(__argv[i - 1], "--observar") == 0) {
                 depurador_observar(v);
             } else if (strcmp(__argv[i - 1], "--break") == 0) {
@@ -1665,6 +1809,7 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         return 1;
     }
     render_iniciar(ruta_logic3 ? ruta_logic3 : "");
+    motor_hud_imagen_callback(cb_hud_imagen_dibujar, NULL);
 
     memset(&juego, 0, sizeof(juego));
     juego.corriendo = 1;
@@ -1774,6 +1919,7 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
      * captura como en --volcar. --vm-test ya lo hace en su propio banco. */
     if (g_ruta_volcar_entrada)
         motor_entrada_volcar(&g_entrada_ext, g_ruta_volcar_entrada);
+    if (g_ruta_volcar_hud) motor_hud_volcar(g_ruta_volcar_hud);
     if (g_grabar_replay) depurador_guardar_replay(g_grabar_replay);
     if (g_ruta_debug) depurador_volcar(g_ruta_debug, &g_memoria, &g_l3, 1);
     if (g_ordenes) {

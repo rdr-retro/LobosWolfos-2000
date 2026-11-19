@@ -6,6 +6,7 @@
 //! modo que el kernel puede escribir en el directamente.
 
 use crate::bios::{self, Regs};
+use crate::lobo;
 use crate::println;
 
 /// Buffer de 512 bytes para el bloque de informacion del controlador VBE.
@@ -649,4 +650,272 @@ pub fn draw_text_shadow(
 /// Longitud en pixels que ocupara `s` al dibujarse con `scale`.
 pub fn text_width(s: &str, scale: i32) -> i32 {
     s.len() as i32 * FONT_W * scale.max(1)
+}
+
+/* ------------------------------------------------------------------ */
+/* Fase 38: fuente 5x7 propia y HUD                                     */
+/* ------------------------------------------------------------------ */
+
+/* Fuente bitmap minima, la misma metrica que hud.c de Windows: 7 filas
+ * de 5 pixeles, bit 4 a la izquierda y 6 pixeles de avance por letra.
+ * No usa la BIOS: la fuente va en datos y funciona tras cambiar de modo. */
+#[derive(Clone, Copy)]
+struct GlifoHud([u8; 7]);
+
+static G_NUM: [GlifoHud; 10] = [
+    GlifoHud([0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E]),
+    GlifoHud([0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E]),
+    GlifoHud([0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F]),
+    GlifoHud([0x1F, 0x02, 0x04, 0x02, 0x01, 0x11, 0x0E]),
+    GlifoHud([0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02]),
+    GlifoHud([0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E]),
+    GlifoHud([0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E]),
+    GlifoHud([0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08]),
+    GlifoHud([0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E]),
+    GlifoHud([0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C]),
+];
+
+static G_LETRAS: [GlifoHud; 26] = [
+    GlifoHud([0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11]), // A
+    GlifoHud([0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E]), // B
+    GlifoHud([0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E]), // C
+    GlifoHud([0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E]), // D
+    GlifoHud([0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F]), // E
+    GlifoHud([0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10]), // F
+    GlifoHud([0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0E]), // G
+    GlifoHud([0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11]), // H
+    GlifoHud([0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E]), // I
+    GlifoHud([0x07, 0x02, 0x02, 0x02, 0x02, 0x12, 0x0C]), // J
+    GlifoHud([0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11]), // K
+    GlifoHud([0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F]), // L
+    GlifoHud([0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11]), // M
+    GlifoHud([0x11, 0x19, 0x19, 0x15, 0x13, 0x13, 0x11]), // N
+    GlifoHud([0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E]), // O
+    GlifoHud([0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10]), // P
+    GlifoHud([0x0E, 0x11, 0x11, 0x11, 0x15, 0x0E, 0x01]), // Q
+    GlifoHud([0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11]), // R
+    GlifoHud([0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E]), // S
+    GlifoHud([0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04]), // T
+    GlifoHud([0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E]), // U
+    GlifoHud([0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04]), // V
+    GlifoHud([0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A]), // W
+    GlifoHud([0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11]), // X
+    GlifoHud([0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04]), // Y
+    GlifoHud([0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F]), // Z
+];
+
+static G_ESPACIO: GlifoHud = GlifoHud([0, 0, 0, 0, 0, 0, 0]);
+static G_DOS_PUNTOS: GlifoHud = GlifoHud([0x00, 0x00, 0x04, 0x04, 0x00, 0x04, 0x04]);
+static G_IGUAL: GlifoHud = GlifoHud([0x00, 0x00, 0x1F, 0x00, 0x1F, 0x00, 0x00]);
+static G_MENOS: GlifoHud = GlifoHud([0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00]);
+static G_MAYOR: GlifoHud = GlifoHud([0x02, 0x04, 0x08, 0x10, 0x08, 0x04, 0x02]);
+static G_PUNTO: GlifoHud = GlifoHud([0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x04]);
+static G_DIAGONAL: GlifoHud = GlifoHud([0x01, 0x01, 0x02, 0x04, 0x08, 0x10, 0x10]);
+static G_NUMERAL: GlifoHud = GlifoHud([0x0A, 0x0A, 0x1F, 0x0A, 0x0A, 0x00, 0x00]);
+static G_INTERROGACION: GlifoHud = GlifoHud([0x0E, 0x11, 0x01, 0x02, 0x04, 0x00, 0x04]);
+static G_CORCHETE: GlifoHud = GlifoHud([0x0E, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0E]);
+
+const HUD_FONDO: u32 = 0xC010141C;
+const HUD_BORDE: u32 = 0xFFD8D8D8;
+const HUD_TEXTO: u32 = 0xFFF0F0F0;
+const HUD_RESAR: u32 = 0xFFFFC040;
+const HUD_BARRA: u32 = 0xFF40C060;
+const HUD_BARRA_VACIA: u32 = 0xFF603030;
+const HUD_BOTON: u32 = 0xFF305080;
+
+/// Las vocales acentuadas y la ene caen en su letra base: la fuente
+/// solo tiene 5x7 y los textos del editor pueden llevar acentos.
+fn glifo_hud(ch: u8) -> &'static GlifoHud {
+    let c = match ch {
+        0xC1 | 0xE1 => b'A',
+        0xC9 | 0xE9 => b'E',
+        0xCD | 0xED => b'I',
+        0xD3 | 0xF3 | 0xD4 | 0xF4 => b'O',
+        0xDA | 0xFA => b'U',
+        0xD1 | 0xF1 => b'N',
+        _ => ch,
+    };
+    match c {
+        b'0'..=b'9' => &G_NUM[(c - b'0') as usize],
+        b'a'..=b'z' => &G_LETRAS[(c - b'a') as usize],
+        b'A'..=b'Z' => &G_LETRAS[(c - b'A') as usize],
+        b':' => &G_DOS_PUNTOS,
+        b'=' => &G_IGUAL,
+        b'-' => &G_MENOS,
+        b'>' => &G_MAYOR,
+        b'.' => &G_PUNTO,
+        b'/' => &G_DIAGONAL,
+        b'#' => &G_NUMERAL,
+        b'?' | 0xA1 | 0xBF => &G_INTERROGACION,
+        b'[' | b']' => &G_CORCHETE,
+        _ => &G_ESPACIO,
+    }
+}
+
+/// Recorta un bufer fijo hasta su primer 0, como hace strlen en el C.
+fn texto_util(texto: &[u8]) -> &[u8] {
+    let n = texto.iter().position(|&b| b == 0).unwrap_or(texto.len());
+    &texto[..n]
+}
+
+/// Dibuja bytes de texto con la fuente 5x7 (`escala` 1 o 2).
+fn texto_hud(c: &Canvas, x: i32, y: i32, texto: &[u8], color: u32, escala: i32) {
+    let escala = if escala < 1 { 1 } else if escala > 2 { 2 } else { escala };
+    let avance = 6 * escala;
+    for (n, &ch) in texto_util(texto).iter().enumerate() {
+        let g = glifo_hud(ch);
+        for fila in 0..7 {
+            for col in 0..5 {
+                if g.0[fila] & (0x10 >> col) != 0 {
+                    c.fill_rect(
+                        x + n as i32 * avance + col as i32 * escala,
+                        y + fila as i32 * escala,
+                        escala,
+                        escala,
+                        color,
+                    );
+                }
+            }
+        }
+    }
+}
+
+fn ancho_texto_hud(texto: &[u8], escala: i32) -> i32 {
+    texto_util(texto).len() as i32 * 6 * escala.max(1)
+}
+
+/// Entero a decimal sin formatos (no hay `core::fmt` en este kernel).
+fn numero_texto(v: i32, dst: &mut [u8]) -> usize {
+    let neg = v < 0;
+    let mut n = if neg { -(v as i64) as u64 } else { v as u64 };
+    let mut tmp = [0u8; 20];
+    let mut k = tmp.len();
+    loop {
+        k -= 1;
+        tmp[k] = b'0' + (n % 10) as u8;
+        n /= 10;
+        if n == 0 {
+            break;
+        }
+    }
+    let mut j = 0;
+    if neg {
+        dst[j] = b'-';
+        j += 1;
+    }
+    let len = tmp.len() - k;
+    dst[j..j + len].copy_from_slice(&tmp[k..]);
+    j + len
+}
+
+fn borde_hud(c: &Canvas, x: i32, y: i32, w: i32, h: i32, color: u32) {
+    if w <= 0 || h <= 0 {
+        return;
+    }
+    c.hline(x, x + w - 1, y, color);
+    c.hline(x, x + w - 1, y + h - 1, color);
+    c.vline(x, y, y + h - 1, color);
+    c.vline(x + w - 1, y, y + h - 1, color);
+}
+
+fn cabecera_hud(c: &Canvas, hud: &lobo::HudEstado) {
+    c.fill_rect(0, 0, c.width, 22, HUD_FONDO);
+    c.hline(0, c.width - 1, 21, HUD_BORDE);
+
+    let mut num = [0u8; 16];
+    let n = numero_texto(hud.vidas, &mut num);
+    texto_hud(c, 8, 7, b"VIDAS:", HUD_RESAR, 1);
+    texto_hud(c, 50, 7, &num[..n], HUD_RESAR, 1);
+
+    let mut puntos = [0u8; 24];
+    puntos[..8].copy_from_slice(b"PUNTOS: ");
+    let n = numero_texto(hud.puntos, &mut num);
+    puntos[8..8 + n].copy_from_slice(&num[..n]);
+    let x = (c.width - 8 - ancho_texto_hud(&puntos[..8 + n], 1)).max(8);
+    texto_hud(c, x, 7, &puntos[..8 + n], HUD_TEXTO, 1);
+}
+
+fn barra_hud(c: &Canvas, e: &lobo::HudElemento) {
+    c.fill_rect(e.x, e.y, e.w, e.h, HUD_BARRA_VACIA);
+    if e.max > 0 && e.valor > 0 {
+        let lleno = (e.w as i64 * e.valor as i64 / e.max as i64)
+            .max(0)
+            .min(e.w as i64) as i32;
+        c.fill_rect(e.x, e.y, lleno, e.h, e.color);
+    }
+    borde_hud(c, e.x, e.y, e.w, e.h, HUD_BORDE);
+}
+
+fn boton_hud(c: &Canvas, e: &lobo::HudElemento) {
+    c.fill_rect(e.x, e.y, e.w, e.h, HUD_BOTON);
+    borde_hud(c, e.x, e.y, e.w, e.h, HUD_BORDE);
+    let tx = e.x + (e.w - ancho_texto_hud(&e.texto, 1)) / 2;
+    let ty = e.y + (e.h - 7) / 2;
+    texto_hud(c, tx, ty, &e.texto, HUD_TEXTO, 1);
+}
+
+fn dialogo_hud(c: &Canvas, hud: &lobo::HudEstado) {
+    if hud.dialogo_n == 0 {
+        return;
+    }
+    let y = c.height - 48;
+    if y < 24 {
+        return;
+    }
+    c.fill_rect(8, y, c.width - 16, 44, HUD_FONDO);
+    borde_hud(c, 8, y, c.width - 16, 44, HUD_BORDE);
+    for i in 0..lobo::HUD_DIALOGO_LINEAS {
+        let color = if i == hud.dialogo_actual { HUD_RESAR } else { HUD_TEXTO };
+        texto_hud(c, 16, y + 7 + i as i32 * 12, &hud.dialogo[i], color, 1);
+    }
+}
+
+fn plantilla_hud(c: &Canvas, hud: &lobo::HudEstado) {
+    if hud.plantilla == 0 {
+        return;
+    }
+    let mut w = c.width / 2;
+    let h = 76;
+    if w < 180 {
+        w = c.width - 16;
+    }
+    let x = (c.width - w) / 2;
+    let y = (c.height - h) / 2;
+    c.fill_rect(x, y, w, h, HUD_FONDO);
+    borde_hud(c, x, y, w, h, HUD_BORDE);
+    if hud.plantilla == 1 {
+        texto_hud(c, x + 12, y + 14, b"PAUSA", HUD_RESAR, 2);
+    } else {
+        texto_hud(c, x + 12, y + 14, b"FIN DEL JUEGO", HUD_RESAR, 2);
+    }
+    texto_hud(c, x + 12, y + 48, b"PULSA ENTER PARA SEGUIR", HUD_TEXTO, 1);
+}
+
+/// Dibuja el HUD sobre el lienzo, justo despues del mundo. No toca la BIOS.
+/// Las imagenes no tienen callback en el kernel: se marca su hueco con un
+/// recuadro para que la capa sea visible sin dependencias externas.
+pub fn dibujar_hud(c: &Canvas, hud: &lobo::HudEstado) {
+    if !hud.activo {
+        return;
+    }
+    cabecera_hud(c, hud);
+    for e in hud.elementos.iter().take(hud.nelementos) {
+        match e.tipo {
+            lobo::HUD_ELEM_TEXTO => {
+                texto_hud(c, e.x, e.y, &e.texto, e.color, e.extra);
+            }
+            lobo::HUD_ELEM_RECT => {
+                c.fill_rect(e.x, e.y, e.w, e.h, e.color);
+            }
+            lobo::HUD_ELEM_BARRA => barra_hud(c, e),
+            lobo::HUD_ELEM_IMAGEN => {
+                c.fill_rect(e.x, e.y, 16, 16, HUD_BOTON);
+                borde_hud(c, e.x, e.y, 16, 16, HUD_BORDE);
+            }
+            lobo::HUD_ELEM_BOTON => boton_hud(c, e),
+            _ => {}
+        }
+    }
+    dialogo_hud(c, hud);
+    plantilla_hud(c, hud);
 }

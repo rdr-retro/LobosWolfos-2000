@@ -251,7 +251,17 @@ enum {
     LOBO_RATON_X,       /* posicion x del cursor */
     LOBO_RATON_Y,       /* posicion y del cursor */
     LOBO_RATON_RUEDA,   /* pasos de rueda acumulados */
-    LOBO_RATON_DENTRO   /* 1 si el cursor esta sobre la ventana */
+    LOBO_RATON_DENTRO,  /* 1 si el cursor esta sobre la ventana */
+    /* --- fase 38: HUD, texto, UI y dialogos --- */
+    LOBO_HUD_VIDAS,     /* pila: valor; apila el valor anterior */
+    LOBO_HUD_PUNTOS,    /* pila: valor; apila el valor anterior */
+    LOBO_HUD_DIALOGO,   /* pila: texto, linea; apila 0 */
+    LOBO_HUD_TEXTO,     /* pila: escala, color, texto, y, x; apila 1 */
+    LOBO_HUD_RECT,      /* pila: color, h, w, y, x; apila 1 */
+    LOBO_HUD_BARRA,     /* pila: color, max, valor, h, w, y, x; apila 1 */
+    LOBO_HUD_IMAGEN,    /* pila: y, x, id; apila 1 */
+    LOBO_HUD_BOTON,     /* pila: etiqueta, h, w, y, x, id; apila 1 si clic */
+    LOBO_HUD_PLANTILLA  /* pila: cual (1 pausa, 2 fin); apila 0 */
 };
 
 /* Una instruccion del programa compilado. */
@@ -346,6 +356,23 @@ typedef struct LoboEstado {
     int vel_x, vel_y, gravedad, rebote, friccion, en_suelo;
     /* --- fase 37: entrada extendida, NULL en motores sin raton --- */
     struct MotorEntrada *entrada_ext;
+    /* --- fase 38: HUD. Sin callbacks (editor y --vm-test) las llamadas no
+     * hacen nada pero apilan un valor, asi la pila sigue cuadrando. Los
+     * colores son u32 del framebuffer; se usa `unsigned` para no exigir
+     * motor.h a quien solo incluye este archivo. */
+    int (*hud_vidas)(void *ctx, int valor);
+    int (*hud_puntos)(void *ctx, int valor);
+    int (*hud_dialogo)(void *ctx, int linea, const char *texto);
+    int (*hud_texto)(void *ctx, int x, int y, const char *texto,
+                     unsigned color, int escala);
+    int (*hud_rect)(void *ctx, int x, int y, int w, int h, unsigned color);
+    int (*hud_barra)(void *ctx, int x, int y, int w, int h, int valor,
+                     int max, unsigned color);
+    int (*hud_imagen)(void *ctx, int id, int x, int y);
+    int (*hud_boton)(void *ctx, int id, int x, int y, int w, int h,
+                     const char *etiqueta);
+    int (*hud_plantilla)(void *ctx, int cual);
+    void *ctx_hud;
 } LoboEstado;
 
 /* Un frame de llamada: donde volver y el estado que hay que restaurar. */

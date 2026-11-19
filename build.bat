@@ -62,14 +62,14 @@ echo Compilando recursos...
 if errorlevel 1 goto error_pop
 
 echo Compilando C...
-for %%F in (src\nucleo.c src\fuente.c src\documento.c src\imagen.c src\pintura.c src\texto.c src\ui.c src\tiles.c src\mapa.c src\tiles_modo.c src\pestanas.c src\app.c src\ajustes.c src\compilar.c src\juego_ventana.c src\ejemplo.c src\logic3.c src\estudio.c src\estudio_ui.c src\datos.c src\sonido.c src\productividad.c src\bloques.c src\bloques_ui.c src\compilador_bloques.c motor\lobo.c motor\entrada.c motor\activo.c motor\colisiones.c motor\nucleo32.s) do (
+for %%F in (src\nucleo.c src\fuente.c src\documento.c src\imagen.c src\pintura.c src\texto.c src\ui.c src\tiles.c src\mapa.c src\tiles_modo.c src\pestanas.c src\app.c src\ajustes.c src\compilar.c src\juego_ventana.c src\ejemplo.c src\logic3.c src\estudio.c src\estudio_ui.c src\datos.c src\sonido.c src\productividad.c src\bloques.c src\bloques_ui.c src\compilador_bloques.c motor\lobo.c motor\entrada.c motor\activo.c motor\colisiones.c motor\hud.c motor\nucleo32.s) do (
     echo   %%~nxF
     "%GCC%" %CFLAGS% -c "%%~F" -o "obj\%%~nF.o"
     if errorlevel 1 goto error_pop
 )
 
 echo Enlazando...
-"%GCC%" -m32 -o "LobosWolfos2000.exe" obj\nucleo.o obj\fuente.o obj\documento.o obj\imagen.o obj\pintura.o obj\texto.o obj\ui.o obj\tiles.o obj\mapa.o obj\tiles_modo.o obj\pestanas.o obj\app.o obj\ajustes.o obj\compilar.o obj\juego_ventana.o obj\ejemplo.o obj\logic3.o obj\estudio.o obj\estudio_ui.o obj\datos.o obj\sonido.o obj\productividad.o obj\bloques.o obj\bloques_ui.o obj\compilador_bloques.o obj\lobo.o obj\entrada.o obj\activo.o obj\colisiones.o obj\nucleo32.o obj\recurso.o %LIBS% -mwindows -static-libgcc
+"%GCC%" -m32 -o "LobosWolfos2000.exe" obj\nucleo.o obj\fuente.o obj\documento.o obj\imagen.o obj\pintura.o obj\texto.o obj\ui.o obj\tiles.o obj\mapa.o obj\tiles_modo.o obj\pestanas.o obj\app.o obj\ajustes.o obj\compilar.o obj\juego_ventana.o obj\ejemplo.o obj\logic3.o obj\estudio.o obj\estudio_ui.o obj\datos.o obj\sonido.o obj\productividad.o obj\bloques.o obj\bloques_ui.o obj\compilador_bloques.o obj\lobo.o obj\entrada.o obj\activo.o obj\colisiones.o obj\hud.o obj\nucleo32.o obj\recurso.o %LIBS% -mwindows -static-libgcc
 if errorlevel 1 goto error_pop
 popd
 goto exito
@@ -85,7 +85,7 @@ echo Listo: "%SALIDA%"
 exit /b 0
 
 rem ------------------------------------------------------------------
-rem  Modo pruebas: build.bat prueba [conformidad^|logic3^|vm^|entidades^|eventos^|colisiones^|render^|estudio^|bloques^|compilador^|depurador^|datos^|regresion^|actualizar]
+rem  Modo pruebas: build.bat prueba [conformidad^|logic3^|vm^|entidades^|eventos^|colisiones^|render^|estudio^|bloques^|compilador^|depurador^|datos^|productividad^|entrada^|hud^|regresion^|actualizar]
 rem  Compila el editor con la configuracion normal y pasa las suites.
 rem ------------------------------------------------------------------
 :pruebas
@@ -109,6 +109,7 @@ if /i "%~2"=="depurador" goto pruebas_depurador
 if /i "%~2"=="datos" goto pruebas_datos
 if /i "%~2"=="productividad" goto pruebas_productividad
 if /i "%~2"=="entrada" goto pruebas_entrada
+if /i "%~2"=="hud" goto pruebas_hud
 
 echo.
 echo === Suite de conformidad del lenguaje ===
@@ -165,6 +166,10 @@ if errorlevel 1 exit /b 1
 echo.
 echo === Entrada extendida (fase 37) ===
 %PS% "%AQUI%pruebas\entrada.ps1"
+if errorlevel 1 exit /b 1
+echo.
+echo === HUD, texto, UI y dialogos (fase 38) ===
+%PS% "%AQUI%pruebas\hud.ps1"
 if errorlevel 1 exit /b 1
 echo.
 echo === Regresion visual del editor ===
@@ -227,6 +232,10 @@ exit /b %ERRORLEVEL%
 %PS% "%AQUI%pruebas\entrada.ps1"
 exit /b %ERRORLEVEL%
 
+:pruebas_hud
+%PS% "%AQUI%pruebas\hud.ps1"
+exit /b %ERRORLEVEL%
+
 :pruebas_regresion
 %PS% "%AQUI%pruebas\regresion.ps1"
 exit /b %ERRORLEVEL%
@@ -259,6 +268,8 @@ if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\productividad.ps1" -Actualizar
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\entrada.ps1" -Actualizar
+if errorlevel 1 exit /b 1
+%PS% "%AQUI%pruebas\hud.ps1" -Actualizar
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\regresion.ps1" -Actualizar
 exit /b %ERRORLEVEL%

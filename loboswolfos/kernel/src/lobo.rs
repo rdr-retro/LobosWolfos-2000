@@ -20,6 +20,8 @@
 //! bloques abiertos para si/sino/fin y mientras/fin. Los errores llevan
 //! la forma "linea N: motivo" en el bufer que pide el llamante.
 
+use crate::sync::SyncCell;
+
 /* ------------------------------------------------------------------ */
 /* Limites y constantes (espejo de lobo.h)                             */
 /* ------------------------------------------------------------------ */
@@ -95,6 +97,26 @@ pub const LOBO_RATON_Y: u8 = 69;
 pub const LOBO_RATON_RUEDA: u8 = 70;
 pub const LOBO_RATON_DENTRO: u8 = 71;
 
+/* Fase 38: HUD, texto y dialogos. Se anaden al final, detras de la
+ * entrada extendida, para no mover ningun opcode anterior. LOBO_TEXTO
+ * es el numero que ya usa motor/lobo.h en Windows (fase 28). */
+pub const LOBO_TEXTO: u8 = 56;
+pub const LOBO_HUD_VIDAS: u8 = 72;
+pub const LOBO_HUD_PUNTOS: u8 = 73;
+pub const LOBO_HUD_DIALOGO: u8 = 74;
+pub const LOBO_HUD_TEXTO: u8 = 75;
+pub const LOBO_HUD_RECT: u8 = 76;
+pub const LOBO_HUD_BARRA: u8 = 77;
+pub const LOBO_HUD_IMAGEN: u8 = 78;
+pub const LOBO_HUD_BOTON: u8 = 79;
+pub const LOBO_HUD_PLANTILLA: u8 = 80;
+
+/* Textos constantes de un programa (espejo de motor/lobo.h). Un valor
+ * de la pila con esta marca alta es un handle de texto. */
+pub const LOBO_TEXTOS_MAX: usize = 64;
+pub const LOBO_TEXTO_MAX: usize = 64;
+pub const LOBO_TEXTO_MARCA: u32 = 0x4000_0000;
+
 /* ------------------------------------------------------------------ */
 /* Programas, estado y maquinas                                        */
 /* ------------------------------------------------------------------ */
@@ -110,17 +132,38 @@ impl LoboInst {
     pub const NUEVA: LoboInst = LoboInst { op: 0, valor: 0 };
 }
 
-/// Programa compilado: lista plana de instrucciones.
+/// Programa compilado: lista plana de instrucciones y textos constantes.
 pub struct LoboPrograma {
     pub insts: [LoboInst; LOBO_INSTS_MAX],
     pub largo: usize,
+    /// Textos entre comillas; un handle con marca alta indexa esta tabla.
+    pub textos: [[u8; LOBO_TEXTO_MAX]; LOBO_TEXTOS_MAX],
+    pub num_textos: usize,
 }
 
 impl LoboPrograma {
     pub const NUEVO: LoboPrograma = LoboPrograma {
         insts: [LoboInst::NUEVA; LOBO_INSTS_MAX],
         largo: 0,
+        textos: [[0; LOBO_TEXTO_MAX]; LOBO_TEXTOS_MAX],
+        num_textos: 0,
     };
+}
+
+/// Handle de un texto del programa, con la marca alta de motor/lobo.h.
+fn texto_handle(indice: i32) -> i32 {
+    LOBO_TEXTO_MARCA as i32 | indice
+}
+
+/// Resuelve un handle a los bytes del texto (sin el 0 final).
+fn resolver_texto(programa: &LoboPrograma, valor: i32) -> Option<&[u8]> {
+    let v = valor as u32;
+    if v & LOBO_TEXTO_MARCA == 0 {
+        return None;
+    }
+    let idx = (v & 0x3fff_ffff) as usize;
+    let texto = programa.textos.get(idx)?;
+    Some(&texto[..texto_largo(texto)])
 }
 
 /// Entrada extendida de la fase 37: 32 teclas con flancos y raton.
@@ -149,6 +192,168 @@ impl EntradaExt {
         raton_botones: 0,
         raton_dentro: false,
     };
+}
+
+/* ------------------------------------------------------------------ */
+/* Fase 38: estado minimo del HUD                                      */
+/* ------------------------------------------------------------------ */
+
+pub const HUD_DIALOGO_LINEAS: usize = 3;
+pub const HUD_TEXTO_MAX: usize = 64;
+pub const HUD_ELEMENTOS_MAX: usize = 32;
+
+pub const HUD_ELEM_TEXTO: u8 = 0;
+pub const HUD_ELEM_RECT: u8 = 1;
+pub const HUD_ELEM_BARRA: u8 = 2;
+pub const HUD_ELEM_IMAGEN: u8 = 3;
+pub const HUD_ELEM_BOTON: u8 = 4;
+
+/// Un elemento suelto de la ultima capa. Lo registra un script durante
+/// un fotograma y se descarta al empezar el siguiente (como en hud.c).
+#[derive(Clone, Copy)]
+pub struct HudElemento {
+    pub tipo: u8,
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+    pub valor: i32,
+    pub max: i32,
+    /// Escala en texto.
+    pub extra: i32,
+    pub color: u32,
+    pub id: i32,
+    pub texto: [u8; HUD_TEXTO_MAX],
+    pub pulsado: bool,
+}
+
+impl HudElemento {
+    pub const NUEVO: HudElemento = HudElemento {
+        tipo: 0,
+        x: 0,
+        y: 0,
+        w: 0,
+        h: 0,
+        valor: 0,
+        max: 0,
+        extra: 1,
+        color: 0,
+        id: 0,
+        texto: [0; HUD_TEXTO_MAX],
+        pulsado: false,
+    };
+}
+
+/// Estado del HUD compartido por todos los scripts del proyecto.
+#[derive(Clone, Copy)]
+pub struct HudEstado {
+    /// Solo se dibuja si algun script ha pedido algo del HUD; asi los
+    /// proyectos sin opcodes nuevos conservan sus capturas anteriores.
+    pub activo: bool,
+    pub vidas: i32,
+    pub puntos: i32,
+    pub dialogo: [[u8; HUD_TEXTO_MAX]; HUD_DIALOGO_LINEAS],
+    pub dialogo_n: usize,
+    pub dialogo_actual: usize,
+    pub plantilla: i32,
+    pub elementos: [HudElemento; HUD_ELEMENTOS_MAX],
+    pub nelementos: usize,
+    pub clic_ahora: bool,
+    pub clic_antes: bool,
+    pub raton_x: i32,
+    pub raton_y: i32,
+}
+
+impl HudEstado {
+    pub const NUEVO: HudEstado = HudEstado {
+        activo: false,
+        vidas: 0,
+        puntos: 0,
+        dialogo: [[0; HUD_TEXTO_MAX]; HUD_DIALOGO_LINEAS],
+        dialogo_n: 0,
+        dialogo_actual: 0,
+        plantilla: 0,
+        elementos: [HudElemento::NUEVO; HUD_ELEMENTOS_MAX],
+        nelementos: 0,
+        clic_ahora: false,
+        clic_antes: false,
+        raton_x: 0,
+        raton_y: 0,
+    };
+
+    /// Escribe una de las tres lineas del panel inferior.
+    fn poner_dialogo(&mut self, linea: i32, texto: &[u8]) {
+        if linea < 0 || linea >= HUD_DIALOGO_LINEAS as i32 {
+            return;
+        }
+        let i = linea as usize;
+        copiar_texto(&mut self.dialogo[i], texto);
+        if self.dialogo[i][0] != 0 && i + 1 > self.dialogo_n {
+            self.dialogo_n = i + 1;
+        }
+    }
+
+    /// Reserva un hueco para un elemento del fotograma.
+    fn elemento_nuevo(&mut self, tipo: u8) -> Option<&mut HudElemento> {
+        if self.nelementos >= HUD_ELEMENTOS_MAX {
+            return None;
+        }
+        let e = &mut self.elementos[self.nelementos];
+        self.nelementos += 1;
+        *e = HudElemento::NUEVO;
+        e.tipo = tipo;
+        Some(e)
+    }
+}
+
+/// Copia un texto al bufer fijo del HUD, terminado en 0.
+fn copiar_texto(dst: &mut [u8; HUD_TEXTO_MAX], src: &[u8]) {
+    let n = src.len().min(HUD_TEXTO_MAX - 1);
+    dst[..n].copy_from_slice(&src[..n]);
+    dst[n..].fill(0);
+}
+
+/* Unico estado del HUD del kernel: el juego es monotarea. */
+static HUD: SyncCell<HudEstado> = SyncCell::new(HudEstado::NUEVO);
+
+/// Copia del estado actual, para que el dibujo no comparta prestamos con
+/// la VM (son unos pocos kilobytes por fotograma).
+pub fn hud_estado() -> HudEstado {
+    unsafe { *HUD.get() }
+}
+
+/// Deja el HUD como al arrancar.
+pub fn hud_limpiar() {
+    unsafe { *HUD.get() = HudEstado::NUEVO };
+}
+
+/// Cierra un fotograma del HUD: descarta los elementos sueltos, calcula
+/// el clic del raton y pasa de linea en el dialogo con enter o espacio.
+pub fn hud_fotograma(ext: &EntradaExt) {
+    let hud = unsafe { &mut *HUD.get() };
+    hud.nelementos = 0;
+    hud.clic_antes = hud.clic_ahora;
+    hud.clic_ahora = false;
+    hud.raton_x = ext.raton_x;
+    hud.raton_y = ext.raton_y;
+
+    let boton = ext.raton_botones & 1 != 0;
+    let dentro = ext.raton_dentro && ext.raton_x >= 0 && ext.raton_y >= 0;
+    hud.clic_ahora = boton && !hud.clic_antes && dentro;
+
+    let pulsada = |slot: i32| -> bool {
+        if slot < 0 || slot >= crate::input::MOTOR_TECLAS_MAX {
+            return false;
+        }
+        let b = 1u32 << (slot as u32);
+        ext.teclas & b != 0 && ext.anterior & b == 0
+    };
+    if pulsada(crate::input::ENT_ENTER) || pulsada(crate::input::ENT_ESPACIO) {
+        hud.dialogo_actual += 1;
+        if hud.dialogo_actual >= HUD_DIALOGO_LINEAS || hud.dialogo_actual >= hud.dialogo_n {
+            hud.dialogo_actual = 0;
+        }
+    }
 }
 
 /// Lo que el juego expone a los scripts: posicion del sprite,
@@ -219,22 +424,19 @@ impl LoboMaquina {
 /* Utilidades de texto (sin core::fmt, para medir igual que el C)      */
 /* ------------------------------------------------------------------ */
 
-/// Longitud util de un nombre fijo (hasta su 0 final).
-fn largo_nombre(nombre: &[u8; LOBO_NOMBRE_MAX]) -> usize {
-    nombre
-        .iter()
-        .position(|&b| b == 0)
-        .unwrap_or(LOBO_NOMBRE_MAX)
+/// Longitud util de un nombre o texto fijo (hasta su 0 final).
+fn largo_nombre(nombre: &[u8]) -> usize {
+    nombre.iter().position(|&b| b == 0).unwrap_or(nombre.len())
 }
 
 /// Un nombre fijo (con relleno de ceros) es ese literal.
-fn nombre_es(nombre: &[u8; LOBO_NOMBRE_MAX], literal: &[u8]) -> bool {
+fn nombre_es(nombre: &[u8], literal: &[u8]) -> bool {
     let n = largo_nombre(nombre);
     n == literal.len() && &nombre[..n] == literal
 }
 
 /// Dos nombres fijos (con relleno de ceros) son iguales hasta sus 0.
-fn nombres_iguales(a: &[u8; LOBO_NOMBRE_MAX], b: &[u8; LOBO_NOMBRE_MAX]) -> bool {
+fn nombres_iguales(a: &[u8], b: &[u8]) -> bool {
     let (na, nb) = (largo_nombre(a), largo_nombre(b));
     na == nb && &a[..na] == &b[..nb]
 }
@@ -301,14 +503,15 @@ fn escribir_error(error: &mut [u8], linea: i32, mensaje: &str) {
 const TOK_NUM: u8 = 0;
 const TOK_ID: u8 = 1;
 const TOK_OP: u8 = 2;
-/// Texto entre comillas (fase 37): nombre de tecla de las nativas nuevas.
+/// Texto entre comillas: nombre de tecla (fase 37) o texto del HUD (fase 38).
 const TOK_TXT: u8 = 3;
 
 #[derive(Clone, Copy)]
 struct LoboToken {
     tipo: u8,
-    /// Identificador u operador (con relleno de ceros).
-    texto: [u8; LOBO_NOMBRE_MAX],
+    /// Identificador, operador o texto (con relleno de ceros). Los nombres
+    /// siguen limitados a LOBO_NOMBRE_MAX; los textos a LOBO_TEXTO_MAX.
+    texto: [u8; LOBO_TEXTO_MAX],
     /// Valor si tipo == TOK_NUM.
     numero: i32,
 }
@@ -316,7 +519,7 @@ struct LoboToken {
 impl LoboToken {
     const NUEVO: LoboToken = LoboToken {
         tipo: 0,
-        texto: [0; LOBO_NOMBRE_MAX],
+        texto: [0; LOBO_TEXTO_MAX],
         numero: 0,
     };
 }
@@ -366,7 +569,7 @@ fn tokenizar(linea: &[u8], tokens: &mut [LoboToken]) -> isize {
                         other => other,
                     };
                 }
-                if j < LOBO_NOMBRE_MAX - 1 {
+                if j < LOBO_TEXTO_MAX - 1 {
                     tokens[n].texto[j] = ch;
                 }
                 j += 1;
@@ -376,7 +579,7 @@ fn tokenizar(linea: &[u8], tokens: &mut [LoboToken]) -> isize {
                 return -3; // falta cerrar las comillas
             }
             i += 1; // la comilla de cierre
-            if j >= LOBO_NOMBRE_MAX {
+            if j >= LOBO_TEXTO_MAX {
                 return -1;
             }
             tokens[n].texto[j] = 0;
@@ -398,7 +601,7 @@ fn tokenizar(linea: &[u8], tokens: &mut [LoboToken]) -> isize {
             }
             tokens[n].tipo = TOK_NUM;
             tokens[n].numero = v;
-            tokens[n].texto = [0; LOBO_NOMBRE_MAX];
+            tokens[n].texto = [0; LOBO_TEXTO_MAX];
             n += 1;
             continue;
         }
@@ -427,7 +630,7 @@ fn tokenizar(linea: &[u8], tokens: &mut [LoboToken]) -> isize {
                 || (c == b'<' && c2 == b'=') || (c == b'>' && c2 == b'=')
             {
                 tokens[n].tipo = TOK_OP;
-                tokens[n].texto = [0; LOBO_NOMBRE_MAX];
+                tokens[n].texto = [0; LOBO_TEXTO_MAX];
                 tokens[n].texto[0] = c;
                 tokens[n].texto[1] = c2;
                 tokens[n].numero = 0;
@@ -442,7 +645,7 @@ fn tokenizar(linea: &[u8], tokens: &mut [LoboToken]) -> isize {
                 | b')' | b','
         ) {
             tokens[n].tipo = TOK_OP;
-            tokens[n].texto = [0; LOBO_NOMBRE_MAX];
+            tokens[n].texto = [0; LOBO_TEXTO_MAX];
             tokens[n].texto[0] = c;
             tokens[n].numero = 0;
             n += 1;
@@ -504,7 +707,7 @@ struct LoboParser<'a> {
 /// Indice de variable del juego, tecla o funcion integrada que
 /// responde a ese nombre; -1 si no es ninguna de las conocidas.
 /// Los otros dos valores son las banderas de tecla y funcion.
-fn nombre_conocido(nombre: &[u8; LOBO_NOMBRE_MAX]) -> (i32, bool, bool) {
+fn nombre_conocido(nombre: &[u8]) -> (i32, bool, bool) {
     if nombre_es(nombre, b"x") {
         return (LOBO_VAR_X, false, false);
     }
@@ -566,11 +769,53 @@ fn nombre_conocido(nombre: &[u8; LOBO_NOMBRE_MAX]) -> (i32, bool, bool) {
     if nombre_es(nombre, b"raton_dentro") {
         return (LOBO_RATON_DENTRO as i32, false, true);
     }
+    /* Fase 38: los builtins del HUD se llaman con su nombre completo;
+     * vidas, puntos y dialogo siguen siendo nombres de variable normales. */
+    if nombre_es(nombre, b"hud_vidas") {
+        return (LOBO_HUD_VIDAS as i32, false, true);
+    }
+    if nombre_es(nombre, b"hud_puntos") {
+        return (LOBO_HUD_PUNTOS as i32, false, true);
+    }
+    if nombre_es(nombre, b"hud_dialogo") {
+        return (LOBO_HUD_DIALOGO as i32, false, true);
+    }
+    if nombre_es(nombre, b"hud_texto") {
+        return (LOBO_HUD_TEXTO as i32, false, true);
+    }
+    if nombre_es(nombre, b"hud_rect") {
+        return (LOBO_HUD_RECT as i32, false, true);
+    }
+    if nombre_es(nombre, b"hud_barra") {
+        return (LOBO_HUD_BARRA as i32, false, true);
+    }
+    if nombre_es(nombre, b"hud_imagen") {
+        return (LOBO_HUD_IMAGEN as i32, false, true);
+    }
+    if nombre_es(nombre, b"hud_boton") {
+        return (LOBO_HUD_BOTON as i32, false, true);
+    }
+    if nombre_es(nombre, b"hud_plantilla") {
+        return (LOBO_HUD_PLANTILLA as i32, false, true);
+    }
     (-1, false, false)
 }
 
-/// Longitud util de un token de texto (sin el relleno de ceros).
-fn texto_largo(texto: &[u8; LOBO_NOMBRE_MAX]) -> usize {
+/// Numero de argumentos de cada builtin del HUD (como en motor/lobo.c).
+fn hud_argumentos(op: i32) -> i32 {
+    match op as u8 {
+        LOBO_HUD_VIDAS | LOBO_HUD_PUNTOS | LOBO_HUD_PLANTILLA => 1,
+        LOBO_HUD_DIALOGO => 2,
+        LOBO_HUD_IMAGEN => 3,
+        LOBO_HUD_TEXTO | LOBO_HUD_RECT => 5,
+        LOBO_HUD_BOTON => 6,
+        LOBO_HUD_BARRA => 7,
+        _ => 0,
+    }
+}
+
+/// Longitud util de un token o de un texto guardado (sin ceros al final).
+fn texto_largo(texto: &[u8]) -> usize {
     let mut n = texto.len();
     while n > 0 && texto[n - 1] == 0 {
         n -= 1;
@@ -597,7 +842,7 @@ impl<'a> LoboParser<'a> {
     }
 
     /// Indice de la local con ese nombre (-1 si no esta preescaneada).
-    fn buscar_local(&self, nombre: &[u8; LOBO_NOMBRE_MAX]) -> i32 {
+    fn buscar_local(&self, nombre: &[u8]) -> i32 {
         for i in 0..self.num_locales {
             if nombres_iguales(&self.locales[i], nombre) {
                 return i as i32;
@@ -607,7 +852,7 @@ impl<'a> LoboParser<'a> {
     }
 
     /// Registra un nombre como variable local del script.
-    fn nueva_local(&mut self, nombre: &[u8; LOBO_NOMBRE_MAX]) -> i32 {
+    fn nueva_local(&mut self, nombre: &[u8]) -> i32 {
         let i = self.buscar_local(nombre);
         if i >= 0 {
             return i;
@@ -622,6 +867,48 @@ impl<'a> LoboParser<'a> {
         self.locales[self.num_locales][n..].fill(0);
         self.num_locales += 1;
         (self.num_locales - 1) as i32
+    }
+
+    /// Guarda un texto constante y devuelve su indice (-1 si no cabe).
+    /// Los textos repetidos se comparten, como en motor/lobo.c.
+    fn agregar_texto(&mut self, texto: &[u8]) -> i32 {
+        let n = texto_largo(texto).min(LOBO_TEXTO_MAX - 1);
+        for i in 0..self.prog.num_textos {
+            let guardado = &self.prog.textos[i];
+            if texto_largo(guardado) == n && &guardado[..n] == &texto[..n] {
+                return i as i32;
+            }
+        }
+        if self.prog.num_textos >= LOBO_TEXTOS_MAX {
+            self.error("demasiados textos (maximo 64)");
+            return -1;
+        }
+        let i = self.prog.num_textos;
+        copiar_texto(&mut self.prog.textos[i], &texto[..n]);
+        self.prog.num_textos += 1;
+        i as i32
+    }
+
+    /// Lee n expresiones separadas por comas y emite el opcode del HUD.
+    /// Los valores quedan apilados de izquierda a derecha; la instruccion
+    /// los consume al reverso, que es el orden de los callbacks del C.
+    fn llamada_hud(&mut self, op: i32, n: i32) -> bool {
+        let mut i = 0;
+        while i < n {
+            if i > 0 && !self.comer_op(b",") {
+                self.error("se esperaba , entre argumentos del HUD");
+                return false;
+            }
+            if !self.expresion() {
+                return false;
+            }
+            i += 1;
+        }
+        if !self.comer_op(b")") {
+            self.error("se esperaba ) para cerrar la llamada del HUD");
+            return false;
+        }
+        self.emitir(op as u8, 0)
     }
 
     /* ---------------- expresiones (descenso recursivo) ------------- */
@@ -666,8 +953,13 @@ impl<'a> LoboParser<'a> {
             return self.emitir(LOBO_NUM, t.numero);
         }
         if t.tipo == TOK_TXT {
-            self.error("el texto solo es valido como argumento de tecla");
-            return false;
+            /* Un texto en una expresion es un handle con marca alta. */
+            let idx = self.agregar_texto(&t.texto);
+            if idx < 0 {
+                return false;
+            }
+            self.pos += 1;
+            return self.emitir(LOBO_TEXTO, idx);
         }
         if t.tipo == TOK_ID {
             self.pos += 1;
@@ -732,6 +1024,12 @@ impl<'a> LoboParser<'a> {
                         return false;
                     }
                     return self.emitir(LOBO_RATON_BOTON, 0);
+                }
+                /* Fase 38: vidas, puntos, dialogo y elementos del HUD. */
+                if conocido >= LOBO_HUD_VIDAS as i32
+                    && conocido <= LOBO_HUD_PLANTILLA as i32
+                {
+                    return self.llamada_hud(conocido, hud_argumentos(conocido));
                 }
                 if conocido != LOBO_CHOCAR as i32 {
                     return false;
@@ -1153,6 +1451,8 @@ pub fn parsear(texto: &[u8], programa: &mut LoboPrograma, error: &mut [u8]) -> b
     }
     programa.largo = 0;
     programa.insts = [LoboInst::NUEVA; LOBO_INSTS_MAX];
+    programa.textos = [[0; LOBO_TEXTO_MAX]; LOBO_TEXTOS_MAX];
+    programa.num_textos = 0;
 
     let mut p = LoboParser {
         prog: programa,
@@ -1261,6 +1561,25 @@ fn escribir_var(estado: &mut LoboEstado, maquina: &mut LoboMaquina, var: i32, va
     }
 }
 
+/// Saca un argumento de la pila para las nativas del HUD.
+fn hud_sacar(pila: &mut [i32; LOBO_PILA_MAX], np: &mut usize) -> Option<i32> {
+    if *np == 0 {
+        return None;
+    }
+    *np -= 1;
+    Some(pila[*np])
+}
+
+/// Apila el resultado de una nativa del HUD.
+fn hud_meter(pila: &mut [i32; LOBO_PILA_MAX], np: &mut usize, valor: i32) -> bool {
+    if *np >= LOBO_PILA_MAX {
+        return false;
+    }
+    pila[*np] = valor;
+    *np += 1;
+    true
+}
+
 /// Ejecuta un programa ya compilado contra el estado del juego. La
 /// maquina conserva las locales y las peticiones de cerrar. `choca` es
 /// la prueba de colision que el juego expone a los scripts (la caja
@@ -1358,6 +1677,13 @@ pub fn ejecutar<F: FnMut(i32, i32) -> bool>(
                 }
                 pila[np] = 0;
                 np += 1;
+            }
+            /* Fase 38: un texto entre comillas apila su handle. */
+            LOBO_TEXTO => {
+                if !hud_meter(&mut pila, &mut np, texto_handle(in_.valor)) {
+                    maquina.agotado = true;
+                    return;
+                }
             }
             LOBO_SUMA | LOBO_RESTA | LOBO_MULT => {
                 if np < 2 {
@@ -1472,6 +1798,279 @@ pub fn ejecutar<F: FnMut(i32, i32) -> bool>(
             LOBO_POP => {
                 if np > 0 {
                     np -= 1;
+                }
+            }
+            /* Fase 38: los argumentos se apilaron de izquierda a derecha
+             * y se consumen en orden inverso, como en motor/lobo.c. */
+            LOBO_HUD_VIDAS => {
+                let Some(valor) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let anterior = unsafe {
+                    let hud = &mut *HUD.get();
+                    hud.activo = true;
+                    let a = hud.vidas;
+                    hud.vidas = valor;
+                    a
+                };
+                if !hud_meter(&mut pila, &mut np, anterior) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_HUD_PUNTOS => {
+                let Some(valor) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let anterior = unsafe {
+                    let hud = &mut *HUD.get();
+                    hud.activo = true;
+                    let a = hud.puntos;
+                    hud.puntos = valor;
+                    a
+                };
+                if !hud_meter(&mut pila, &mut np, anterior) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_HUD_DIALOGO => {
+                let Some(handle) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(linea) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let texto = resolver_texto(programa, handle);
+                unsafe {
+                    let hud = &mut *HUD.get();
+                    hud.activo = true;
+                    if let Some(t) = texto {
+                        hud.poner_dialogo(linea, t);
+                    }
+                }
+                if !hud_meter(&mut pila, &mut np, 0) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_HUD_TEXTO => {
+                let Some(escala) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(color) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(handle) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(y) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(x) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let texto = resolver_texto(programa, handle);
+                unsafe {
+                    let hud = &mut *HUD.get();
+                    hud.activo = true;
+                    if let (Some(t), Some(e)) = (texto, hud.elemento_nuevo(HUD_ELEM_TEXTO)) {
+                        e.x = x;
+                        e.y = y;
+                        e.color = color as u32;
+                        e.extra = if escala < 1 { 1 } else if escala > 2 { 2 } else { escala };
+                        copiar_texto(&mut e.texto, t);
+                    }
+                }
+                if !hud_meter(&mut pila, &mut np, 1) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_HUD_RECT => {
+                let Some(color) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(h) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(w) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(y) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(x) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                unsafe {
+                    let hud = &mut *HUD.get();
+                    hud.activo = true;
+                    if let Some(e) = hud.elemento_nuevo(HUD_ELEM_RECT) {
+                        e.x = x;
+                        e.y = y;
+                        e.w = w;
+                        e.h = h;
+                        e.color = color as u32;
+                    }
+                }
+                if !hud_meter(&mut pila, &mut np, 1) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_HUD_BARRA => {
+                let Some(color) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(max) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(valor) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(h) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(w) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(y) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(x) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                unsafe {
+                    let hud = &mut *HUD.get();
+                    hud.activo = true;
+                    if let Some(e) = hud.elemento_nuevo(HUD_ELEM_BARRA) {
+                        e.x = x;
+                        e.y = y;
+                        e.w = w;
+                        e.h = h;
+                        e.valor = valor;
+                        e.max = max;
+                        e.color = color as u32;
+                    }
+                }
+                if !hud_meter(&mut pila, &mut np, 1) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_HUD_IMAGEN => {
+                let Some(y) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(x) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(id) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                unsafe {
+                    let hud = &mut *HUD.get();
+                    hud.activo = true;
+                    if let Some(e) = hud.elemento_nuevo(HUD_ELEM_IMAGEN) {
+                        e.id = id;
+                        e.x = x;
+                        e.y = y;
+                    }
+                }
+                if !hud_meter(&mut pila, &mut np, 1) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_HUD_BOTON => {
+                let Some(handle) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(h) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(w) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(y) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(x) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(id) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let texto = resolver_texto(programa, handle);
+                let pulsado = unsafe {
+                    let hud = &mut *HUD.get();
+                    hud.activo = true;
+                    let clic = hud.clic_ahora;
+                    let mx = hud.raton_x;
+                    let my = hud.raton_y;
+                    match (texto, hud.elemento_nuevo(HUD_ELEM_BOTON)) {
+                        (Some(t), Some(e)) => {
+                            e.id = id;
+                            e.x = x;
+                            e.y = y;
+                            e.w = w;
+                            e.h = h;
+                            copiar_texto(&mut e.texto, t);
+                            e.pulsado = clic && mx >= x && mx < x + w && my >= y && my < y + h;
+                            e.pulsado as i32
+                        }
+                        _ => 0,
+                    }
+                };
+                if !hud_meter(&mut pila, &mut np, pulsado) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_HUD_PLANTILLA => {
+                let Some(cual) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                unsafe {
+                    let hud = &mut *HUD.get();
+                    hud.activo = true;
+                    hud.plantilla = cual;
+                }
+                if !hud_meter(&mut pila, &mut np, 0) {
+                    maquina.agotado = true;
+                    return;
                 }
             }
             _ => {

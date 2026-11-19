@@ -19,7 +19,12 @@ enum {
     DEF_VARIABLE,
     DEF_SUMA,
     DEF_MAYOR,
-    DEF_CODIGO
+    DEF_CODIGO,
+    DEF_HUD_VIDAS,
+    DEF_HUD_PUNTOS,
+    DEF_HUD_DIALOGO,
+    DEF_HUD_TEXTO,
+    DEF_HUD_PLANTILLA
 };
 
 static char codigo[COMPILADOR_CODIGO_MAX];
@@ -212,6 +217,36 @@ void generar_sentencia(int id, int profundo) {
     }
     if (def == DEF_CODIGO) {
         anadir_bloque_codigo(id);
+        return;
+    }
+    /* Fase 38: el HUD se genera con las mismas llamadas que acepta la VM. */
+    if (def == DEF_HUD_VIDAS) {
+        anadir_linea(id, "hud_vidas(%d)",
+                     campo_entero(bloques_nodo_campo(id, 0)));
+        return;
+    }
+    if (def == DEF_HUD_PUNTOS) {
+        anadir_linea(id, "hud_puntos(%d)",
+                     campo_entero(bloques_nodo_campo(id, 0)));
+        return;
+    }
+    if (def == DEF_HUD_DIALOGO) {
+        char texto[96];
+        copiar_escapado(texto, sizeof(texto), bloques_nodo_campo(id, 1));
+        anadir_linea(id, "hud_dialogo(%d, \"%s\")",
+                     campo_entero(bloques_nodo_campo(id, 0)), texto);
+        return;
+    }
+    if (def == DEF_HUD_TEXTO) {
+        char texto[96];
+        copiar_escapado(texto, sizeof(texto), bloques_nodo_campo(id, 0));
+        anadir_linea(id, "hud_texto(8, %d, \"%s\", 16777215, 1)",
+                     campo_entero(bloques_nodo_campo(id, 1)), texto);
+        return;
+    }
+    if (def == DEF_HUD_PLANTILLA) {
+        anadir_linea(id, "hud_plantilla(%d)",
+                     campo_entero(bloques_nodo_campo(id, 0)));
         return;
     }
     /* Definicion desconocida: se deja una linea que el validador marcara. */
