@@ -1556,7 +1556,11 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
          * WM_SIZE ni WM_PAINT han preparado el buffer todavia. Se deja listo
          * el lienzo antes de simular clics para que la interaccion parta de
          * la geometria real y no de un lienzo 0,0,0,0. */
-        if (!g.pixeles) app_redimensionar(ANCHO_INICIAL, ALTO_INICIAL);
+        /* Fuerza el tamano nominal aunque WM_SIZE haya ajustado la ventana
+         * a una pantalla pequena (por ejemplo un CRT a 1024x768). Asi los
+         * patrones de regresion no dependen de la resolucion del monitor. */
+        if (!strstr(cmd, "--maximizar"))
+            app_redimensionar(ANCHO_INICIAL, ALTO_INICIAL);
         /* Prueba del estado maximizado sin bucle de mensajes: WM_SIZE deja
          * el buffer con el tamano de la pantalla y el dibujo usa la barra
          * superior completa. */

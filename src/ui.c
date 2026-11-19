@@ -11,8 +11,8 @@ static const char *MENU_ETIQUETAS[MENU_TOTAL] = {
     "COMPILE", "AYUDA", "INFO"
 };
 
-#define MENU_MARGEN 6
-#define MENU_PADDING 10
+#define MENU_MARGEN 4
+#define MENU_PADDING 7
 
 #define SEPARADOR_ALTO 8
 #define SEPARADOR_MARGEN 4
@@ -593,10 +593,10 @@ Zona confirmar_panel_zona(Zona *si, Zona *no) {
 /* Barra de menus                                                      */
 /* ------------------------------------------------------------------ */
 /* Las etiquetas se rasterizan con la fuente normal del sistema
- * ("Segoe UI" a 15 px, calidad antialias) y se mezcla la cobertura alfa.
- * Se hace con GDI para que anchos y posiciones sean exactos. */
+ * ("Segoe UI" a 12 px, calidad antialias) y se mezcla la cobertura alfa.
+ * El tamano compacto deja la barra entera visible en pantallas CRT. */
 #define MENU_FUENTE_SISTEMA L"Segoe UI"
-#define MENU_TAMANO_SISTEMA 15
+#define MENU_TAMANO_SISTEMA 12
 
 static HFONT menu_fuente_sistema(void) {
     static HFONT fuente = NULL;
@@ -1031,7 +1031,7 @@ Zona pestana_zona(int indice) {
     int ancho;
     if (indice < 0 || indice >= g.num_pestanas) return zona_vacia();
     ancho = pestana_ancho(indice);
-    return zona_hacer(pestana_x(indice), 4, ancho, TAB_BARRA_ALTO - 4);
+    return zona_hacer(pestana_x(indice), 3, ancho, TAB_BARRA_ALTO - 3);
 }
 
 Zona pestana_cerrar_zona(int indice) {
@@ -1385,7 +1385,7 @@ int barra_media_en(int x, int y) {
 static void dibujar_icono_media(int indice, Zona z, int habilitado) {
     u32 *pix;
     int w = 0, h = 0;
-    int caja = 20;
+    int caja = 16;
     int escala, dw, dh, x0, y0, dx, dy;
     int alfa_base = habilitado ? 255 : 89; /* 35 % */
 
@@ -1422,7 +1422,7 @@ static void dibujar_botones_media(void) {
     {
         Zona p = barra_media_zona(0);
         if (p.x > 4)
-            dibujar_rect(p.x - 5, p.y + 9, p.x - 4, zona_abajo(p) - 9,
+            dibujar_rect(p.x - 5, p.y + 7, p.x - 4, zona_abajo(p) - 7,
                          BARRA_BORDE);
     }
 

@@ -18,6 +18,11 @@ para cargar y guardar PNG.
   cada pestaña conserva su vista, zoom y desplazamiento. Las pestañas viven en
   la barra de título, entre el título de la ventana y los controles de
   minimizar/maximizar/cerrar, como en Windows 2000 (fase 18).
+- Barra superior compacta para pantallas CRT (cambio previo a la fase 31):
+  la franja de pestañas mide 26 px y la de menús 26 px, 52 px en total en vez
+  de 70 px; las etiquetas usan Segoe UI a 12 px en vez de 15 px. Los botones
+  de ventana, los controles play/pausa/stop y los iconos de pestaña se han
+  reducido para conservar el centrado.
 - Gestor de lógica: paneles izquierdo, derecho e inferior (los laterales del
   mismo ancho), un botón de item arrastrable y un lienzo desplazable con
   rejilla. Los items son mapas `.mav` de la carpeta `maps` junto al ejecutable:

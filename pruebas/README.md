@@ -318,7 +318,10 @@ y el hash a mano, y volver a pasarla sin `-Actualizar` y con `-Repetir`.
 
 ## Regresion del editor (`regresion.ps1`)
 
-Casos actuales, a 1200x700 y con `--sin-ventanas`:
+Casos actuales, a 1200x700 y con `--sin-ventanas`. El modo `--captura` fuerza
+ese tamano aunque el monitor este a 1024x768, para que los patrones no
+dependan de la resolucion del CRT. Tras el cambio visual previo a la fase 31
+la franja superior ocupa `y=0..51` (pestanas `0..25`, menus `26..51`):
 
 | Caso | Flags | Cubre |
 |---|---|---|

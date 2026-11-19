@@ -1061,6 +1061,12 @@ kernel anade `Canvas::blit_ex` y camara equivalente para el sprite; no tiene
 entidades LOGIC3, por lo que el espejo queda en la primitiva y la camara.
 `build.bat prueba` pasa las ocho suites.
 
+**Cambio visual previo a la fase 31:** barra superior compacta para CRT. La
+franja de pestanas y la de menus pasan de 34+36 a 26+26 px, la fuente de
+etiquetas de 15 a 12 px y los controles/iconos se redimensionan. El modo
+`--captura` fuerza 1200x700 aunque el monitor este a 1024x768. Los ocho
+patrones de regresion se regeneraron con `regresion.ps1 -Actualizar`.
+
 ### Fase 31 - Vista Estudio: escenario, objetos e inspector
 
 **Objetivo:** la nueva interfaz de proyecto.

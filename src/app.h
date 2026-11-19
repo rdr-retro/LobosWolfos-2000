@@ -119,8 +119,9 @@ typedef unsigned char  u8;
 #define ANCHO_INICIAL     1200
 #define ALTO_INICIAL      700
 
-#define MENU_BARRA_ALTO   36
-#define TAB_BARRA_ALTO    34
+/* Barra superior compacta para pantallas CRT: 26 + 26 en vez de 34 + 36. */
+#define MENU_BARRA_ALTO   26
+#define TAB_BARRA_ALTO    26
 #define AREA_SUP_ALTO     (TAB_BARRA_ALTO + MENU_BARRA_ALTO)
 
 /* Controles de ventana dibujados dentro de la barra de titulo. Van a la
@@ -129,14 +130,14 @@ typedef unsigned char  u8;
 #define TITULO_BOTON_MAX     1
 #define TITULO_BOTON_CERRAR  2
 #define TITULO_BOTONES       3
-#define TITULO_BOTON_LADO    24
-#define TITULO_BOTON_ALTO    20
+#define TITULO_BOTON_LADO    20
+#define TITULO_BOTON_ALTO    18
 #define TITULO_BOTON_HUECO   2
 #define TITULO_BOTONES_ANCHO \
     (TITULO_BOTONES * TITULO_BOTON_LADO + \
      (TITULO_BOTONES - 1) * TITULO_BOTON_HUECO)
 #define TITULO_MARGEN        6
-#define TITULO_ICONO_LADO    16
+#define TITULO_ICONO_LADO    14
 #define TITULO_ICONO_X       TITULO_MARGEN
 /* Titulo de la ventana junto al icono, a la izquierda. */
 #define TITULO_TEXTO_X       (TITULO_ICONO_X + TITULO_ICONO_LADO + 8)
@@ -148,9 +149,9 @@ typedef unsigned char  u8;
 
 /* Botones play/pausa/stop del extremo derecho de la barra de menus. */
 #define BARRA_MEDIA_BOTONES 3
-#define BARRA_MEDIA_LADO    30
+#define BARRA_MEDIA_LADO    24
 #define BARRA_MEDIA_HUECO   2
-#define BARRA_MEDIA_MARGEN  6
+#define BARRA_MEDIA_MARGEN  4
 #define BARRA_MEDIA_ANCHO \
     (BARRA_MEDIA_BOTONES * BARRA_MEDIA_LADO + \
      (BARRA_MEDIA_BOTONES - 1) * BARRA_MEDIA_HUECO)
@@ -403,8 +404,8 @@ typedef unsigned char  u8;
 #define TAB_HUECO         3
 #define TAB_ANCHO_MIN     92
 #define TAB_ANCHO_MAX     230
-#define TAB_CERRAR_LADO   16
-#define TAB_NUEVO_LADO    24
+#define TAB_CERRAR_LADO   14
+#define TAB_NUEVO_LADO    20
 #define TAB_LADO_INSET    4
 #define TAB_RADIO_SUP     6
 
