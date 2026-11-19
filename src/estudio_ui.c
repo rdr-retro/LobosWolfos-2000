@@ -399,6 +399,10 @@ void ui_dibujar_estudio(void) {
         bloques_ui_dibujar();
         return;
     }
+    if (g.estudio_pestana == DATOS_TAB || g.estudio_pestana == SONIDOS_TAB) {
+        datos_dibujar(g.estudio_pestana);
+        return;
+    }
     dibujar_lista_estudio(p);
     dibujar_escenario(p, centro);
     dibujar_inspector(p, der);
@@ -429,6 +433,8 @@ void estudio_pulsar(int x, int y, int boton) {
             } else {
                 g.estudio_pestana = i;
                 if (i == BLOQUES_TAB) bloques_importar_modelo();
+                if ((i == DATOS_TAB || i == SONIDOS_TAB) &&
+                    g.estudio_ruta[0]) datos_cargar(g.estudio_ruta);
                 estudio_guardar_estado();
                 app_invalidar();
             }
@@ -438,6 +444,10 @@ void estudio_pulsar(int x, int y, int boton) {
 
     if (g.estudio_pestana == BLOQUES_TAB) {
         bloques_ui_pulsar(x, y, boton);
+        return;
+    }
+    if (g.estudio_pestana == DATOS_TAB || g.estudio_pestana == SONIDOS_TAB) {
+        datos_pulsar(x, y, boton);
         return;
     }
 
@@ -491,6 +501,10 @@ void estudio_soltar(int x, int y, int boton) {
         bloques_ui_soltar(x, y, boton);
         return;
     }
+    if (g.estudio_pestana == DATOS_TAB || g.estudio_pestana == SONIDOS_TAB) {
+        datos_soltar(x, y, boton);
+        return;
+    }
     (void)x;
     (void)y;
     (void)boton;
@@ -507,6 +521,11 @@ void estudio_mover(int x, int y, int botones) {
     (void)botones;
     if (g.estudio_pestana == BLOQUES_TAB && !zona_contiene(barra, x, y)) {
         bloques_ui_mover(x, y, botones);
+        return;
+    }
+    if ((g.estudio_pestana == DATOS_TAB ||
+         g.estudio_pestana == SONIDOS_TAB) && !zona_contiene(barra, x, y)) {
+        datos_mover(x, y, botones);
         return;
     }
     if (zona_contiene(barra, x, y)) {
@@ -529,6 +548,10 @@ void estudio_rueda(int x, int y, int delta, int ctrl) {
     (void)ctrl;
     if (g.estudio_pestana == BLOQUES_TAB) {
         bloques_ui_rueda(x, y, delta);
+        return;
+    }
+    if (g.estudio_pestana == DATOS_TAB || g.estudio_pestana == SONIDOS_TAB) {
+        datos_rueda(x, y, delta, ctrl);
         return;
     }
     if (!zona_contiene(izq, x, y)) return;
@@ -561,6 +584,10 @@ void estudio_tecla(int vk, int ctrl, int shift) {
         bloques_ui_tecla(vk, ctrl, shift);
         return;
     }
+    if (g.estudio_pestana == DATOS_TAB || g.estudio_pestana == SONIDOS_TAB) {
+        datos_tecla(vk, ctrl, shift);
+        return;
+    }
     (void)ctrl;
     (void)shift;
     if (vk == VK_DELETE) {
@@ -583,6 +610,10 @@ void estudio_tecla(int vk, int ctrl, int shift) {
 void estudio_caracter(int ch) {
     if (g.estudio_pestana == BLOQUES_TAB) {
         bloques_ui_caracter(ch);
+        return;
+    }
+    if (g.estudio_pestana == DATOS_TAB || g.estudio_pestana == SONIDOS_TAB) {
+        datos_caracter(ch);
         return;
     }
     (void)ch;

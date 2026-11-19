@@ -144,6 +144,7 @@ static void validar_seleccion(const Proyecto3 *p) {
 void estudio_proyecto_cambiar(const char *ruta) {
     int i;
     copiar_ruta(g.estudio_ruta, ruta);
+    datos_proyecto_cambiar(g.estudio_ruta);
     i = indice_recuerdo(g.estudio_ruta);
     if (i >= 0) {
         g.estudio_escena = recuerdos[i].escena;

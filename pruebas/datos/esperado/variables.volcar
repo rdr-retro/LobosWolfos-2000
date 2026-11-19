@@ -1,0 +1,5 @@
+fase35=1 pestana=2 seccion=1 seleccion=0 celda=0 foco=0 confirmar=-1 refs=0 error=-
+obs=G:salud|Vidas_del_lobo
+obs=O1:energia|Energia
+varG=0|salud|entero|5
+varO=1|0|energia|entero|3

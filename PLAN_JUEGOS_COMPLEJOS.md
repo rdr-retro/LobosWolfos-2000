@@ -1234,6 +1234,26 @@ congela nueve casos sin reutilizar las rutas de las once suites anteriores;
 **Criterio de salida:** se crea una lista de 10 elementos, se edita, se
 guarda y se recarga intacta.
 
+**Estado (19-11-2026): completada.** La vista Estudio estrena las pestanas
+reservadas **Datos** (indice 2) y **Sonidos** (indice 3), sin anadir una
+septima pestana ni desplazar ARCHIVO=1, MODO=2 y AYUDA=9. `src/datos.c`
+gestiona variables globales y de objeto con observacion, listas de hasta 256
+elementos editables, importacion de trajes PNG con recorte, pivote y tira de
+cuadros, y borrado con confirmacion y sustitucion de referencias. Las
+observaciones y la tabla de sonidos se guardan en `<proyecto>.fase35`; las
+variables, listas y trajes siguen usando los campos de LOGIC3, con el
+escritor canonico y el CRC intactos. `src/sonido.c` valida WAV PCM mono de
+8 o 16 bits a 11025 o 22050 Hz con tope de 256 KB y reproduce con
+`PlaySoundA` cargada de `winmm.dll` sin anadir `-lwinmm`. Las entradas y
+salidas nuevas van detras de flags nuevos (`--datos`, `--sonidos`,
+`--datos-variable`, `--datos-lista`, `--datos-editar`, `--traje-importar`,
+`--sonido-importar`, `--sonido-probar`, `--datos-migrar`, `--datos-borrar`,
+`--confirmar`, `--datos-guardar` y `--volcar-datos`). El criterio se verifica
+en `pruebas/datos/esperado/lista10.volcar`: la lista `inventario` conserva
+sus 10 celdas y la celda 3 editada tras guardar y recargar. Nueva suite
+`pruebas/datos.ps1` con siete casos que congelan volcado, hash BMP y tres
+sondas de pixel; `build.bat prueba` pasa las trece suites y 110 casos.
+
 ### Fase 36 - Productividad del editor
 
 **Objetivo:** que construir un juego grande sea rapido.

@@ -2,6 +2,7 @@
  * Nucleo: buffer de dibujo, primitivas, ventana, bucle de mensajes y dialogos.
  * ========================================================================== */
 #include "app.h"
+#include "logic3.h"
 
 App g;
 
@@ -1394,40 +1395,43 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
  * comilla de cierre, y sin comillas hasta el siguiente argumento que
  * empiece por "--" o el final de la linea. Asi `--captura ruta.bmp
  * --gestor` no arrastra las flags siguientes dentro del valor. */
-static char *arg_valor(char *cmd, const char *nombre) {
+static char *arg_valor_n(char *cmd, const char *nombre, int indice) {
     static char bufs[32][MAX_PATH];
     static int buf_i = 0;
     char *p = cmd;
     size_t n = strlen(nombre);
+    int visto = 0;
     if (!p) return NULL;
     while (*p) {
         while (*p == ' ' || *p == '\t') p++;
         if (!*p) break;
         if (_strnicmp(p, nombre, n) == 0 &&
             (p[n] == '=' || p[n] == ' ' || p[n] == '\t' || p[n] == 0)) {
-            const char *inicio, *fin;
-            p += n;
-            while (*p == ' ' || *p == '\t') p++;
-            if (*p == '=') {
-                p++;
+            if (visto++ >= indice) {
+                const char *inicio, *fin;
+                p += n;
                 while (*p == ' ' || *p == '\t') p++;
-            }
-            inicio = p;
-            if (*p == '"') {
-                inicio = p + 1;
-                fin = strchr(inicio, '"');
-                if (!fin) fin = inicio + strlen(inicio);
-            } else {
-                fin = strstr(p, " --");
-                if (!fin) fin = p + strlen(p);
-            }
-            n = (size_t)(fin - inicio);
-            if (n >= MAX_PATH) n = MAX_PATH - 1;
-            {
-                char *dst = bufs[buf_i++ & 15];
-                memcpy(dst, inicio, n);
-                dst[n] = 0;
-                return dst;
+                if (*p == '=') {
+                    p++;
+                    while (*p == ' ' || *p == '\t') p++;
+                }
+                inicio = p;
+                if (*p == '"') {
+                    inicio = p + 1;
+                    fin = strchr(inicio, '"');
+                    if (!fin) fin = inicio + strlen(inicio);
+                } else {
+                    fin = strstr(p, " --");
+                    if (!fin) fin = p + strlen(p);
+                }
+                n = (size_t)(fin - inicio);
+                if (n >= MAX_PATH) n = MAX_PATH - 1;
+                {
+                    char *dst = bufs[buf_i++ & 15];
+                    memcpy(dst, inicio, n);
+                    dst[n] = 0;
+                    return dst;
+                }
             }
         }
         if (*p == '"') {
@@ -1439,6 +1443,47 @@ static char *arg_valor(char *cmd, const char *nombre) {
         }
     }
     return NULL;
+}
+
+/* Primera aparicion de una flag con valor. Las flags de la fase 35 que se
+ * repiten usan arg_valor_n directamente. */
+static char *arg_valor(char *cmd, const char *nombre) {
+    return arg_valor_n(cmd, nombre, 0);
+}
+
+/* Fase 35: detecta una flag exacta sin confundir --datos con --datos-lista. */
+static int arg_presente(char *cmd, const char *nombre) {
+    char *p = cmd;
+    size_t n = strlen(nombre);
+    if (!p) return 0;
+    while (*p) {
+        while (*p == ' ' || *p == '\t') p++;
+        if (!*p) break;
+        if (_strnicmp(p, nombre, n) == 0 &&
+            (p[n] == 0 || p[n] == ' ' || p[n] == '\t')) return 1;
+        if (*p == '"') {
+            p++;
+            while (*p && *p != '"') p++;
+            if (*p) p++;
+        } else {
+            while (*p && *p != ' ' && *p != '\t') p++;
+        }
+    }
+    return 0;
+}
+
+/* Divide por '|' un argumento de las pruebas de la fase 35. */
+static int partir_argumento(char *texto, char **campos, int max) {
+    int n = 1;
+    campos[0] = texto;
+    while (*texto && n < max) {
+        if (*texto == '|') {
+            *texto = 0;
+            campos[n++] = texto + 1;
+        }
+        texto++;
+    }
+    return n;
 }
 
 int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
@@ -1798,6 +1843,108 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 while (*p == ';' || *p == ' ' || *p == ',') p++;
             }
         }
+        /* Fase 35: entrar en las pestanas reservadas despues de --clics
+         * para no reinterpretar los clics de creacion de escena y objeto. */
+        if (arg_presente(cmd, "--datos") || arg_presente(cmd, "--sonidos")) {
+            if (g.vista != VISTA_ESTUDIO) app_alternar_estudio();
+            if (arg_presente(cmd, "--sonidos")) g.estudio_pestana = SONIDOS_TAB;
+            else g.estudio_pestana = DATOS_TAB;
+            if (g.estudio_ruta[0]) datos_cargar(g.estudio_ruta);
+            estudio_guardar_estado();
+        }
+        /* Fase 35: mutaciones deterministas. Van despues de --clics para
+         * que el proyecto creado desde los botones ya este disponible. */
+        {
+            char *dc = arg_valor(cmd, "--datos-cargar");
+            if (dc && dc[0]) datos_cargar(dc);
+        }
+        {
+            int iv = 0;
+            char *dv;
+            while ((dv = arg_valor_n(cmd, "--datos-variable", iv)) != NULL &&
+                   dv[0]) {
+                char *c[5];
+                char nombre[DATOS_CLAVE_MAX];
+                char valor[64];
+                char obs[DATOS_OBS_TEXTO_MAX];
+                int objeto = 0, tipo = L3_TIPO_ENTERO;
+                if (partir_argumento(dv, c, 5) >= 4) {
+                    objeto = atoi(c[0]);
+                    recortar_texto(nombre, c[1], sizeof(nombre));
+                    tipo = logic3_tipo_desde_texto(c[2]);
+                    if (tipo < 0) tipo = atoi(c[2]);
+                    recortar_texto(valor, c[3], sizeof(valor));
+                    if (c[4]) recortar_texto(obs, c[4], sizeof(obs));
+                    else obs[0] = 0;
+                    datos_variable_nueva(objeto, nombre, tipo, valor, obs);
+                }
+                iv++;
+            }
+        }
+        {
+            char *dl = arg_valor(cmd, "--datos-lista");
+            if (dl && dl[0]) {
+                char *c[4];
+                int tipo = L3_TIPO_ENTERO;
+                if (partir_argumento(dl, c, 4) >= 3) {
+                    tipo = logic3_tipo_desde_texto(c[2]);
+                    if (tipo < 0) tipo = atoi(c[2]);
+                    datos_lista_nueva(c[0], atoi(c[1]), tipo, c[3]);
+                }
+            }
+        }
+        {
+            char *de = arg_valor(cmd, "--datos-editar");
+            if (de && de[0]) {
+                int lista = 0, celda = 0;
+                char valor[128];
+                if (sscanf(de, "%d,%d,%127[^,]", &lista, &celda, valor) == 3)
+                    datos_lista_editar(lista, celda, valor);
+            }
+        }
+        {
+            char *ti = arg_valor(cmd, "--traje-importar");
+            if (ti && ti[0]) {
+                char *c[4];
+                int x = 0, y = 0, w = 32, h = 32;
+                int px = 16, py = 16, cuadros = 1, cw = 32, ch = 32;
+                if (partir_argumento(ti, c, 4) >= 4) {
+                    sscanf(c[1], "%d,%d,%d,%d", &x, &y, &w, &h);
+                    sscanf(c[2], "%d,%d", &px, &py);
+                    sscanf(c[3], "%d,%d,%d", &cuadros, &cw, &ch);
+                    datos_traje_importar(c[0], x, y, w, h, px, py,
+                                         cuadros, cw, ch);
+                }
+            }
+        }
+        {
+            char *si = arg_valor(cmd, "--sonido-importar");
+            if (si && si[0]) {
+                char *c[2];
+                if (partir_argumento(si, c, 2) >= 2)
+                    datos_sonido_importar(c[0], c[1]);
+            }
+        }
+        {
+            char *sp = arg_valor(cmd, "--sonido-probar");
+            if (sp && sp[0]) datos_sonido_probar(atoi(sp));
+        }
+        {
+            char *sm = arg_valor(cmd, "--datos-migrar");
+            if (sm && sm[0]) datos_migrar_sonidos(sm);
+        }
+        {
+            char *db = arg_valor(cmd, "--datos-borrar");
+            if (db && db[0]) {
+                int tipo = 0, indice = 0;
+                char reemplazo[64] = "";
+                if (sscanf(db, "%d,%d,%63s", &tipo, &indice, reemplazo) < 2)
+                    reemplazo[0] = 0;
+                datos_borrar(tipo, indice,
+                             arg_presente(cmd, "--confirmar"),
+                             reemplazo[0] ? reemplazo : NULL);
+            }
+        }
         /* Teclado simulado en el editor de codigo (fase 8): el texto se
          * escribe caracter a caracter, con \n \t \b \\ como escapes y
          * cada \n como salto de linea. Va despues de --clics para poder
@@ -2124,6 +2271,24 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 if (l3_ruta[0]) logic3_guardar_actual(l3_ruta);
             }
         }
+        /* Fase 35: guarda el LOGIC3 y el archivo lateral de datos. El
+         * escritor canonico no cambia; el sidecar solo se crea con esta
+         * flag o desde el boton del editor. */
+        {
+            char *dg = arg_valor(cmd, "--datos-guardar");
+            if (dg) {
+                char dg_ruta[MAX_PATH];
+                int n = 0;
+                while (dg[n] && dg[n] != ' ' && dg[n] != '\t' &&
+                       n < MAX_PATH - 1) {
+                    dg_ruta[n] = dg[n];
+                    n++;
+                }
+                dg_ruta[n] = 0;
+                if (dg_ruta[0] && logic3_guardar_actual(dg_ruta))
+                    datos_guardar(dg_ruta);
+            }
+        }
         /* Conversion LOGIC2 -> LOGIC3 (fase 24): escribe <ruta>.logic3
          * y deja el modelo convertido activo. */
         {
@@ -2330,6 +2495,22 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                     }
                     fclose(vf);
                 }
+            }
+        }
+        /* Fase 35: volcado propio, solo cuando se pide de forma explicita
+         * para no cambiar los patrones de las doce suites anteriores. */
+        {
+            char *vd = arg_valor(cmd, "--volcar-datos");
+            if (vd) {
+                char vd_ruta[MAX_PATH];
+                int n = 0;
+                while (vd[n] && vd[n] != ' ' && vd[n] != '\t' &&
+                       n < MAX_PATH - 1) {
+                    vd_ruta[n] = vd[n];
+                    n++;
+                }
+                vd_ruta[n] = 0;
+                datos_volcar(vd_ruta);
             }
         }
         /* Vuelca el lobo generado (fase 33) como texto plano. */

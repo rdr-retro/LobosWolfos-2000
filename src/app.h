@@ -421,6 +421,16 @@ typedef unsigned char  u8;
 #define ESTUDIO_BLOQUEOS_MAX    128
 #define ESTUDIO_RECUERDOS_MAX   8
 
+/* Fase 35: Datos y Sonidos ya estaban reservados en la barra. No se anade
+ * una septima pestana y no se desplazan los indices de menu usados por
+ * las pruebas (ARCHIVO=1, MODO=2 y AYUDA=9). */
+#define DATOS_TAB               2
+#define SONIDOS_TAB             3
+#define DATOS_OBS_MAX           192
+#define DATOS_SONIDOS_MAX       32
+#define DATOS_CLAVE_MAX         96
+#define DATOS_OBS_TEXTO_MAX     64
+
 /* Lienzo de bloques (fase 32). El tab se inserta antes de Play para no
  * desplazar los indices de menu usados por las pruebas. */
 #define BLOQUES_TAB             4
@@ -807,6 +817,24 @@ typedef struct Pestana {
     int tiles_visible;
     int tiles_plegado;
 } Pestana;
+
+/* Fase 35: metadatos que LOGIC3 no puede guardar. Se escriben en un
+ * archivo lateral `<proyecto>.fase35`; las listas, variables y trajes
+ * siguen usando los campos del formato canonico. */
+typedef struct {
+    char clave[DATOS_CLAVE_MAX];
+    char texto[DATOS_OBS_TEXTO_MAX];
+} ObservacionDatos;
+
+typedef struct {
+    char nombre[48];
+    char ruta[MAX_PATH];
+    int frecuencia;
+    int canales;
+    int bits;
+    int bytes;
+    int valido;
+} SonidoDatos;
 
 typedef struct App {
     HWND hwnd;
@@ -1631,6 +1659,39 @@ int  estudio_esta_bloqueado(int id);
 void estudio_proyecto_cambiar(const char *ruta);
 void estudio_proyecto_guardar(const char *ruta);
 void estudio_guardar_estado(void);
+
+/* Editor de datos y assets (datos.c, fase 35). */
+void datos_proyecto_cambiar(const char *ruta);
+int  datos_variable_nueva(int objeto_id, const char *nombre, int tipo,
+                          const char *valor, const char *obs);
+int  datos_lista_nueva(const char *nombre, int capacidad, int tipo,
+                       const char *elementos_txt);
+int  datos_lista_editar(int indice, int elemento, const char *valor);
+int  datos_traje_importar(const char *ruta, int x, int y, int ancho, int alto,
+                          int pivote_x, int pivote_y, int cuadros,
+                          int cuadro_ancho, int cuadro_alto);
+int  datos_sonido_importar(const char *nombre, const char *ruta);
+int  datos_sonido_probar(int indice);
+int  datos_sustituir_referencias(const char *viejo, const char *nuevo);
+int  datos_borrar(int tipo, int indice, int confirmado, const char *reemplazo);
+int  datos_cargar(const char *ruta);
+int  datos_guardar(const char *ruta);
+int  datos_migrar_sonidos(const char *ruta);
+void datos_dibujar(int pestana);
+void datos_pulsar(int x, int y, int boton);
+void datos_soltar(int x, int y, int boton);
+void datos_mover(int x, int y, int botones);
+void datos_rueda(int x, int y, int delta, int ctrl);
+void datos_tecla(int vk, int ctrl, int shift);
+void datos_caracter(int ch);
+void datos_volcar(const char *ruta);
+const char *datos_ultimo_error(void);
+int  datos_refs_sustituidas(void);
+
+/* WAV PCM mono (sonido.c, fase 35). */
+int  sonido_validar_wav(const char *ruta, int *frecuencia, int *canales,
+                        int *bits, int *bytes);
+int  sonido_reproducir(const char *ruta);
 
 /* Lienzo de bloques (fase 32). El modelo se mantiene aparte del LOGIC3 y se
  * vuelca a `p->bloques` en cada mutacion; el escritor de LOGIC3 no cambia. */
