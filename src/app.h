@@ -436,6 +436,11 @@ typedef unsigned char  u8;
 #define BLOQUES_ALTO           26
 #define BLOQUES_ID_INICIAL      1000
 
+/* Compilador bloques -> lobo (fase 33): el codigo se guarda en el nodo y se
+ * vuelca a `Bloque3.codigo`. El visor es de solo lectura. */
+#define COMPILADOR_CODIGO_MAX   FUNCIONES_CODIGO_MAX
+#define COMPILADOR_LINEAS_MAX   256
+
 /* Herramienta de texto: medidas y margenes. */
 #define TEXTO_MARGEN                 2
 #define TEXTO_ANCHO_MIN              160
@@ -906,6 +911,13 @@ typedef struct App {
     int bloques_pan_x, bloques_pan_y;
     int bloques_modelo_cargado;
 
+    /* Compilador de bloques (fase 33): visor, conversion y ultimo error. */
+    int bloques_ver_codigo;
+    int bloques_convertido;
+    int bloques_error_bloque;
+    int bloques_error_linea;
+    char bloques_error[LOBO_ERROR_MAX];
+
     /* Pestanas: la activa vive en el estado global de arriba. */
     Pestana pestanas[MAX_PESTANAS];
     int num_pestanas;
@@ -1366,6 +1378,7 @@ void bloques_ui_rueda(int x, int y, int delta);
 void bloques_ui_tecla(int vk, int ctrl, int shift);
 void bloques_ui_caracter(int ch);
 void bloques_ui_arrastrar(int x0, int y0, int x1, int y1);
+void bloques_ui_visor_alternar(void);
 
 /* ------------------------------------------------------------------ */
 /* UI                                                                  */
@@ -1654,6 +1667,18 @@ const char *bloques_nodo_slot(int id);
 const char *bloques_nodo_campo(int id, int campo);
 void bloques_campo_anadir(int id, int campo, int ch);
 void bloques_nodo_posicion(int id, int *x, int *y);
+void bloques_codigo_poner(int id, const char *codigo);
+const char *bloques_codigo_obtener(int id);
+
+/* Compilador bloques -> lobo 3 (fase 33). Genera un script por evento,
+ * valida con el compilador de la VM y puede convertir el lienzo en codigo. */
+void compilador_bloques_generar(void);
+const char *compilador_bloques_codigo(void);
+const char *compilador_bloques_error(void);
+int  compilador_bloques_bloque_error(void);
+int  compilador_bloques_linea_error(void);
+int  compilador_bloques_lineas(void);
+int  compilador_bloques_convertir(void);
 
 /* Ajustes del proyecto (ajustes.c, fase 14) */
 void ajustes_proyecto_iniciar(void);

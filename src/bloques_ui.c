@@ -59,6 +59,17 @@ static Zona zona_def_fila(int fila) {
     return zona_hacer(6, y + fila * 22, ESTUDIO_IZQ_ANCHO - 12, 20);
 }
 
+/* Botones del inspector para el visor y la conversion (fase 33). */
+static Zona zona_boton_codigo(void) {
+    Zona p = estudio_panel_der_zona();
+    return zona_hacer(p.x + 10, zona_abajo(p) - 110, p.ancho - 20, 22);
+}
+
+static Zona zona_boton_convertir(void) {
+    Zona p = estudio_panel_der_zona();
+    return zona_hacer(p.x + 10, zona_abajo(p) - 80, p.ancho - 20, 22);
+}
+
 static int def_en_fila(int fila, int categoria) {
     int i, n = 0;
     for (i = 0; i < bloques_def_cantidad(); i++) {
@@ -94,13 +105,22 @@ static void dibujar_bloque(const BloqueCaja *c) {
 
     dibujar_rect_z(c->z, color);
     dibujar_marco_z(c->z, seleccionado ? 0x00FFFFFFu : BLOQ_COLOR_BORDE);
+    if (g.bloques_error_bloque == c->id)
+        dibujar_marco_z(c->z, 0x00E04040u);
     if (seleccionado)
         dibujar_rect(c->z.x + 1, c->z.y + 1, c->z.x + 3, zona_abajo(c->z) - 1,
                      0x00FFFFFFu);
 
     fuente_dibujar(c->z.x + 6, c->z.y + 7, bloques_nombre_def(def), tinta);
     campo = bloques_nodo_campo(c->id, 0);
-    if (campo && campo[0]) {
+    if (bloques_codigo_obtener(c->id)[0]) {
+        const char *cod = bloques_codigo_obtener(c->id);
+        int lineas = 1;
+        while (*cod) if (*cod++ == '\n') lineas++;
+        formatear(etiqueta, sizeof(etiqueta), "lobo %d lin", lineas);
+        fuente_dibujar(c->z.x + c->z.ancho - fuente_texto_ancho(etiqueta) - 6,
+                       c->z.y + 7, etiqueta, tinta);
+    } else if (campo && campo[0]) {
         formatear(etiqueta, sizeof(etiqueta), "= %s", campo);
         fuente_dibujar(c->z.x + c->z.ancho - fuente_texto_ancho(etiqueta) - 6,
                        c->z.y + 7, etiqueta, tinta);
@@ -190,6 +210,55 @@ static void dibujar_lienzo(void) {
     }
 }
 
+/* Visor de solo lectura del lobo generado (fase 33). */
+static u32 color_linea_lobo(const char *linea) {
+    if (strncmp(linea, "mientras", 8) == 0 ||
+        strncmp(linea, "si ", 3) == 0 || strncmp(linea, "fin", 3) == 0)
+        return 0x001E88E5u;
+    if (strstr(linea, "mi.") != NULL) return 0x00804020u;
+    return BLOQ_COLOR_TEXTO;
+}
+
+static void dibujar_visor_codigo(void) {
+    Zona c = zona_lienzo();
+    const char *codigo = compilador_bloques_codigo();
+    const char *error = compilador_bloques_error();
+    char titulo[96], texto[320], linea[340];
+    int y = c.y + 16, n = 1;
+
+    formatear(titulo, sizeof(titulo), "CODIGO LOBO GENERADO / %d LINEAS",
+              compilador_bloques_lineas());
+    fuente_dibujar(c.x + 12, c.y - 24, titulo, TEXTO_UI);
+    dibujar_rect(c.x, c.y - 8, zona_derecha(c), c.y - 7, SEPARADOR);
+
+    while (*codigo && y < zona_abajo(c) - 40) {
+        const char *fin = strchr(codigo, '\n');
+        int len = fin ? (int)(fin - codigo) : (int)strlen(codigo);
+        u32 color;
+        if (len > (int)sizeof(texto) - 1) len = (int)sizeof(texto) - 1;
+        memcpy(texto, codigo, (size_t)len);
+        texto[len] = 0;
+        formatear(linea, sizeof(linea), "%3d| %s", n, texto);
+        color = (n == compilador_bloques_linea_error() && error[0]) ?
+                0x00C04040u : color_linea_lobo(texto);
+        fuente_dibujar(c.x + 12, y, linea, color);
+        y += 14;
+        n++;
+        if (!fin) break;
+        codigo = fin + 1;
+    }
+    if (error[0]) {
+        fuente_dibujar(c.x + 12, zona_abajo(c) - 26, error, 0x00C04040u);
+        formatear(titulo, sizeof(titulo), "BLOQUE %d RESALTADO AL VOLVER",
+                  compilador_bloques_bloque_error());
+        fuente_dibujar(c.x + 12, zona_abajo(c) - 12, titulo, 0x00808080u);
+    } else if (g.bloques_convertido) {
+        fuente_dibujar(c.x + 12, zona_abajo(c) - 14,
+                       "CONVERTIDO A CODIGO: EL LIENZO YA NO SE PUEDE EDITAR",
+                       0x00808080u);
+    }
+}
+
 static void dibujar_inspector_bloques(void) {
     Zona p = estudio_panel_der_zona();
     int x = p.x + 10, y = p.y + 10;
@@ -234,6 +303,24 @@ static void dibujar_inspector_bloques(void) {
         y += 12;
         fuente_dibujar(x, y, "CTRL+Y rehacer", BLOQ_COLOR_TEXTO);
     }
+    /* Los botones de codigo solo aparecen despues de compilar o abrir el
+     * visor: la fase 32 conserva asi sus capturas y hashes BMP. */
+    if (g.bloques_ver_codigo || g.bloques_convertido ||
+        compilador_bloques_lineas() > 0 || compilador_bloques_error()[0]) {
+        Zona zc = zona_boton_codigo();
+        Zona zv = zona_boton_convertir();
+        int error = compilador_bloques_error()[0] != 0;
+        dibujar_rect_z(zc, g.bloques_ver_codigo ? BOTON_SELECCION : BARRA);
+        dibujar_marco_z(zc, BARRA_BORDE);
+        fuente_dibujar(zc.x + 8, zc.y + 6,
+                       g.bloques_ver_codigo ? "VOLVER AL LIENZO" : "VER CODIGO (F2)",
+                       g.bloques_ver_codigo ? 0x00FFFFFFu : TEXTO_UI);
+        dibujar_rect_z(zv, error || g.bloques_convertido ? 0x00D0D0D0u : BARRA);
+        dibujar_marco_z(zv, BARRA_BORDE);
+        fuente_dibujar(zv.x + 8, zv.y + 6,
+                       g.bloques_convertido ? "YA CONVERTIDO" : "CONVERTIR A CODIGO",
+                       error || g.bloques_convertido ? 0x00808080u : TEXTO_UI);
+    }
     fuente_dibujar(x, zona_abajo(p) - 26, "ARCHIVO -> GUARDAR LOGIC3",
                    0x00606060u);
     fuente_dibujar(x, zona_abajo(p) - 14, "para conservar los bloques",
@@ -244,7 +331,8 @@ void bloques_ui_dibujar(void) {
     Zona der = estudio_panel_der_zona();
     dibujar_rect(der.x, AREA_SUP_ALTO, der.x + 1, g.alto, SEPARADOR);
     dibujar_paleta();
-    dibujar_lienzo();
+    if (g.bloques_ver_codigo) dibujar_visor_codigo();
+    else dibujar_lienzo();
     dibujar_inspector_bloques();
 }
 
@@ -295,7 +383,17 @@ void bloques_ui_pulsar(int x, int y, int boton) {
     Zona c = zona_lienzo();
     int i, fila, id, def;
     if (boton != 0 && boton != 1) return;
+    if (boton == 0 && zona_contiene(zona_boton_codigo(), x, y)) {
+        bloques_ui_visor_alternar();
+        return;
+    }
+    if (boton == 0 && zona_contiene(zona_boton_convertir(), x, y)) {
+        compilador_bloques_convertir();
+        app_invalidar();
+        return;
+    }
     if (zona_contiene(barra, x, y)) return;
+    if (g.bloques_ver_codigo) return;
     for (i = 0; i < BLOQUES_CATEGORIAS; i++) {
         if (!zona_contiene(zona_categoria(i), x, y)) continue;
         g.bloques_categoria = i;
@@ -378,6 +476,7 @@ void bloques_ui_soltar(int x, int y, int boton) {
 void bloques_ui_mover(int x, int y, int botones) {
     int hover;
     (void)botones;
+    if (g.bloques_ver_codigo) return;
     g.bloques_drag_x = x;
     g.bloques_drag_y = y;
     hover = bloque_en(x, y);
@@ -389,6 +488,7 @@ void bloques_ui_mover(int x, int y, int botones) {
 
 void bloques_ui_rueda(int x, int y, int delta) {
     Zona c = zona_lienzo();
+    if (g.bloques_ver_codigo) return;
     if (!zona_contiene(c, x, y)) return;
     g.bloques_pan_y += delta > 0 ? -12 : 12;
     if (g.bloques_pan_y > 400) g.bloques_pan_y = 400;
@@ -401,6 +501,14 @@ void bloques_ui_tecla(int vk, int ctrl, int shift) {
     Zona c = zona_lienzo();
     int i, def, n = 0, actual = -1;
     (void)shift;
+    if (vk == VK_F2) {
+        bloques_ui_visor_alternar();
+        return;
+    }
+    if (g.bloques_ver_codigo) {
+        if (vk == VK_ESCAPE) bloques_ui_visor_alternar();
+        return;
+    }
     if (ctrl) {
         if (vk == 'Z') bloques_deshacer();
         else if (vk == 'Y') bloques_rehacer();
@@ -466,8 +574,15 @@ void bloques_ui_tecla(int vk, int ctrl, int shift) {
 }
 
 void bloques_ui_caracter(int ch) {
+    if (g.bloques_ver_codigo) return;
     if (g.bloques_sel <= 0) return;
     bloques_campo_anadir(g.bloques_sel, 0, ch);
+    app_invalidar();
+}
+
+void bloques_ui_visor_alternar(void) {
+    if (!g.bloques_ver_codigo) compilador_bloques_generar();
+    g.bloques_ver_codigo = g.bloques_ver_codigo ? 0 : 1;
     app_invalidar();
 }
 

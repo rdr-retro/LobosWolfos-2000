@@ -39,6 +39,10 @@ typedef struct {
     int x, y;
     int abierto;
     char campo[2][BLOQUES_CAMPO_MAX];
+    /* Codigo generado por la fase 33. Solo lo usa codigo.lobo; se vuelca a
+     * Bloque3.codigo para que el motor lo ejecute sin cambiar el formato. */
+    char codigo[COMPILADOR_CODIGO_MAX];
+    int tiene_codigo;
 } NodoBloque;
 
 typedef struct {
@@ -262,6 +266,11 @@ void bloques_volcar_modelo(void) {
             b->ranuras[b->num_ranuras].bloque = nodos[j].id;
             b->num_ranuras++;
         }
+        /* El lobo generado viaja en `Bloque3.codigo`, no en un campo corto. */
+        if (nodos[i].tiene_codigo && strcmp(d->tipo, "codigo.lobo") == 0) {
+            copiar_texto(b->codigo, sizeof(b->codigo), nodos[i].codigo);
+            b->tiene_codigo = 1;
+        }
         b->linea = 0;
     }
     p->num_bloques = n;
@@ -296,6 +305,10 @@ void bloques_importar_modelo(void) {
         n->y = 0;
         for (j = 0; j < 2 && j < b->num_campos; j++)
             copiar_texto(n->campo[j], sizeof(n->campo[j]), b->campos[j].valor);
+        if (b->tiene_codigo) {
+            copiar_texto(n->codigo, sizeof(n->codigo), b->codigo);
+            n->tiene_codigo = 1;
+        }
         if (b->id >= siguiente_id) siguiente_id = b->id + 1;
     }
     for (i = 0; i < num_nodos; i++) {
@@ -341,6 +354,11 @@ void bloques_reiniciar(void) {
     g.bloques_arrastre = -1;
     g.bloques_desde_paleta = -1;
     g.bloques_modelo_cargado = 0;
+    g.bloques_ver_codigo = 0;
+    g.bloques_convertido = 0;
+    g.bloques_error_bloque = 0;
+    g.bloques_error_linea = 0;
+    g.bloques_error[0] = 0;
 }
 
 int bloques_crear(int def, int x, int y) {
@@ -566,14 +584,42 @@ void bloques_nodo_posicion(int id, int *x, int *y) {
     if (x) *x = i >= 0 ? nodos[i].x : 0;
     if (y) *y = i >= 0 ? nodos[i].y : 0;
 }
+void bloques_codigo_poner(int id, const char *codigo) {
+    int i;
+    asegurar();
+    i = indice_de_id(id);
+    if (i < 0) return;
+    copiar_texto(nodos[i].codigo, sizeof(nodos[i].codigo), codigo);
+    nodos[i].tiene_codigo = nodos[i].codigo[0] ? 1 : 0;
+    bloques_volcar_modelo();
+}
+const char *bloques_codigo_obtener(int id) {
+    int i = indice_de_id(id);
+    asegurar();
+    if (i < 0 || !nodos[i].tiene_codigo) return "";
+    return nodos[i].codigo;
+}
 void bloques_campo_anadir(int id, int campo, int ch) {
     int i;
     asegurar();
     i = indice_de_id(id);
     if (i < 0 || campo < 0 || campo > 1) return;
+    /* BS borra el ultimocaracter; lo usa el atajo de prueba para reemplazar
+     * el valor por defecto del campo. */
+    if (ch == '\b') {
+        int n = (int)strlen(nodos[i].campo[campo]);
+        if (n > 0) nodos[i].campo[campo][n - 1] = 0;
+        else return;
+        bloques_volcar_modelo();
+        return;
+    }
     if (ch < 32 || ch > 126) return;
     if (strlen(nodos[i].campo[campo]) >= BLOQUES_CAMPO_MAX - 1) return;
     nodos[i].campo[campo][strlen(nodos[i].campo[campo])] = (char)ch;
+    /* Editar un bloque convertido invalida el lobo que se habia generado. */
+    nodos[i].codigo[0] = 0;
+    nodos[i].tiene_codigo = 0;
+    g.bloques_convertido = 0;
     bloques_volcar_modelo();
 }
 

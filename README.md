@@ -47,6 +47,11 @@ para cargar y guardar PNG.
   deshacer/rehacer y navegación por teclado. Cada mutación vuelca el modelo a
   los bloques del proyecto LOGIC3 con el escritor existente, sin tocar el
   formato ni el CRC.
+- Compilador bloques -> lobo (fase 33): los bloques generan codigo lobo 3
+  validado por la VM, con visor de solo lectura y resaltado del bloque con
+  error. `Convertir a codigo` sustituye el lienzo por un unico bloque
+  `codigo.lobo`, de forma irreversible, y el motor ejecuta la misma traza que
+  el lobo escrito a mano.
 - Entidades y escenas en el motor (fase 26): cada objeto de la primera escena
   se instancia con posición, tamaño, capa, visibilidad, traje y variables
   propias; `mi.x`, `mi.y`, `mi.vida`, `mi.visible`, `mi.traje` y
@@ -110,10 +115,10 @@ También se puede compilar desde PowerShell:
 
 ## Pruebas
 
-`build.bat prueba` compila el editor y pasa las diez suites:
+`build.bat prueba` compila el editor y pasa las once suites:
 
 ```bat
-build.bat prueba              conformidad + logic3 + vm + entidades + eventos + colisiones + render + estudio + bloques + regresion
+build.bat prueba              conformidad + logic3 + vm + entidades + eventos + colisiones + render + estudio + bloques + compilador + regresion
 build.bat prueba conformidad  solo el lenguaje lobo
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
@@ -123,6 +128,7 @@ build.bat prueba colisiones   solo colisiones, flags y fisica
 build.bat prueba render       solo trajes, animacion, capas y camara
 build.bat prueba estudio      solo la vista Estudio
 build.bat prueba bloques      solo el lienzo de bloques
+build.bat prueba compilador   solo el compilador bloques -> lobo
 build.bat prueba regresion    solo la interfaz del editor
 build.bat prueba actualizar   reescribe los patrones (revisar el diff)
 ```
@@ -565,6 +571,33 @@ sigue siendo el conteo LOGIC3. Los flags de prueba son `--bloques`,
 `--bloque N`, `--arrastre-bloque "cat:x0,y0;x1,y1|..."` (categoría opcional y
 varios gestos separados por `|`) y `--deshacer-bloque`. `--bloque N` se aplica
 después de los arrastres para que la selección por id sea la final.
+
+#### Compilador bloques -> lobo (fase 33)
+
+Dentro de la pestaña Bloques, **VER CODIGO (F2)** genera el lobo 3 del lienzo y
+lo muestra en el area central en solo lectura, con numeros de linea y colores
+para palabras clave, `mi.` y la linea con error. **VOLVER AL LIENZO** o `Esc`
+cierran el visor. **CONVERTIR A CODIGO** es irreversible: vuelca el lobo a un
+unico bloque `codigo.lobo` y el lienzo deja de ser editable. El codigo se
+guarda en `Bloque3.codigo` y el escritor LOGIC3 emite `campo "codigo" ...` con
+el mismo formato y CRC de siempre.
+
+El generador recorre las raices en orden visual. Los sombreros de evento no
+emiten codigo: el evento ya vive en el proyecto. `mover x` genera
+`x = x + N`, `cambiar variable` genera `mi.variable("nombre") = ...`, `si` y
+`repetir siempre` generan `si`/`mientras` con su `fin`, y los reporteros se
+resuelven dentro de la sentencia que los usa. Todo se valida con
+`lobo_compilar(..., LOBO_MODO_VM, ...)`; si falla, el numero de linea se mapea
+al id del bloque que se resalta en rojo al volver al lienzo.
+
+El volcado añade una linea `cb_*` solo cuando el compilador ha intervenido
+(visor, conversion, codigo generado o error): `cb_visor=N cb_lineas=N
+cb_error=TEXTO cb_bloque=N cb_linea=N cb_convertido=N`. El error se sanitiza
+para no romper el formato de clave=valor. Los flags de prueba son
+`--compilar-bloques`, `--visor-codigo`, `--convertir-bloques`,
+`--volcar-codigo RUTA` y `--campo-bloque ID:TEXTO`. El codigo no se genera en
+cada mutacion del lienzo: solo se produce al abrir el visor, al compilar
+explicitamente o al convertir, para no alterar las capturas de la fase 32.
 
 ## Uso
 

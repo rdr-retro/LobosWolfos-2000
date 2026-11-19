@@ -1139,7 +1139,7 @@ El volcado anade campos `lb_` solo en la pestana Bloques, asi que los volcados
 de regresion siguen intactos; sus hashes BMP se regeneraron por la barra de
 seis pestanas. `pruebas/bloques.ps1` congela nueve casos con BMP, volcado,
 cinco sondas de pixel y el LOGIC3 canonico del capitulo 4.3. `build.bat prueba`
-pasa las diez suites y 86 casos. Quedan para fases posteriores la busqueda en
+pasa las once suites y 94 casos. Quedan para fases posteriores la busqueda en
 la paleta, deshabilitar bloques y la seleccion multiple; el criterio de salida
 de esta fase queda cubierto.
 
@@ -1162,6 +1162,24 @@ de esta fase queda cubierto.
 
 **Criterio de salida:** el mismo proyecto produce la misma traza desde
 bloques y desde el lobo generado escrito a mano.
+
+**Estado (19-11-2026): completada.** `src/compilador_bloques.c` recorre las
+raices del lienzo y genera un script lobo 3 por proyecto: `mover x` emite
+`x = x + N`, `cambiar variable` emite `mi.variable("nombre") = ...`, `si` y
+`repetir siempre` emiten `si`/`mientras` con su `fin`, y los reporteros se
+resuelven dentro de la sentencia que los usa. Todo se valida con
+`lobo_compilar(..., LOBO_MODO_VM, ...)`. Los sombreros de evento no emiten
+codigo porque el evento ya vive en el LOGIC3; `codigo.expresion` queda para una
+fase posterior. `NodoBloque.codigo` guarda el lobo y `bloques_volcar_modelo()`
+lo vuelca a `Bloque3.codigo`, asi que el escritor emite `campo "codigo"` con
+el mismo formato y CRC. El visor de solo lectura muestra numeros de linea y
+resalta la linea con error; al volver al lienzo el bloque implicado aparece con
+marco rojo. `Convertir a codigo` es irreversible y deja un unico bloque
+`codigo.lobo`. Los campos `cb_*` y los botones del inspector solo aparecen
+cuando el compilador interviene, para no alterar los volcados ni los hashes BMP
+de la fase 32. `pruebas/compilador.ps1` congela ocho casos, incluido `paridad`,
+que comprueba que bloques y lobo manual producen la misma traza (`18 16`).
+`build.bat prueba` pasa las once suites y 94 casos.
 
 ### Fase 34 - Depurador: valores en vivo, pausa y breakpoints
 

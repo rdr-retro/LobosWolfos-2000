@@ -1,11 +1,12 @@
 # Pruebas de LobosWolfos 2000
 
-Diez suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
+Once suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
 (fase 24), la VM resumible y lobo 3 (fase 25), entidades, escenas y ciclo de
 vida (fase 26), eventos, planificador y mensajes (fase 27), variables, listas
 y funciones (fase 28), colisiones, flags y fisica (fase 29), render de
 trajes, animacion, capas y camara (fase 30), la vista Estudio (fase 31), el
-lienzo de bloques (fase 32) y la interfaz del editor (fase 23). Congelan el
+lienzo de bloques (fase 32), el compilador bloques -> lobo (fase 33) y la
+interfaz del editor (fase 23). Congelan el
 comportamiento antes de cambiar el runtime en las fases siguientes.
 
 Todo es texto: los patrones de las capturas son hashes SHA-256 y
@@ -15,7 +16,7 @@ las pruebas no lo necesitan.
 ## Comandos
 
 ```bat
-build.bat prueba              compila y pasa las diez suites
+build.bat prueba              compila y pasa las once suites
 build.bat prueba conformidad  solo la suite del lenguaje
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
@@ -25,6 +26,7 @@ build.bat prueba colisiones   solo colisiones, flags y fisica
 build.bat prueba render       solo trajes, animacion, capas y camara
 build.bat prueba estudio      solo la vista Estudio
 build.bat prueba bloques      solo el lienzo de bloques
+build.bat prueba compilador   solo el compilador bloques -> lobo
 build.bat prueba regresion    solo la regresion del editor
 build.bat prueba actualizar   reescribe los patrones con el estado actual
 ```
@@ -43,6 +45,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\render.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\render.ps1 -Repetir
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\estudio.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\bloques.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\compilador.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\regresion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\linea_base.ps1
 ```
@@ -403,6 +406,46 @@ Para regenerar o revisar:
 build.bat prueba bloques
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\bloques.ps1 -Actualizar
 git diff pruebas\bloques\esperado
+```
+
+## Compilador bloques -> lobo (`compilador.ps1`)
+
+Suite de la fase 33. Congela el lobo generado, los campos `cb_*` del volcado,
+cuatro sondas de pixel y la traza de la VM. Los patrones viven en
+`pruebas\compilador\esperado`:
+
+| Archivo | Contenido |
+|---|---|
+| `<nombre>.lobo` | codigo generado por `--volcar-codigo` |
+| `<nombre>.pixeles` | cuatro sondas `x,y=RRGGBB` del visor o del error |
+| `<nombre>.logic3` | proyecto convertido con `campo "codigo"` |
+| `<nombre>.traza` | traza de `game.exe --logic3` |
+| `menu_indices.volcar` | indices de ARCHIVO, MODO y AYUDA |
+
+| Caso | Flags | Cubre |
+|---|---|---|
+| `generar_mover` | arrastre `2:` y `--compilar-bloques` | `x = x + 2` y `cb_lineas=1` |
+| `generar_control` | `1:` + `2:` anidados | `mientras 1` / `fin` y `lb_cuerpo=1` |
+| `generar_variable` | arrastre `3:` y `--campo-bloque` | `mi.variable("...")` |
+| `error_bloque` | `5:` con texto invalido | error mapeado a `cb_bloque` y `cb_linea` |
+| `visor` | `--visor-codigo` | `cb_visor=1` y pixeles del visor |
+| `convertir` | `--convertir-bloques` y guardado | `cb_convertido=1` y LOGIC3 |
+| `paridad` | bloques y lobo manual | misma traza desde ambos proyectos |
+| `menu_indices` | `--menu 1/2/9` | indices antiguos y sin campos `cb_` |
+
+`--campo-bloque ID:TEXTO` reemplaza el valor por defecto del campo 0, para
+poder escribir texto sin depender del orden de clics y arrastres. Los campos
+`cb_*` solo aparecen en el volcado cuando hay visor, conversion, codigo
+generado o error, de modo que los volcados de la fase 32 no cambian. El codigo
+no se genera en cada mutacion del lienzo: solo al compilar, abrir el visor o
+convertir, para preservar los hashes BMP de la fase 32.
+
+Para regenerar o revisar:
+
+```bat
+build.bat prueba compilador
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\compilador.ps1 -Actualizar
+git diff pruebas\compilador\esperado
 ```
 
 ## Regresion del editor (`regresion.ps1`)

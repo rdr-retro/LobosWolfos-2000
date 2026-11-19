@@ -1907,12 +1907,47 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
         if (strstr(cmd, "--deshacer-bloque") != NULL &&
             g.vista == VISTA_ESTUDIO && g.estudio_pestana == BLOQUES_TAB)
             bloques_deshacer();
+        /* Campo de un bloque por id (fase 33): atajo de prueba para escribir
+         * texto sin depender delorden de clics y arrastres. */
+        {
+            char *campo_arg = arg_valor(cmd, "--campo-bloque");
+            if (campo_arg && g.vista == VISTA_ESTUDIO &&
+                g.estudio_pestana == BLOQUES_TAB) {
+                int id_campo = 0;
+                const char *p = strchr(campo_arg, ':');
+                if (p && sscanf(campo_arg, "%d", &id_campo) == 1) {
+                    int k;
+                    p++;
+                    /* El campo puede venir con un valor por defecto: se
+                     * limpia para que el texto de la prueba lo reemplace. */
+                    for (k = 0; k < 8; k++)
+                        bloques_campo_anadir(id_campo, 0, '\b');
+                    while (*p) {
+                        bloques_campo_anadir(id_campo, 0, (unsigned char)*p);
+                        p++;
+                    }
+                }
+            }
+        }
         /* La seleccion por id va al final: los arrastres posteriores podian
          * dejar seleccionado el ultimo bloque creado. */
         if (g.vista == VISTA_ESTUDIO) {
             char *bloque_sel = arg_valor(cmd, "--bloque");
             if (bloque_sel && bloque_sel[0])
                 bloques_seleccionar(atoi(bloque_sel));
+        }
+        /* Compilador de bloques (fase 33): genera lobo 3, abre el visor de
+         * solo lectura o convierte el lienzo en un bloque codigo.lobo. */
+        if (g.vista == VISTA_ESTUDIO && g.estudio_pestana == BLOQUES_TAB) {
+            if (strstr(cmd, "--compilar-bloques") != NULL)
+                compilador_bloques_generar();
+            if (strstr(cmd, "--visor-codigo") != NULL) {
+                if (strstr(cmd, "--compilar-bloques") == NULL)
+                    compilador_bloques_generar();
+                g.bloques_ver_codigo = 1;
+            }
+            if (strstr(cmd, "--convertir-bloques") != NULL)
+                compilador_bloques_convertir();
         }
         /* Portapapeles simulado tras el arrastre: copiar/cortar la seleccion
          * y pegar el bloque flotante para comprobar que se dibuja. */
@@ -2256,6 +2291,9 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                     }
                     if (g.vista == VISTA_ESTUDIO &&
                         g.estudio_pestana == BLOQUES_TAB) {
+                        char cb_error[LOBO_ERROR_MAX];
+                        const char *e = compilador_bloques_error();
+                        int n = 0;
                         fprintf(vf,
                                 "lb_bloques=%d lb_sel=%d lb_ranuras=%d "
                                 "lb_cuerpo=%d lb_paleta=%d lb_categoria=%d "
@@ -2265,8 +2303,52 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                                 g.bloques_paleta_sel, g.bloques_categoria,
                                 g.bloques_foco, g.bloques_zoom,
                                 g.bloques_pan_x, g.bloques_pan_y);
+                        /* Fase 33: el error se sanitiza para que no rompa
+                         * el formato de una linea por clave. */
+                        while (e && e[n] && n < LOBO_ERROR_MAX - 1) {
+                            char ch = e[n];
+                            cb_error[n] = (ch == ' ' || ch == '\t' ||
+                                           ch == '\n' || ch == '\r' ||
+                                           ch == '=') ? '_' : ch;
+                            n++;
+                        }
+                        cb_error[n] = 0;
+                        /* Los campos cb_* solo aparecen cuando el compilador
+                         * ha intervenido: asi los volcados de la fase 32 no
+                         * cambian ni una linea. */
+                        if (g.bloques_ver_codigo || g.bloques_convertido ||
+                            cb_error[0] || compilador_bloques_lineas() > 0)
+                            fprintf(vf,
+                                    "cb_visor=%d cb_lineas=%d cb_error=%s "
+                                    "cb_bloque=%d cb_linea=%d cb_convertido=%d\n",
+                                    g.bloques_ver_codigo,
+                                    compilador_bloques_lineas(),
+                                    cb_error[0] ? cb_error : "-",
+                                    compilador_bloques_bloque_error(),
+                                    compilador_bloques_linea_error(),
+                                    g.bloques_convertido);
                     }
                     fclose(vf);
+                }
+            }
+        }
+        /* Vuelca el lobo generado (fase 33) como texto plano. */
+        {
+            char *codigo_arg = arg_valor(cmd, "--volcar-codigo");
+            if (codigo_arg) {
+                char ruta[MAX_PATH];
+                int n = 0;
+                FILE *cf;
+                while (codigo_arg[n] && codigo_arg[n] != ' ' &&
+                       codigo_arg[n] != '\t' && n < MAX_PATH - 1) {
+                    ruta[n] = codigo_arg[n];
+                    n++;
+                }
+                ruta[n] = 0;
+                cf = ruta[0] ? fopen(ruta, "w") : NULL;
+                if (cf) {
+                    fputs(compilador_bloques_codigo(), cf);
+                    fclose(cf);
                 }
             }
         }
