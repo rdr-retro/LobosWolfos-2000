@@ -805,6 +805,12 @@ pub fn blob_cargado() -> Option<&'static [u8]> {
     unsafe { *BLOB_CARGADO.get() }
 }
 
+/// Devuelve una entrada virtual del blob por nombre (fase 43). La usan los
+/// scripts VM para leer el bytecode congelado en `vm.lbin`.
+pub fn entrada_blob<'a>(blob: &'a [u8], nombre: &str) -> Option<&'a [u8]> {
+    buscar_entrada(blob, nombre)
+}
+
 /// Lee la zona de juego del disco (blob LGB1) y carga el mapa.
 ///
 /// El mapa es opcional (fase 12): si el proyecto no tiene ninguno, o no

@@ -85,7 +85,7 @@ echo Listo: "%SALIDA%"
 exit /b 0
 
 rem ------------------------------------------------------------------
-rem  Modo pruebas: build.bat prueba [conformidad^|logic3^|vm^|entidades^|eventos^|colisiones^|render^|estudio^|bloques^|compilador^|depurador^|datos^|productividad^|entrada^|hud^|audio^|save^|escenas^|perfil^|regresion^|actualizar]
+rem  Modo pruebas: build.bat prueba [conformidad^|logic3^|vm^|bios^|entidades^|eventos^|colisiones^|render^|estudio^|bloques^|compilador^|depurador^|datos^|productividad^|entrada^|hud^|audio^|save^|escenas^|perfil^|regresion^|actualizar]
 rem  Compila el editor con la configuracion normal y pasa las suites.
 rem ------------------------------------------------------------------
 :pruebas
@@ -98,6 +98,7 @@ if /i "%~2"=="regresion" goto pruebas_regresion
 if /i "%~2"=="conformidad" goto pruebas_conformidad
 if /i "%~2"=="logic3" goto pruebas_logic3
 if /i "%~2"=="vm" goto pruebas_vm
+if /i "%~2"=="bios" goto pruebas_bios
 if /i "%~2"=="entidades" goto pruebas_entidades
 if /i "%~2"=="eventos" goto pruebas_eventos
 if /i "%~2"=="colisiones" goto pruebas_colisiones
@@ -126,6 +127,10 @@ if errorlevel 1 exit /b 1
 echo.
 echo === VM resumible y lobo 3 ===
 %PS% "%AQUI%pruebas\vm.ps1"
+if errorlevel 1 exit /b 1
+echo.
+echo === Paridad BIOS del subconjunto VM ===
+%PS% "%AQUI%pruebas\bios.ps1"
 if errorlevel 1 exit /b 1
 echo.
 echo === Entidades, escenas y ciclo de vida ===
@@ -208,6 +213,10 @@ exit /b %ERRORLEVEL%
 %PS% "%AQUI%pruebas\vm.ps1"
 exit /b %ERRORLEVEL%
 
+:pruebas_bios
+%PS% "%AQUI%pruebas\bios.ps1"
+exit /b %ERRORLEVEL%
+
 :pruebas_entidades
 %PS% "%AQUI%pruebas\entidades.ps1"
 exit /b %ERRORLEVEL%
@@ -282,6 +291,8 @@ if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\logic3.ps1" -Actualizar
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\vm.ps1" -Actualizar
+if errorlevel 1 exit /b 1
+%PS% "%AQUI%pruebas\bios.ps1" -Actualizar
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\entidades.ps1" -Actualizar
 if errorlevel 1 exit /b 1

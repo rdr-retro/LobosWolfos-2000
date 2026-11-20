@@ -32,7 +32,10 @@
  * de mapas: "\\" para el motor de Windows y "/" para el kernel, que
  * busca las entradas con barra normal.
  */
+#include <stdarg.h>
+
 #include "app.h"
+#include "logic3.h"
 #include "recurso.h"
 
 #define BLOB_MAGICO "LGB1"
@@ -55,6 +58,44 @@ typedef struct {
 
 /* Mensaje del ultimo fallo de compilacion (lo muestra el dialogo). */
 static char compilar_error_msj[256];
+
+/* Fase 43: avisos de construcciones que no corren en la BIOS. Se llenan al
+ * montar el blob y se vuelcan a --bios-avisos cuando se da esa flag. */
+#define BIOS_AVISOS_MAX 8192
+static char bios_avisos_texto[BIOS_AVISOS_MAX];
+static char bios_avisos_ruta[MAX_PATH];
+/* Solo la imagen BIOS congela bytecode: la vista previa y el .exe de
+ * Windows siguen montando el blob que usaban las fases anteriores. */
+static int bios_vm_generar;
+
+void compilar_bios_avisos(const char *ruta) {
+    if (ruta) recortar_texto(bios_avisos_ruta, ruta, sizeof(bios_avisos_ruta));
+    else bios_avisos_ruta[0] = 0;
+}
+
+const char *compilar_ultimos_avisos(void) { return bios_avisos_texto; }
+
+static void bios_aviso(const char *formato, ...) {
+    char linea[512];
+    va_list args;
+    size_t usado;
+    va_start(args, formato);
+    vsnprintf(linea, sizeof(linea), formato, args);
+    va_end(args);
+    usado = strlen(bios_avisos_texto);
+    if (usado + strlen(linea) + 2 >= sizeof(bios_avisos_texto)) return;
+    if (usado > 0) strcat(bios_avisos_texto, "\n");
+    strcat(bios_avisos_texto, linea);
+}
+
+static void bios_avisos_guardar(void) {
+    FILE *f;
+    if (!bios_avisos_ruta[0]) return;
+    f = fopen(bios_avisos_ruta, "wb");
+    if (!f) return;
+    fwrite(bios_avisos_texto, 1, strlen(bios_avisos_texto), f);
+    fclose(f);
+}
 
 /* ------------------------------------------------------------------ */
 /* Bloque de bytes que crece al agregar (para montar el blob)          */
@@ -91,6 +132,236 @@ static int blob_entrada(Bloque *b, const char *nombre, const void *datos,
     if (!bloque_agregar(b, nombre, (int)strlen(nombre))) return 0;
     if (largo > 0 && !bloque_agregar(b, datos, largo)) return 0;
     return 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* Bytecode BIOS: vm.lbin (fase 43)                                    */
+/* ------------------------------------------------------------------ */
+
+static int vm_u32(Bloque *b, unsigned int v) {
+    unsigned char x[4];
+    x[0] = (unsigned char)(v & 0xffu);
+    x[1] = (unsigned char)((v >> 8) & 0xffu);
+    x[2] = (unsigned char)((v >> 16) & 0xffu);
+    x[3] = (unsigned char)((v >> 24) & 0xffu);
+    return bloque_agregar(b, x, 4);
+}
+
+static int vm_i32(Bloque *b, int v) { return vm_u32(b, (unsigned int)v); }
+
+/* Opera los mismos opcodes que acepta lobovm.rs. Los demas hacen que la
+ * maquina BIOS se agote, asi que el editor avisa y no congela ese programa. */
+static int vm_opcode_portable(int op) {
+    if (op >= 0 && op <= 23) return 1;
+    if (op == 26 || op == 27) return 1;
+    if (op >= 39 && op <= 40) return 1;
+    if (op >= 42 && op <= 47) return 1;
+    if (op == 49) return 1;
+    if (op >= 50 && op <= 55) return 1;
+    if (op >= 56 && op <= 59) return 1;
+    if (op >= 60 && op <= 63) return 1;
+    if (op >= 64 && op <= 71) return 1;
+    if (op >= 72 && op <= 74) return 1;
+    if (op >= 81 && op <= 85) return 1;
+    return 0;
+}
+
+/* Mascara MOTOR_ENT_* y ranura extendida de los nombres que conoce el
+ * planificador de eventos del motor de Windows. */
+static void vm_tecla(const char *nombre, unsigned int *mascara,
+                     unsigned int *slot) {
+    *mascara = 0;
+    *slot = 0;
+    if (!nombre) return;
+    if (!_stricmp(nombre, "izquierda")) { *mascara = 0x01; *slot = 1; }
+    else if (!_stricmp(nombre, "derecha")) { *mascara = 0x02; *slot = 2; }
+    else if (!_stricmp(nombre, "arriba")) { *mascara = 0x04; *slot = 3; }
+    else if (!_stricmp(nombre, "abajo")) { *mascara = 0x08; *slot = 4; }
+    else if (!_stricmp(nombre, "saltar") || !_stricmp(nombre, "espacio")) {
+        *mascara = 0x10; *slot = 5;
+    } else if (!_stricmp(nombre, "cerrar")) { *mascara = 0x20; }
+    else if (!_stricmp(nombre, "a")) { *slot = 7; }
+    else if (!_stricmp(nombre, "intro") || !_stricmp(nombre, "enter")) {
+        *slot = 6;
+    }
+}
+
+typedef struct {
+    int tipo, parametro, script, objeto;
+} VmEvento;
+
+/* Busca un Evento3 por id y devuelve el objeto que lo contiene (1 si es
+ * una funcion). Los ids se repiten entre objetos, como en logic3_motor.c. */
+static const Evento3 *vm_buscar_evento(const Proyecto3 *p, int id, int *dueno) {
+    int i, j;
+    if (!p) return NULL;
+    for (i = 0; i < p->num_objetos; i++) {
+        for (j = 0; j < p->objetos[i].num_eventos; j++) {
+            if (p->objetos[i].eventos[j].id != id) continue;
+            *dueno = p->objetos[i].id > 0 ? p->objetos[i].id : 1;
+            return &p->objetos[i].eventos[j];
+        }
+    }
+    for (i = 0; i < p->num_funciones; i++) {
+        for (j = 0; j < p->funciones[i].num_eventos; j++) {
+            if (p->funciones[i].eventos[j].id != id) continue;
+            *dueno = 1;
+            return &p->funciones[i].eventos[j];
+        }
+    }
+    return NULL;
+}
+
+/* Compila los botones FUNCIONES en modo VM y escribe la entrada vm.lbin.
+ * Los avisos se acumulan en bios_avisos_texto; un fallo aqui no impide que
+ * el blob siga llevando el proyecto y los mapas (el kernel cae al
+ * interprete clasico si no hay bytecode valido). */
+static int vm_serializar(Bloque *blob) {
+    LoboPrograma programas[32];
+    int ids[32];
+    int bloques_funcion[32];
+    VmEvento eventos[64];
+    int num_programas = 0, num_eventos = 0;
+    Bloque vm;
+    Proyecto3 *p3;
+    int i, k, bloque_codigo = 0;
+    int ok = 0;
+
+    for (i = 0; i < 32; i++) bloques_funcion[i] = -1;
+
+    memset(&vm, 0, sizeof(vm));
+    bios_avisos_texto[0] = 0;
+
+    /* Avisos de los bloques del lienzo, en orden de creacion. */
+    for (i = 0; i < bloques_cantidad(); i++) {
+        int id = bloques_nodo_id(i);
+        int def = bloques_nodo_def(id);
+        if (id > 0 && bloques_nodo_no_bios(id))
+            bios_aviso("bloque %d (%s): no portable en BIOS", id,
+                       bloques_nombre_def(def));
+    }
+
+    p3 = logic3_modelo_activo();
+    for (i = 0; i < g.num_funciones && i < 32; i++) {
+        const FuncionCodigo *f = &g.funciones[i];
+        LoboPrograma *prog;
+        char error[LOBO_ERROR_MAX];
+        int j, malo = 0;
+        int bloque_actual = -1;
+
+        /* logic3_a_logic2 crea una funcion por bloque codigo.lobo, en el
+         * mismo orden: asi se recupera el evento de cada programa. */
+        if (p3) {
+            while (bloque_codigo < p3->num_bloques &&
+                   strcmp(p3->bloques[bloque_codigo].tipo, "codigo.lobo") != 0)
+                bloque_codigo++;
+            if (bloque_codigo < p3->num_bloques)
+                bloque_actual = bloque_codigo++;
+        }
+        if (!f->codigo[0]) continue;
+        prog = &programas[num_programas];
+        lobo_programa_iniciar(prog);
+        if (!lobo_compilar(f->codigo, prog, LOBO_MODO_VM, error, sizeof(error))) {
+            bios_aviso("funcion %d (%s): %s", f->id, f->nombre, error);
+            lobo_programa_liberar(prog);
+            continue;
+        }
+        for (j = 0; j < prog->largo; j++) {
+            if (!vm_opcode_portable((int)prog->insts[j].op)) {
+                bios_aviso("funcion %d (%s): opcode %d no portable en BIOS",
+                           f->id, f->nombre, (int)prog->insts[j].op);
+                malo = 1;
+                break;
+            }
+        }
+        if (malo || prog->largo > 4096 || prog->num_textos > 64) {
+            lobo_programa_liberar(prog);
+            continue;
+        }
+        ids[num_programas] = f->id;
+        bloques_funcion[num_programas] = bloque_actual;
+        num_programas++;
+    }
+
+    /* Un evento por bloque codigo.lobo que haya llegado a la imagen. Si el
+     * proyecto es LOGIC2 (sin modelo LOGIC3), todos corren en fotograma. */
+    for (k = 0; k < num_programas; k++) {
+        const Bloque3 *b = NULL;
+        const Evento3 *ev = NULL;
+        int dueno = 1;
+        VmEvento *salida;
+
+        if (p3 && bloques_funcion[k] >= 0 && bloques_funcion[k] < p3->num_bloques)
+            b = &p3->bloques[bloques_funcion[k]];
+        if (num_eventos >= 64) {
+            bios_aviso("demasiados eventos BIOS; se omiten los restantes");
+            break;
+        }
+        salida = &eventos[num_eventos++];
+        salida->script = ids[k];
+        salida->objeto = 1;
+        salida->tipo = L3_EVENTO_FOTOGRAMA;
+        salida->parametro = 0;
+
+        if (b) ev = vm_buscar_evento(p3, b->evento, &dueno);
+        if (!ev) continue;
+        salida->objeto = dueno;
+        salida->tipo = ev->tipo;
+        if (ev->tipo == L3_EVENTO_TECLA) {
+            unsigned int mascara = 0, slot = 0;
+            vm_tecla(ev->nombre, &mascara, &slot);
+            salida->parametro = (int)((mascara & 0xffu) |
+                                      ((slot & 0xffu) << 8) |
+                                      (((unsigned int)ev->flanco & 0xffu) << 16));
+        } else if (ev->tipo == L3_EVENTO_TOCAR) {
+            salida->parametro = ev->objeto;
+        } else if (ev->tipo == L3_EVENTO_CADA) {
+            salida->parametro = ev->cada;
+        } else if (ev->tipo == L3_EVENTO_ESCENA) {
+            salida->parametro = ev->escena;
+        }
+    }
+
+    /* Cabecera y cuerpo. Los textos de instruccion van como indice plano,
+     * que es lo que escribe el compilador C y lo que acepta la VM BIOS. */
+    if (!vm_u32(&vm, 0x314d564cu) ||      /* "LVM1" */
+        !vm_u32(&vm, 1u) ||
+        !vm_u32(&vm, (unsigned int)num_programas) ||
+        !vm_u32(&vm, (unsigned int)num_eventos)) goto fin;
+    for (k = 0; k < num_programas; k++) {
+        LoboPrograma *prog = &programas[k];
+        if (!vm_i32(&vm, ids[k]) ||
+            !vm_u32(&vm, (unsigned int)prog->largo) ||
+            !vm_u32(&vm, (unsigned int)prog->num_textos)) goto fin;
+        for (i = 0; i < prog->largo; i++) {
+            unsigned char op = (unsigned char)prog->insts[i].op;
+            if (!bloque_agregar(&vm, &op, 1) ||
+                !bloque_agregar(&vm, "\0\0\0", 3) ||
+                !vm_i32(&vm, prog->insts[i].valor) ||
+                !vm_i32(&vm, prog->insts[i].extra)) goto fin;
+        }
+        for (i = 0; i < prog->num_textos; i++) {
+            char texto[64];
+            memset(texto, 0, sizeof(texto));
+            strncpy(texto, prog->textos[i], sizeof(texto) - 1);
+            if (!bloque_agregar(&vm, texto, 64)) goto fin;
+        }
+    }
+    for (k = 0; k < num_eventos; k++) {
+        if (!vm_i32(&vm, eventos[k].tipo) ||
+            !vm_i32(&vm, eventos[k].parametro) ||
+            !vm_i32(&vm, eventos[k].script) ||
+            !vm_i32(&vm, eventos[k].objeto)) goto fin;
+    }
+    if (!blob_entrada(blob, "vm.lbin", vm.datos, vm.largo)) goto fin;
+    ok = 1;
+
+fin:
+    for (k = 0; k < num_programas; k++) lobo_programa_liberar(&programas[k]);
+    free(vm.datos);
+    if (!ok) formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                       "No hay memoria para congelar el bytecode BIOS.");
+    return ok;
 }
 
 /* ------------------------------------------------------------------ */
@@ -248,6 +519,9 @@ static int compilar_reunir(Bloque *blob, char separador) {
                   "No hay memoria para montar el proyecto.");
         return 0;
     }
+
+    /* 2b. Solo la BIOS congela bytecode y recoge avisos (fase 43). */
+    if (bios_vm_generar && !vm_serializar(blob)) return 0;
 
     /* 3. Cada mapa referenciado y sus tiles, como archivos virtuales. */
     for (i = 0; i < num_maps; i++) {
@@ -754,11 +1028,14 @@ int compilar_bios(const char *ruta) {
     memset(&blob, 0, sizeof(blob));
 
     /* 1-3. El proyecto activo como entradas del blob (barra normal,
-     * que es como las busca el kernel). */
+     * que es como las busca el kernel). Solo aqui se anade vm.lbin. */
+    bios_vm_generar = 1;
     if (!compilar_reunir(&blob, '/')) {
+        bios_vm_generar = 0;
         free(blob.datos);
         return 0;
     }
+    bios_vm_generar = 0;
 
     /* 4. Pie al final del ultimo sector: relleno con ceros hasta el
      * multiplo de sector y largo total (pie incluido), que es lo que el
@@ -816,6 +1093,7 @@ int compilar_bios(const char *ruta) {
                   "Fallo al escribir la imagen %s.", ruta);
         return 0;
     }
+    bios_avisos_guardar();
     return 1;
 }
 
@@ -858,9 +1136,13 @@ void dialogo_compilar_bios(void) {
     ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY |
                 OFN_OVERWRITEPROMPT;
     if (!GetSaveFileNameA(&ofn)) return;
-    if (compilar_bios(ruta))
+    if (compilar_bios(ruta)) {
         app_estado("Imagen USB compilada: %s (flashea con flashear.bat)", ruta);
-    else
+        if (compilar_ultimos_avisos()[0])
+            dialogo_informacion("Avisos BIOS (no portables)",
+                                compilar_ultimos_avisos());
+    } else {
         dialogo_error(compilar_error_msj);
+    }
     app_invalidar();
 }

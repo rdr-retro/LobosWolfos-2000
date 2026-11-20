@@ -19,10 +19,12 @@
 
 use crate::activo;
 use crate::audio;
+use crate::biosent;
 use crate::cpu;
 use crate::gfx;
 use crate::input;
 use crate::lobo;
+use crate::lobovm;
 use crate::motor::{self, MotorCelda, MotorMapa};
 use crate::motor::{
     MOTOR_ENT_ABAJO, MOTOR_ENT_ARRIBA, MOTOR_ENT_CERRAR, MOTOR_ENT_DERECHA, MOTOR_ENT_IZQUIERDA,
@@ -83,11 +85,24 @@ static SCRIPTS: SyncCell<[Script; activo::USADAS_MAX]> =
     SyncCell::new([Script::NUEVO; activo::USADAS_MAX]);
 static NUM_SCRIPTS: SyncCell<usize> = SyncCell::new(0);
 
+/* Fase 43: una maquina VM por script. Solo se usa cuando el blob trae la
+ * entrada `vm.lbin`; si no la hay, los scripts siguen corriendo con el
+ * interprete clasico de lobo.rs y estas maquinas quedan intactas. */
+static VM_MAQUINAS: SyncCell<[lobovm::Maquina; activo::USADAS_MAX]> =
+    SyncCell::new([lobovm::Maquina::NUEVA; activo::USADAS_MAX]);
+/// Mascara MOTOR_ENT_* del fotograma anterior, para los flancos de los
+/// eventos `tecla` declarados por LOGIC3. No se usa fuera de la VM.
+static VM_ENTRADA_ANTERIOR: SyncCell<u32> = SyncCell::new(0);
+
 /// Compila los scripts del proyecto y prepara una maquina por elemento
 /// (el puerto de scripts_preparar de juego.c). Las funciones vacias o
 /// borradas se saltan; las que no compilan se avisan por la serie y
 /// tambien se saltan: el resto del juego sigue corriendo.
 fn scripts_preparar() {
+    if lobovm::cantidad() > 0 {
+        vm_scripts_preparar();
+        return;
+    }
     let ids = activo::funciones_usadas();
     let programas = unsafe { &mut *PROGRAMAS.get() };
     let prog_id = unsafe { &mut *PROG_ID.get() };
@@ -137,6 +152,45 @@ fn scripts_preparar() {
     unsafe { *NUM_PROGRAMAS.get() = num_programas };
     unsafe { *NUM_SCRIPTS.get() = num_scripts };
     println!("egine: lobo: {} scripts.", num_scripts);
+}
+
+/* Prepara los scripts del bytecode BIOS: el editor congela en `vm.lbin` un
+ * programa por funcion y el kernel no vuelve a compilar el texto. Conserva
+ * el mismo orden de `funciones_usadas` que el motor de Windows para que la
+ * serie de eventos y las posiciones coincidan. */
+fn vm_scripts_preparar() {
+    let ids = activo::funciones_usadas();
+    let scripts = unsafe { &mut *SCRIPTS.get() };
+    let prog_id = unsafe { &mut *PROG_ID.get() };
+    let maquinas = unsafe { &mut *VM_MAQUINAS.get() };
+    let mut num_scripts = 0usize;
+
+    for &id in ids {
+        let Some(codigo) = activo::funcion_codigo(id) else {
+            continue;
+        };
+        if codigo.is_empty() {
+            continue;
+        }
+        let Some(prog) = lobovm::indice_programa(id) else {
+            println!("egine: bios: funcion {} sin bytecode.", id);
+            continue;
+        };
+        if num_scripts >= activo::USADAS_MAX {
+            break;
+        }
+        scripts[num_scripts].prog = prog;
+        prog_id[num_scripts] = id;
+        maquinas[num_scripts].reiniciar();
+        num_scripts += 1;
+    }
+
+    unsafe {
+        *NUM_PROGRAMAS.get() = lobovm::cantidad();
+        *NUM_SCRIPTS.get() = num_scripts;
+    }
+    println!("egine: lobo: {} scripts.", num_scripts);
+    println!("egine: bios vm {} scripts.", num_scripts);
 }
 
 /// Colision AABB de la caja del sprite contra las celdas del mapa,
@@ -279,18 +333,113 @@ impl Juego {
             let lado = self.mapa.lado;
             let celdas =
                 unsafe { core::slice::from_raw_parts(celdas_ptr, num_celdas as usize) };
-            let programas = unsafe { &*PROGRAMAS.get() };
-            let scripts = unsafe { &mut *SCRIPTS.get() };
-            for (indice, s) in scripts.iter_mut().take(num_scripts).enumerate() {
-                perfil::serie(indice);
-                let mut choca = |cx: i32, cy: i32| choca_caja(cx, cy, celdas, lado);
-                lobo::ejecutar(&programas[s.prog], &mut st, &mut choca, &mut s.maquina);
-                if s.maquina.cerrar {
-                    self.corriendo = false;
+
+            if lobovm::cantidad() > 0 {
+                /* Fase 43: bytecode congelado por el editor. La VM se
+                 * reanuda en cada fotograma y los eventos declarados se
+                 * reparten por id de funcion, igual que en Windows. */
+                biosent::jugador_mover(self.x, self.y);
+                let scripts = unsafe { &*SCRIPTS.get() };
+                let prog_id = unsafe { &*PROG_ID.get() };
+                let maquinas = unsafe { &mut *VM_MAQUINAS.get() };
+
+                /* No hay barrido incondicional: en LOGIC3 cada bloque es un
+                 * evento. Solo los eventos que se repiten (`fotograma` y
+                 * tecla mantenida) llaman a `fotograma`; el resto usa
+                 * `evento`, igual que eventos.c del motor de Windows. */
+                let mantenida = input::entrada();
+                let anterior_vm = unsafe { *VM_ENTRADA_ANTERIOR.get() };
+                biosent::disparar_declarados(
+                    self.fotograma,
+                    mantenida,
+                    anterior_vm,
+                    st.ext.teclas,
+                    st.ext.anterior,
+                );
+
+                /* Las esperas de los disparos siguen contando aunque no
+                 * llegue un evento nuevo (eventos.c, paso 2). */
+                for script_id in biosent::scripts_esperables().iter().copied() {
+                    if script_id < 0 {
+                        break;
+                    }
+                    for i in 0..num_scripts {
+                        if prog_id[i] != script_id || !maquinas[i].esta_esperando() {
+                            continue;
+                        }
+                        let Some(prog) = lobovm::programa_indice(scripts[i].prog as i32) else {
+                            continue;
+                        };
+                        maquinas[i].establecer_entidad(1);
+                        let mut choca = |cx: i32, cy: i32| choca_caja(cx, cy, celdas, lado);
+                        lobovm::reanudar(prog, &mut st, &mut maquinas[i], &mut choca);
+                        if maquinas[i].detener_todo() {
+                            self.corriendo = false;
+                        }
+                    }
+                }
+
+                let mut entregados = 0usize;
+                while entregados < 32 {
+                    let Some((tipo, parametro, script, objeto)) = biosent::tomar() else {
+                        break;
+                    };
+                    entregados += 1;
+                    biosent::evento_ejecutado();
+                    println!(
+                        "egine: bios evento {} param {} script {} objeto {}.",
+                        tipo, parametro, script, objeto
+                    );
+                    let repetir = biosent::es_repetitivo(tipo, parametro);
+                    for i in 0..num_scripts {
+                        if script >= 0 && prog_id[i] != script {
+                            continue;
+                        }
+                        let Some(prog) = lobovm::programa_indice(scripts[i].prog as i32) else {
+                            continue;
+                        };
+                        maquinas[i].establecer_entidad(objeto);
+                        let mut choca = |cx: i32, cy: i32| choca_caja(cx, cy, celdas, lado);
+                        if repetir {
+                            lobovm::fotograma(prog, &mut st, &mut maquinas[i], &mut choca);
+                        } else {
+                            lobovm::evento(prog, &mut st, &mut maquinas[i], &mut choca);
+                        }
+                        if maquinas[i].detener_todo() {
+                            self.corriendo = false;
+                        }
+                    }
+                }
+                unsafe { *VM_ENTRADA_ANTERIOR.get() = mantenida };
+                let (pendientes, emitidos, ejecutados) = biosent::contadores();
+                println!(
+                    "egine: bios entidades {} cola {} emitidos {} ejecutados {}.",
+                    biosent::cantidad(),
+                    pendientes,
+                    emitidos,
+                    ejecutados
+                );
+            } else {
+                let programas = unsafe { &*PROGRAMAS.get() };
+                let scripts = unsafe { &mut *SCRIPTS.get() };
+                for (indice, s) in scripts.iter_mut().take(num_scripts).enumerate() {
+                    perfil::serie(indice);
+                    let mut choca = |cx: i32, cy: i32| choca_caja(cx, cy, celdas, lado);
+                    lobo::ejecutar(&programas[s.prog], &mut st, &mut choca, &mut s.maquina);
+                    if s.maquina.cerrar {
+                        self.corriendo = false;
+                    }
                 }
             }
+
             self.x = st.x;
             self.y = st.y;
+            if lobovm::cantidad() > 0 {
+                biosent::jugador_mover(self.x, self.y);
+                /* Mismo triple que la traza determinista de game.exe, con
+                 * prefijo para no mezclarlo con el rastro por segundo. */
+                println!("egine: vm {} {} {}.", self.fotograma, self.x, self.y);
+            }
             self.cerrar_fotograma();
             perfil::fin_fotograma();
             return;
@@ -423,6 +572,9 @@ impl Juego {
                 VENTANA_ALTO,
                 VENTANA_ANCHO as usize,
             );
+            if lobovm::cantidad() > 0 {
+                biosent::renderizar(&lienzo, 0, 0);
+            }
             gfx::dibujar_hud(&lienzo, &lobo::hud_estado());
             aplicar_efectos(fb);
             return;
@@ -484,6 +636,11 @@ impl Juego {
                 0,
                 zoom,
             );
+        }
+        /* Fase 43: las entidades de la VM van entre el mundo y el HUD. Sin
+         * bytecode no hay entidades, asi que no se escribe ningun pixel. */
+        if lobovm::cantidad() > 0 {
+            biosent::renderizar(&lienzo, cam_x, cam_y);
         }
         /* Fase 38: la capa del HUD va justo despues del mundo. Si ningun
          * script ha pedido HUD, dibujar_hud no toca el framebuffer. */
@@ -605,6 +762,25 @@ pub fn arrancar(mi: &gfx::ModeInfo) -> ! {
     if sin_mapa {
         println!("egine: sin mapa: ventana en negro.");
     }
+    /* Fase 43: entorno limpio antes de cargar el bytecode: el cargador
+     * declara los eventos justo despues y `limpiar` los borraria. */
+    biosent::limpiar(16, 16);
+
+    /* Fase 43: si el editor congelo el bytecode en `vm.lbin`, la BIOS lo
+     * ejecuta en vez de compilar el texto otra vez. Un blob viejo sin la
+     * entrada sigue por el camino clasico de lobo.rs. */
+    let vm_entrada = activo::blob_cargado().and_then(|b| activo::entrada_blob(b, "vm.lbin"));
+    let vm_programas = match vm_entrada {
+        Some(datos) => lobovm::cargar(datos),
+        None => 0,
+    };
+    if vm_programas > 0 {
+        println!("egine: bios vm {} programas.", vm_programas);
+    } else if vm_programas < 0 {
+        println!("egine: bios vm invalida; se usa el interprete clasico.");
+        // Un bytecode danado no debe dejar programas a medias.
+        // lobovm::cargar ya devuelve -1 sin publicar ninguno.
+    }
     // Compila los botones FUNCIONES del proyecto (fase 8): el resto del
     // juego sigue corriendo aunque alguno no compile.
     scripts_preparar();
@@ -631,6 +807,7 @@ pub fn arrancar(mi: &gfx::ModeInfo) -> ! {
     };
     // El hueco de nacimiento con margen, para no empezar pegado a un muro.
     juego.buscar_spawn();
+    biosent::jugador_mover(juego.x, juego.y); // fase 43: jugador tras el spawn
     juego.renderizar(fb);
     presentar(fb, mi);
     println!(

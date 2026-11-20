@@ -107,6 +107,16 @@ static void dibujar_bloque(const BloqueCaja *c) {
     dibujar_marco_z(c->z, seleccionado ? 0x00FFFFFFu : BLOQ_COLOR_BORDE);
     if (g.bloques_error_bloque == c->id)
         dibujar_marco_z(c->z, 0x00E04040u);
+    /* Fase 43: esquina rayada para los bloques que no corren en BIOS. No
+     * cambia la caja ni el id, asi que el layout y las capturas siguen. */
+    if (bloques_nodo_no_bios(c->id)) {
+        int hx = zona_derecha(c->z) - 14;
+        int hy = zona_abajo(c->z) - 14;
+        for (i = 0; i < 4; i++)
+            dibujar_rect(hx + i * 3, hy + (3 - i) * 2,
+                         hx + i * 3 + 1, hy + (3 - i) * 2 + 4,
+                         0x00E0A030u);
+    }
     if (seleccionado)
         dibujar_rect(c->z.x + 1, c->z.y + 1, c->z.x + 3, zona_abajo(c->z) - 1,
                      0x00FFFFFFu);
@@ -290,7 +300,12 @@ static void dibujar_inspector_bloques(void) {
         formatear(linea, sizeof(linea), "campo %s",
                   bloques_nodo_campo(id, 0));
         fuente_dibujar(x, y, linea, BLOQ_COLOR_TEXTO);
-        y += 18;
+        y += 12;
+        if (bloques_nodo_no_bios(id)) {
+            fuente_dibujar(x, y, "BIOS: no portable", 0x00E0A030u);
+            y += 12;
+        }
+        y += 6;
         fuente_dibujar(x, y, "ATAJOS", 0x001E88E5u);
         y += 14;
         fuente_dibujar(x, y, "TAB     paleta / lienzo", BLOQ_COLOR_TEXTO);

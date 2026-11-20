@@ -23,6 +23,8 @@ use core::panic::PanicInfo;
 mod activo;
 mod audio;
 mod bios;
+mod biosent;
+mod lobovm;
 mod cmos;
 mod console;
 mod cpu;

@@ -361,6 +361,35 @@ pub fn hud_limpiar() {
     unsafe { *HUD.get() = HudEstado::NUEVO };
 }
 
+/// Fase 43: entrada minima al HUD desde la VM del subconjunto BIOS. El
+/// interprete clasico ya tiene estas tres operaciones dentro de `ejecutar`;
+/// aqui se exponen para que la VM no necesite duplicar el codigo.
+pub fn hud_vidas(valor: i32) -> i32 {
+    let hud = unsafe { &mut *HUD.get() };
+    let anterior = hud.vidas;
+    if valor >= 0 {
+        hud.vidas = valor;
+        hud.activo = true;
+    }
+    anterior
+}
+
+pub fn hud_puntos(valor: i32) -> i32 {
+    let hud = unsafe { &mut *HUD.get() };
+    let anterior = hud.puntos;
+    if valor >= 0 {
+        hud.puntos = valor;
+        hud.activo = true;
+    }
+    anterior
+}
+
+pub fn hud_dialogo(linea: i32, texto: &[u8]) {
+    let hud = unsafe { &mut *HUD.get() };
+    hud.activo = true;
+    hud.poner_dialogo(linea, texto);
+}
+
 /// Cierra un fotograma del HUD: descarta los elementos sueltos, calcula
 /// el clic del raton y pasa de linea en el dialogo con enter o espacio.
 pub fn hud_fotograma(ext: &EntradaExt) {

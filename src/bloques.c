@@ -56,6 +56,21 @@ static const char *CATEGORIAS[BLOQUES_CATEGORIAS] = {
     "EVENTOS", "CONTROL", "MOVIMIENTO", "DATOS", "OPERADORES", "CODIGO"
 };
 
+/* Fase 43: bloques que el subconjunto BIOS no puede ejecutar. Se mantiene
+ * aparte de DEFS para no desplazar ningun indice ni romper las capturas. */
+static const unsigned char DEFS_NO_BIOS[BLOQUES_DEFS] = {
+    [9] = 1,  /* codigo.lobo: se decide mirando su texto */
+    [13] = 1, /* hud.texto */
+    [14] = 1, /* hud.plantilla */
+    [20] = 1, /* datos.guardar */
+    [21] = 1, /* datos.cargar */
+    [22] = 1, /* datos.borrar_save */
+    [23] = 1, /* datos.record */
+    [24] = 1, /* datos.record_actual */
+    [25] = 1, /* datos.ajuste */
+    [26] = 1  /* datos.ajuste_actual */
+};
+
 static const DefBloque DEFS[BLOQUES_DEFS] = {
     { "eventos.inicio", "al inicio", 0, FORMA_HAT, 0x0043A047u,
       { 0, 0 }, { "", "" }, { "", "" } },
@@ -592,6 +607,37 @@ const char *bloques_def_campo(int def, int indice) {
     asegurar();
     if (def < 0 || def >= BLOQUES_DEFS || indice < 0 || indice > 1) return "";
     return DEFS[def].campo_nombre[indice];
+}
+
+/* Busca en el codigo de un bloque las llamadas que la VM BIOS no tiene. */
+static int codigo_no_bios(const char *codigo) {
+    static const char *prohibidas[] = {
+        "llamar", "retornar", "lista", "anadir", "insertar", "ordenar",
+        "clonar", "enviar_a", "hud_texto", "hud_rect", "hud_barra",
+        "hud_imagen", "hud_boton", "hud_plantilla", "guardar", "cargar",
+        "borrar_save", "record", "ajuste", "camara", "efecto", "transicion"
+    };
+    int i;
+    if (!codigo) return 0;
+    for (i = 0; i < (int)(sizeof(prohibidas) / sizeof(prohibidas[0])); i++)
+        if (strstr(codigo, prohibidas[i])) return 1;
+    return 0;
+}
+
+int bloques_def_no_bios(int def) {
+    asegurar();
+    return (def >= 0 && def < BLOQUES_DEFS) ? DEFS_NO_BIOS[def] : 0;
+}
+
+int bloques_nodo_no_bios(int id) {
+    int i = indice_de_id(id);
+    asegurar();
+    if (i < 0) return 0;
+    if (!DEFS_NO_BIOS[nodos[i].def]) return 0;
+    /* codigo.lobo solo es no portable si su texto usa algo de la lista. */
+    if (strcmp(DEFS[nodos[i].def].tipo, "codigo.lobo") == 0)
+        return codigo_no_bios(nodos[i].codigo);
+    return 1;
 }
 
 int bloques_nodo_id(int indice) {

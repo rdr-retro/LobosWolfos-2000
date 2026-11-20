@@ -1599,13 +1599,9 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
             char *l3_arg = arg_valor(cmd, "--abrir-logic3");
             if (l3_arg) {
                 char l3_ruta[MAX_PATH];
-                int n = 0;
-                while (l3_arg[n] && l3_arg[n] != ' ' &&
-                       l3_arg[n] != '\t' && n < MAX_PATH - 1) {
-                    l3_ruta[n] = l3_arg[n];
-                    n++;
-                }
-                l3_ruta[n] = 0;
+                /* arg_valor ya respeta las comillas: conservar los espacios
+                 * de la ruta (por ejemplo "GreenBlue kit"). */
+                recortar_texto(l3_ruta, l3_arg, sizeof(l3_ruta));
                 if (l3_ruta[0] && logic3_cargar_editor(l3_ruta)) {
                     g.vista = VISTA_MODULOS;
                     app_actualizar_titulo();
@@ -1725,13 +1721,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
             char *l3_arg = arg_valor(cmd, "--abrir-logic3");
             if (l3_arg) {
                 char l3_ruta[MAX_PATH];
-                int n = 0;
-                while (l3_arg[n] && l3_arg[n] != ' ' &&
-                       l3_arg[n] != '\t' && n < MAX_PATH - 1) {
-                    l3_ruta[n] = l3_arg[n];
-                    n++;
-                }
-                l3_ruta[n] = 0;
+                recortar_texto(l3_ruta, l3_arg, sizeof(l3_ruta));
                 if (l3_ruta[0] && logic3_cargar_editor(l3_ruta))
                     g.vista = VISTA_MODULOS;
             }
@@ -2416,13 +2406,19 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
             char *bios_arg = arg_valor(cmd, "--compilar-bios");
             if (bios_arg) {
                 char bios_ruta[MAX_PATH];
-                int n = 0;
-                while (bios_arg[n] && bios_arg[n] != ' ' &&
-                       bios_arg[n] != '\t' && n < MAX_PATH - 1) {
-                    bios_ruta[n] = bios_arg[n];
-                    n++;
+                recortar_texto(bios_ruta, bios_arg, sizeof(bios_ruta));
+                /* Fase 43: --bios-avisos <ruta> vuelca los avisos de
+                 * no portabilidad sin cambiar el menu ni otras flags. */
+                {
+                    char *avisos_arg = arg_valor(cmd, "--bios-avisos");
+                    if (avisos_arg) {
+                        char avisos_ruta[MAX_PATH];
+                        recortar_texto(avisos_ruta, avisos_arg, sizeof(avisos_ruta));
+                        compilar_bios_avisos(avisos_ruta);
+                    } else {
+                        compilar_bios_avisos(NULL);
+                    }
                 }
-                bios_ruta[n] = 0;
                 if (bios_ruta[0]) compilar_bios(bios_ruta);
             }
         }

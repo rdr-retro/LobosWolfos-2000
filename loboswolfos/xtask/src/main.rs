@@ -805,6 +805,26 @@ fn probar_imagen(root: &Path, img: &Path, exigir_lobo: bool) {
         fallos.push("los scripts lobo no se prepararon (falta \"egine: lobo: N scripts\")");
     }
 
+    /* Fase 43: cuando la imagen trae bytecode BIOS, exige que se haya
+     * cargado, que la VM haya avanzado y que el planificador haya cerrado
+     * algunos fotogramas. Sin `vm.lbin` no se comprueba nada y el comportamiento
+     * de las suites anteriores queda intacto. */
+    if texto.contains("egine: bios vm ") {
+        if !texto
+            .lines()
+            .any(|l| l.starts_with("egine: bios vm ") && l.ends_with(" scripts."))
+            || !texto.lines().any(|l| l.starts_with("egine: vm "))
+        {
+            fallos.push("la VM BIOS no avanzo (falta \"egine: vm\")");
+        }
+        if !texto.lines().any(|l| l.starts_with("egine: bios entidades ")) {
+            fallos.push("el planificador BIOS no cerro ningun fotograma");
+        }
+        if texto.contains("egine: bios: funcion ") {
+            fallos.push("una funcion no tenia bytecode en vm.lbin");
+        }
+    }
+
     if fallos.is_empty() {
         println!("loboswolfos: prueba del juego SUPERADA.");
     } else {

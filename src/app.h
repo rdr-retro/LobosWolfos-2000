@@ -1743,6 +1743,8 @@ unsigned int bloques_def_color(int def);
 const char *bloques_categoria_nombre(int cat);
 const char *bloques_def_slot(int def, int indice);
 const char *bloques_def_campo(int def, int indice);
+int  bloques_def_no_bios(int def);
+int  bloques_nodo_no_bios(int id);
 int  bloques_layout(int x, int y, int ancho, int alto,
                     BloqueCaja *cajas, int max);
 int  bloques_nodo_id(int indice);
@@ -1782,6 +1784,10 @@ int  compilar_windows(const char *ruta);
 void dialogo_compilar_windows(void);
 int  compilar_bios(const char *ruta);
 void dialogo_compilar_bios(void);
+/* Fase 43: ruta opcional donde volcar los avisos de no portabilidad y
+ * accessor al texto mostrado tambien en el dialogo de compilacion. */
+void compilar_bios_avisos(const char *ruta);
+const char *compilar_ultimos_avisos(void);
 
 /* Vista previa del juego (juego_ventana.c, fase 9): los botones
  * play/pausa/stop de la barra prueban el proyecto sin exportar .exe. */
