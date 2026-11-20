@@ -1,0 +1,5 @@
+plantillas=5
+catalogo=plataformas;shooter;puzzle;aventura;laberinto
+seleccion=plataformas
+jn=0 jn_sel=0 tut=0 tut_paso=0 ayuda=0
+creada=logic\primer_juego.logic3

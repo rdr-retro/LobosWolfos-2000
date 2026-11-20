@@ -3664,6 +3664,293 @@ void ui_dibujar_guia(void) {
 
 
 /* ------------------------------------------------------------------ */
+/* Fase 44: juego nuevo, tutorial y ayuda por bloque                    */
+/* ------------------------------------------------------------------ */
+#define JN_ANCHO_V       470
+#define JN_ALTO_V        390
+#define JN_TITULO_V      26
+#define JN_FILA_ALTO_V   44
+#define JN_BOTON_ALTO_V  28
+
+static Zona jn_boton_zona(int indice) {
+    Zona v = juego_nuevo_zona();
+    int y = zona_abajo(v) - 44;
+    if (indice == 0) return zona_hacer(v.x + 70, y, 140, JN_BOTON_ALTO_V);
+    return zona_hacer(zona_derecha(v) - 210, y, 140, JN_BOTON_ALTO_V);
+}
+
+Zona juego_nuevo_zona(void) {
+    int x = (g.ancho - JN_ANCHO_V) / 2;
+    int y = (g.alto - JN_ALTO_V) / 2;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    return zona_hacer(x, y, JN_ANCHO_V, JN_ALTO_V);
+}
+
+Zona juego_nuevo_fila_zona(int indice) {
+    Zona v = juego_nuevo_zona();
+    if (indice < 0 || indice >= PLANTILLAS_TOTAL) return zona_vacia();
+    return zona_hacer(v.x + 20, v.y + 60 + indice * JN_FILA_ALTO_V,
+                      v.ancho - 40, JN_FILA_ALTO_V - 4);
+}
+
+int juego_nuevo_fila_en(int x, int y) {
+    int i;
+    if (!g.juego_nuevo_visible) return -1;
+    for (i = 0; i < PLANTILLAS_TOTAL; i++)
+        if (zona_contiene(juego_nuevo_fila_zona(i), x, y)) return i;
+    return -1;
+}
+
+int juego_nuevo_boton_en(int x, int y) {
+    if (!g.juego_nuevo_visible) return -1;
+    if (zona_contiene(jn_boton_zona(0), x, y)) return 0;
+    if (zona_contiene(jn_boton_zona(1), x, y)) return 1;
+    return -1;
+}
+
+void ui_dibujar_juego_nuevo(void) {
+    Zona v;
+    int i;
+    char linea[96];
+    if (!g.juego_nuevo_visible) return;
+    v = juego_nuevo_zona();
+    dibujar_rect(v.x + 5, v.y + 5, zona_derecha(v) + 5, zona_abajo(v) + 5,
+                 0x00808080u);
+    dibujar_rect_z(v, GUIA_FONDO_V);
+    dibujar_rect(v.x, v.y, zona_derecha(v), v.y + JN_TITULO_V,
+                 GUIA_TITULO_FONDO_V);
+    fuente_dibujar(v.x + 12, v.y + (JN_TITULO_V - 7) / 2,
+                   "JUEGO NUEVO - ELIGE UNA PLANTILLA", GUIA_TITULO_TEXTO_V);
+    fuente_dibujar(v.x + 22, v.y + 38,
+                   "Pulsa una plantilla para crear el proyecto", GUIA_GRIS_V);
+
+    for (i = 0; i < PLANTILLAS_TOTAL; i++) {
+        Zona z = juego_nuevo_fila_zona(i);
+        int hover = zona_contiene(z, g.raton_x, g.raton_y);
+        dibujar_rect_z(z, hover ? GUIA_BOTON_HOV_V : GUIA_BOTON_V);
+        dibujar_marco_z(z, i == g.juego_nuevo_sel ? GUIA_ACENTO_V : GUIA_BORDE_V);
+        fuente_dibujar_escala(z.x + 12, z.y + 5, plantillas_nombre(i),
+                              i == g.juego_nuevo_sel ? GUIA_ACENTO_V : GUIA_TEXTO_V,
+                              1);
+        formatear(linea, sizeof(linea), "%s", plantillas_descripcion(i));
+        fuente_dibujar(z.x + 12, z.y + 24, linea, GUIA_GRIS_V);
+    }
+
+    for (i = 0; i < 2; i++) {
+        Zona z = jn_boton_zona(i);
+        int hover = zona_contiene(z, g.raton_x, g.raton_y);
+        dibujar_rect_z(z, hover ? GUIA_BOTON_HOV_V : GUIA_BOTON_V);
+        dibujar_marco_z(z, GUIA_BORDE_V);
+        fuente_dibujar(z.x + (z.ancho - fuente_texto_ancho(i ? "CERRAR" : "CREAR")) / 2,
+                       z.y + (z.alto - 7) / 2, i ? "CERRAR" : "CREAR",
+                       GUIA_TEXTO_V);
+    }
+    dibujar_marco_z(v, GUIA_BORDE_V);
+}
+
+#define TUT_ANCHO_V    580
+#define TUT_ALTO_V     372
+#define TUT_TITULO_V   26
+#define TUT_BOTON_ALTO 28
+
+typedef struct TutorialPaso {
+    const char *titulo;
+    const char *lineas[4];
+    const char *consejo;
+} TutorialPaso;
+
+static const TutorialPaso TUTORIAL_TEXTOS[TUTORIAL_PASOS] = {
+    {
+        "1. ELIGE UNA PLANTILLA",
+        {
+            "Abre ARCHIVO en la barra y pulsa JUEGO NUEVO.",
+            "Aparece una ventana con cinco plantillas listas para usar.",
+            "Plataformas trae nivel, jugador, monedas y meta desde el principio.",
+            "Pulsa una fila y el editor crea el proyecto LOGIC3."
+        },
+        "Consejo: --juego-nuevo --plantilla plataformas hace lo mismo sin raton."
+    },
+    {
+        "2. MIRA EL NIVEL",
+        {
+            "El proyecto se abre en el gestor con la escena del nivel.",
+            "El jugador esta a la izquierda y la meta a la derecha.",
+            "Las tres monedas estan repartidas por el camino.",
+            "Puedes mover cualquier objeto arrastrandolo en la vista Estudio."
+        },
+        "Consejo: MODO > VISTA ESTUDIO muestra escenas, objetos y bloques."
+    },
+    {
+        "3. PRUEBA Y AJUSTA",
+        {
+            "Pulsa PLAY para mover al jugador con las flechas.",
+            "Al tocar una moneda desaparece y suma una al contador.",
+            "Al llegar a la meta aparece el mensaje de fin.",
+            "Usa AJUSTES DEL PROYECTO para cambiar tamano, FPS o fondo."
+        },
+        "Consejo: guarda a menudo con ARCHIVO > GUARDAR PROYECTO."
+    },
+    {
+        "4. SIGUE APRENDIENDO",
+        {
+            "La guia antigua sigue en AYUDA > GUIA PASO A PASO.",
+            "En el lienzo de bloques puedes ver que hace cada bloque.",
+            "Pulsa el boton de ayuda de un bloque para leer su explicacion.",
+            "Cuando termines, compila con COMPILE > COMPILAR PARA WINDOWS."
+        },
+        "Consejo: este tutorial no cambia la guia ni sus capturas antiguas."
+    }
+};
+
+Zona tutorial_zona(void) {
+    int x = (g.ancho - TUT_ANCHO_V) / 2;
+    int y = (g.alto - TUT_ALTO_V) / 2;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    return zona_hacer(x, y, TUT_ANCHO_V, TUT_ALTO_V);
+}
+
+Zona tutorial_boton_zona(int indice) {
+    Zona v = tutorial_zona();
+    static const int anchos[3] = { 130, 170, 90 };
+    int total = anchos[0] + anchos[1] + anchos[2] + GUIA_BOTON_HUECO_V * 2;
+    int x0 = v.x + (v.ancho - total) / 2;
+    int y = zona_abajo(v) - 44;
+    if (indice < 0 || indice > 2) return zona_vacia();
+    return zona_hacer(x0 + (indice == 0 ? 0 : anchos[0] + GUIA_BOTON_HUECO_V) +
+                              (indice == 2 ? anchos[1] + GUIA_BOTON_HUECO_V : 0),
+                      y, anchos[indice], TUT_BOTON_ALTO);
+}
+
+int tutorial_boton_en(int x, int y) {
+    int i;
+    if (!g.tutorial_visible) return -1;
+    for (i = 0; i < 3; i++)
+        if (zona_contiene(tutorial_boton_zona(i), x, y)) return i;
+    return -1;
+}
+
+void ui_dibujar_tutorial(void) {
+    Zona v;
+    const TutorialPaso *paso;
+    char marca[32];
+    int i;
+    if (!g.tutorial_visible) return;
+    if (g.tutorial_paso < 0) g.tutorial_paso = 0;
+    if (g.tutorial_paso >= TUTORIAL_PASOS) g.tutorial_paso = TUTORIAL_PASOS - 1;
+    paso = &TUTORIAL_TEXTOS[g.tutorial_paso];
+    v = tutorial_zona();
+    dibujar_rect(v.x + 5, v.y + 5, zona_derecha(v) + 5, zona_abajo(v) + 5,
+                 0x00808080u);
+    dibujar_rect_z(v, GUIA_FONDO_V);
+    dibujar_rect(v.x, v.y, zona_derecha(v), v.y + TUT_TITULO_V,
+                 GUIA_TITULO_FONDO_V);
+    fuente_dibujar(v.x + 12, v.y + (TUT_TITULO_V - 7) / 2,
+                   "TUTORIAL DEL ESTUDIO", GUIA_TITULO_TEXTO_V);
+    formatear(marca, sizeof(marca), "PASO %d DE %d", g.tutorial_paso + 1,
+              TUTORIAL_PASOS);
+    fuente_dibujar(zona_derecha(v) - 120, v.y + (TUT_TITULO_V - 7) / 2,
+                   marca, GUIA_TITULO_TEXTO_V);
+
+    fuente_dibujar_escala(v.x + 20, v.y + 40, paso->titulo,
+                          GUIA_ACENTO_V, 2);
+    dibujar_rect(v.x + 20, v.y + 70, zona_derecha(v) - 20, v.y + 71,
+                 0x00C8D0D8u);
+    for (i = 0; i < 4; i++) {
+        int y = v.y + 88 + i * 24;
+        dibujar_rect(v.x + 22, y + 2, v.x + 26, y + 6, GUIA_ACENTO_V);
+        fuente_dibujar(v.x + 34, y, paso->lineas[i], GUIA_TEXTO_V);
+    }
+    {
+        Zona pista = zona_hacer(v.x + 20, v.y + 204, v.ancho - 40, 64);
+        dibujar_rect_z(pista, GUIA_PISTA_V);
+        dibujar_marco_z(pista, GUIA_PISTA_BORDE_V);
+        fuente_dibujar(pista.x + 12, pista.y + 12, "CONSEJO", 0x00605020u);
+        fuente_dibujar(pista.x + 12, pista.y + 34, paso->consejo, GUIA_TEXTO_V);
+    }
+    fuente_dibujar(v.x + 20, v.y + 288,
+                   "Flechas: cambiar paso     ESC: cerrar el tutorial",
+                   GUIA_GRIS_V);
+
+    /* Los mismos tres botones de la guia, con texto propio. */
+    {
+        int anchos[3] = { 130, 170, 90 };
+        const char *textos[3] = { "ANTERIOR", "SIGUIENTE >", "CERRAR" };
+        for (i = 0; i < 3; i++) {
+            Zona z = tutorial_boton_zona(i);
+            int hover = zona_contiene(z, g.raton_x, g.raton_y);
+            dibujar_rect_z(z, hover ? GUIA_BOTON_HOV_V : GUIA_BOTON_V);
+            dibujar_marco_z(z, GUIA_BORDE_V);
+            fuente_dibujar(z.x + (anchos[i] - fuente_texto_ancho(textos[i])) / 2,
+                           z.y + (z.alto - 7) / 2, textos[i], GUIA_TEXTO_V);
+        }
+    }
+    dibujar_marco_z(v, GUIA_BORDE_V);
+}
+
+#define AY_ANCHO_V   540
+#define AY_ALTO_V    240
+#define AY_TITULO_V  26
+
+Zona ayuda_zona(void) {
+    int x = (g.ancho - AY_ANCHO_V) / 2;
+    int y = (g.alto - AY_ALTO_V) / 2;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    return zona_hacer(x, y, AY_ANCHO_V, AY_ALTO_V);
+}
+
+static Zona ayuda_boton_zona(void) {
+    Zona v = ayuda_zona();
+    return zona_hacer(zona_derecha(v) - 150, zona_abajo(v) - 46, 130, 28);
+}
+
+int ayuda_boton_en(int x, int y) {
+    if (!g.ayuda_visible) return -1;
+    return zona_contiene(ayuda_boton_zona(), x, y) ? 0 : -1;
+}
+
+void ui_dibujar_ayuda(void) {
+    Zona v;
+    char linea[160];
+    int def;
+    if (!g.ayuda_visible) return;
+    v = ayuda_zona();
+    def = g.ayuda_def;
+    dibujar_rect(v.x + 5, v.y + 5, zona_derecha(v) + 5, zona_abajo(v) + 5,
+                 0x00808080u);
+    dibujar_rect_z(v, GUIA_FONDO_V);
+    dibujar_rect(v.x, v.y, zona_derecha(v), v.y + AY_TITULO_V,
+                 GUIA_TITULO_FONDO_V);
+    fuente_dibujar(v.x + 12, v.y + (AY_TITULO_V - 7) / 2,
+                   "AYUDA DEL BLOQUE", GUIA_TITULO_TEXTO_V);
+    if (def < 0) {
+        fuente_dibujar(v.x + 20, v.y + 48, "NO HAY UN BLOQUE SELECCIONADO",
+                       GUIA_GRIS_V);
+    } else {
+        fuente_dibujar_escala(v.x + 20, v.y + 44, bloques_nombre_def(def),
+                              GUIA_ACENTO_V, 2);
+        formatear(linea, sizeof(linea), "Categoria: %s",
+                  bloques_categoria_nombre(bloques_def_categoria(def)));
+        fuente_dibujar(v.x + 20, v.y + 86, linea, GUIA_GRIS_V);
+        fuente_dibujar(v.x + 20, v.y + 116, bloques_ayuda_def(def), GUIA_TEXTO_V);
+        formatear(linea, sizeof(linea), "Campo: %s   Ranura: %s",
+                  bloques_def_campo(def, 0), bloques_def_slot(def, 0));
+        fuente_dibujar(v.x + 20, v.y + 142, linea, GUIA_GRIS_V);
+    }
+    {
+        Zona z = ayuda_boton_zona();
+        int hover = zona_contiene(z, g.raton_x, g.raton_y);
+        dibujar_rect_z(z, hover ? GUIA_BOTON_HOV_V : GUIA_BOTON_V);
+        dibujar_marco_z(z, GUIA_BORDE_V);
+        fuente_dibujar(z.x + (z.ancho - fuente_texto_ancho("CERRAR")) / 2,
+                       z.y + (z.alto - 7) / 2, "CERRAR", GUIA_TEXTO_V);
+    }
+    dibujar_marco_z(v, GUIA_BORDE_V);
+}
+
+/* ------------------------------------------------------------------ */
 /* Dibujo general                                                      */
 /* ------------------------------------------------------------------ */
 /* Recorta un rectangulo a la zona indicada. Devuelve 0 si no queda nada. */
@@ -4592,6 +4879,9 @@ void ui_dibujar(void) {
         ui_dibujar_confirmaciones();
         ui_dibujar_ajustes();
         ui_dibujar_guia();
+        ui_dibujar_juego_nuevo();
+        ui_dibujar_tutorial();
+        ui_dibujar_ayuda();
         return;
     }
 
@@ -4608,6 +4898,9 @@ void ui_dibujar(void) {
         ui_dibujar_confirmaciones();
         ui_dibujar_ajustes();
         ui_dibujar_guia();
+        ui_dibujar_juego_nuevo();
+        ui_dibujar_tutorial();
+        ui_dibujar_ayuda();
         return;
     }
 
@@ -4625,6 +4918,9 @@ void ui_dibujar(void) {
         ui_dibujar_confirmaciones();
         ui_dibujar_ajustes();
         ui_dibujar_guia();
+        ui_dibujar_juego_nuevo();
+        ui_dibujar_tutorial();
+        ui_dibujar_ayuda();
         return;
     }
 
@@ -4665,6 +4961,9 @@ void ui_dibujar(void) {
     ui_dibujar_confirmaciones();
     ui_dibujar_ajustes();
     ui_dibujar_guia();
+    ui_dibujar_juego_nuevo();
+    ui_dibujar_tutorial();
+    ui_dibujar_ayuda();
 
     /* Linea de estado de estructuras no usadas. */
     for (i = 0; i < 0; i++) { }

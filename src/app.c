@@ -354,6 +354,104 @@ void guia_pulsar(int x, int y, int boton) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Fase 44: juego nuevo, tutorial y ayuda por bloque                   */
+/* ------------------------------------------------------------------ */
+void juego_nuevo_abrir(void) {
+    g.juego_nuevo_visible = 1;
+    if (plantillas_indice(plantillas_id(g.juego_nuevo_sel)) < 0)
+        g.juego_nuevo_sel = 0;
+    g.juego_nuevo_hover = -1;
+    g.menu_abierto = -1;
+    app_invalidar();
+}
+
+void juego_nuevo_cerrar(void) {
+    if (!g.juego_nuevo_visible) return;
+    g.juego_nuevo_visible = 0;
+    g.juego_nuevo_hover = -1;
+    app_invalidar();
+}
+
+void juego_nuevo_pulsar(int x, int y, int boton) {
+    int fila, b;
+    char ruta[MAX_PATH];
+    if (!g.juego_nuevo_visible || boton != 0) return;
+    b = juego_nuevo_boton_en(x, y);
+    if (b == 0) {
+        plantillas_crear(plantillas_id(g.juego_nuevo_sel), ruta, sizeof(ruta));
+        return;
+    }
+    if (b == 1) {
+        juego_nuevo_cerrar();
+        return;
+    }
+    fila = juego_nuevo_fila_en(x, y);
+    if (fila >= 0) {
+        g.juego_nuevo_sel = fila;
+        plantillas_crear(plantillas_id(fila), ruta, sizeof(ruta));
+        app_invalidar();
+    }
+}
+
+void tutorial_abrir(void) {
+    g.tutorial_visible = 1;
+    g.tutorial_paso = 0;
+    g.tutorial_hover = -1;
+    g.menu_abierto = -1;
+    app_invalidar();
+}
+
+void tutorial_cerrar(void) {
+    if (!g.tutorial_visible) return;
+    g.tutorial_visible = 0;
+    g.tutorial_hover = -1;
+    app_invalidar();
+}
+
+static void tutorial_anterior(void) {
+    if (g.tutorial_paso > 0) g.tutorial_paso--;
+    app_invalidar();
+}
+
+static void tutorial_siguiente(void) {
+    if (g.tutorial_paso + 1 < TUTORIAL_PASOS) {
+        g.tutorial_paso++;
+        app_invalidar();
+    }
+}
+
+void tutorial_pulsar(int x, int y, int boton) {
+    int b;
+    if (!g.tutorial_visible || boton != 0) return;
+    b = tutorial_boton_en(x, y);
+    if (b == 0) tutorial_anterior();
+    else if (b == 1) tutorial_siguiente();
+    else if (b == 2) tutorial_cerrar();
+}
+
+void ayuda_abrir(int def) {
+    g.ayuda_visible = 1;
+    g.ayuda_def = def;
+    g.menu_abierto = -1;
+    app_invalidar();
+}
+
+void ayuda_abrir_tipo(const char *tipo) {
+    ayuda_abrir(bloques_ayuda_indice(tipo));
+}
+
+void ayuda_cerrar(void) {
+    if (!g.ayuda_visible) return;
+    g.ayuda_visible = 0;
+    app_invalidar();
+}
+
+void ayuda_pulsar(int x, int y, int boton) {
+    if (!g.ayuda_visible || boton != 0) return;
+    if (ayuda_boton_en(x, y) == 0) ayuda_cerrar();
+}
+
+/* ------------------------------------------------------------------ */
 /* Menu desplegable                                                    */
 /* ------------------------------------------------------------------ */
 static int opcion_menu_en(int x, int y) {
@@ -2436,6 +2534,20 @@ void app_pulsar(int x, int y, int boton) {
         return;
     }
 
+    /* Fase 44: las ventanas nuevas son modales e independientes de la guia. */
+    if (g.juego_nuevo_visible) {
+        juego_nuevo_pulsar(x, y, boton);
+        return;
+    }
+    if (g.tutorial_visible) {
+        tutorial_pulsar(x, y, boton);
+        return;
+    }
+    if (g.ayuda_visible) {
+        ayuda_pulsar(x, y, boton);
+        return;
+    }
+
     /* El menu contextual de capa y las confirmaciones bloquean el resto de la
      * interfaz mientras estan abiertos. */
     if (g.confirmar_borrado || g.confirmar_tile >= 0 || g.capa_menu_abierto >= 0) {
@@ -2583,6 +2695,7 @@ void app_soltar(int x, int y, int boton) {
         return;
     }
     if (g.guia_visible) return;
+    if (g.juego_nuevo_visible || g.tutorial_visible || g.ayuda_visible) return;
     if (g.titulo_boton_pulsado >= 0) {
         int tb = g.titulo_boton_pulsado;
         g.titulo_boton_pulsado = -1;
@@ -2660,6 +2773,24 @@ void app_mover(int x, int y, int botones) {
         }
         return;
     }
+    if (g.juego_nuevo_visible) {
+        int hover = juego_nuevo_fila_en(x, y);
+        if (hover < 0) hover = juego_nuevo_boton_en(x, y) >= 0 ? 100 : -1;
+        if (hover != g.juego_nuevo_hover) {
+            g.juego_nuevo_hover = hover;
+            app_invalidar();
+        }
+        return;
+    }
+    if (g.tutorial_visible) {
+        int hover = tutorial_boton_en(x, y);
+        if (hover != g.tutorial_hover) {
+            g.tutorial_hover = hover;
+            app_invalidar();
+        }
+        return;
+    }
+    if (g.ayuda_visible) return;
 
     /* Hover de los botones play/pausa/stop de la barra de menus. */
     {
@@ -2847,6 +2978,7 @@ void app_rueda(int x, int y, int delta, int ctrl) {
     g.raton_y = y;
     if (g.ajustes_visible) return;
     if (g.guia_visible) return;
+    if (g.juego_nuevo_visible || g.tutorial_visible || g.ayuda_visible) return;
     if (g.vista == VISTA_ESTUDIO) {
         estudio_rueda(x, y, delta, ctrl);
         return;
@@ -2880,6 +3012,39 @@ void app_tecla(int vk, int ctrl, int shift) {
         else if (vk == VK_LEFT || vk == VK_PRIOR) guia_anterior();
         else if (vk == VK_RIGHT || vk == VK_NEXT || vk == VK_RETURN)
             guia_siguiente();
+        return;
+    }
+    if (g.juego_nuevo_visible) {
+        char ruta[MAX_PATH];
+        if (vk == VK_ESCAPE) juego_nuevo_cerrar();
+        else if (vk == VK_LEFT || vk == VK_UP) {
+            if (g.juego_nuevo_sel > 0) g.juego_nuevo_sel--;
+            app_invalidar();
+        } else if (vk == VK_RIGHT || vk == VK_DOWN) {
+            if (g.juego_nuevo_sel + 1 < PLANTILLAS_TOTAL) g.juego_nuevo_sel++;
+            app_invalidar();
+        } else if (vk == VK_RETURN) {
+            plantillas_crear(plantillas_id(g.juego_nuevo_sel), ruta, sizeof(ruta));
+        }
+        return;
+    }
+    if (g.tutorial_visible) {
+        if (vk == VK_ESCAPE) tutorial_cerrar();
+        else if (vk == VK_LEFT || vk == VK_PRIOR) tutorial_anterior();
+        else if (vk == VK_RIGHT || vk == VK_NEXT || vk == VK_RETURN)
+            tutorial_siguiente();
+        return;
+    }
+    if (g.ayuda_visible) {
+        if (vk == VK_ESCAPE || vk == VK_RETURN) ayuda_cerrar();
+        return;
+    }
+    /* Atajos sin filas nuevas de menu: no cambian ninguna captura antigua. */
+    if (ctrl && shift && vk == 'N') { juego_nuevo_abrir(); return; }
+    if (vk == VK_F2) { tutorial_abrir(); return; }
+    if (vk == VK_F3 && g.vista == VISTA_ESTUDIO &&
+        g.estudio_pestana == BLOQUES_TAB) {
+        ayuda_abrir(bloques_nodo_def(g.bloques_sel));
         return;
     }
     if (ajustes_tecla(vk, ctrl)) return;
@@ -2934,6 +3099,7 @@ void app_tecla(int vk, int ctrl, int shift) {
 
 void app_caracter(int ch) {
     if (g.guia_visible) return;
+    if (g.juego_nuevo_visible || g.tutorial_visible || g.ayuda_visible) return;
     if (ajustes_caracter(ch)) return;
     if (g.vista == VISTA_ESTUDIO) {
         estudio_caracter(ch);
@@ -2956,6 +3122,7 @@ void app_caracter(int ch) {
 void app_doble_clic(int x, int y) {
     if (g.ajustes_visible) return;
     if (g.guia_visible) return;
+    if (g.juego_nuevo_visible || g.tutorial_visible || g.ayuda_visible) return;
     if (y >= 0 && y < TAB_BARRA_ALTO) {
         /* Los controles de ventana tienen prioridad sobre el doble clic. */
         if (titulo_boton_en(x, y) >= 0) return;

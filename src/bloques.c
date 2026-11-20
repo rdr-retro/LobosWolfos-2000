@@ -56,6 +56,38 @@ static const char *CATEGORIAS[BLOQUES_CATEGORIAS] = {
     "EVENTOS", "CONTROL", "MOVIMIENTO", "DATOS", "OPERADORES", "CODIGO"
 };
 
+/* Fase 44: texto de ayuda de cada bloque. Es una tabla paralela a DEFS,
+ * asi que anyadir o quitar una linea no desplaza ningun indice existente. */
+static const char *AYUDA_DEFS[BLOQUES_DEFS] = {
+    "al inicio: se ejecuta una vez cuando arranca la escena.",
+    "al pulsar tecla: reacciona a una tecla; escribe su nombre en el campo.",
+    "al recibir: se ejecuta cuando otro objeto envia ese mensaje.",
+    "repetir siempre: repite los bloques de dentro en cada fotograma.",
+    "si: ejecuta el cuerpo solo cuando la condicion es verdadera.",
+    "mover x: suma el valor del campo a la posicion horizontal del objeto.",
+    "cambiar variable: modifica una variable del objeto con el delta dado.",
+    "suma: devuelve la suma de los dos valores conectados.",
+    "mayor que: devuelve verdadero si el primero supera al segundo.",
+    "codigo lobo: escribe sentencias del lenguaje lobo directamente.",
+    "hud vidas: muestra el numero de vidas en pantalla.",
+    "hud puntos: muestra la puntuacion en pantalla.",
+    "hud dialogo: escribe una linea de dialogo en la posicion indicada.",
+    "hud texto: muestra un texto libre en la altura indicada.",
+    "hud plantilla: elige una plantilla de HUD ya preparada.",
+    "sonar: reproduce un sonido corto del proyecto.",
+    "musica: reproduce una musica en bucle hasta que se detenga.",
+    "detener sonido: para la musica y los efectos que esten sonando.",
+    "volumen: ajusta el volumen general entre 0 y 100.",
+    "volumen actual: devuelve el volumen que hay puesto ahora.",
+    "guardar: escribe un valor en el guardado con la clave indicada.",
+    "cargar: lee el valor guardado con esa clave.",
+    "borrar save: elimina todo el guardado del juego.",
+    "record: guarda una marca solo si supera la anterior.",
+    "record actual: devuelve la mejor marca guardada de esa clave.",
+    "ajuste: cambia un ajuste del proyecto mientras se juega.",
+    "ajuste actual: devuelve el valor actual de un ajuste."
+};
+
 /* Fase 43: bloques que el subconjunto BIOS no puede ejecutar. Se mantiene
  * aparte de DEFS para no desplazar ningun indice ni romper las capturas. */
 static const unsigned char DEFS_NO_BIOS[BLOQUES_DEFS] = {
@@ -607,6 +639,19 @@ const char *bloques_def_campo(int def, int indice) {
     asegurar();
     if (def < 0 || def >= BLOQUES_DEFS || indice < 0 || indice > 1) return "";
     return DEFS[def].campo_nombre[indice];
+}
+const char *bloques_ayuda_def(int def) {
+    asegurar();
+    if (def < 0 || def >= BLOQUES_DEFS) return "";
+    return AYUDA_DEFS[def];
+}
+int bloques_ayuda_indice(const char *tipo) {
+    int i;
+    asegurar();
+    if (!tipo) return -1;
+    for (i = 0; i < BLOQUES_DEFS; i++)
+        if (strcmp(DEFS[i].tipo, tipo) == 0) return i;
+    return -1;
 }
 
 /* Busca en el codigo de un bloque las llamadas que la VM BIOS no tiene. */

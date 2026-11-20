@@ -1080,6 +1080,18 @@ typedef struct App {
     int guia_paso;      /* 0..GUIA_PASOS-1 */
     int guia_hover;     /* boton bajo el raton o -1 */
 
+    /* Fase 44: selector de plantillas, tutorial y ayuda por bloque. Tres
+     * ventanas modales nuevas; no cambian la guia ni ninguna captura vieja. */
+    int juego_nuevo_visible;
+    int juego_nuevo_sel;     /* 0..PLANTILLAS_TOTAL-1 */
+    int juego_nuevo_hover;   /* fila bajo el raton o -1 */
+    int tutorial_visible;
+    int tutorial_paso;       /* 0..TUTORIAL_PASOS-1 */
+    int tutorial_hover;      /* boton bajo el raton o -1 */
+    int ayuda_visible;
+    int ayuda_def;           /* indice de DEFS, o -1 */
+    char plantilla_creada[MAX_PATH]; /* ultimo proyecto generado */
+
     /* Ajustes del proyecto (fase 14): boton AJUSTES DEL PROYECTO. */
     AjustesProyecto ajustes;
     AjustesProyecto ajustes_ed;   /* copia en edicion */
@@ -1453,6 +1465,40 @@ void guia_pulsar(int x, int y, int boton);
  * probar con PLAY (ejemplo.c). */
 void ejemplo_crear_juego(void);
 
+/* Fase 44: plantillas, tutorial y ayuda contextual por bloque. */
+#define PLANTILLAS_TOTAL 5
+#define TUTORIAL_PASOS   4
+Zona juego_nuevo_zona(void);
+Zona juego_nuevo_fila_zona(int indice);
+int  juego_nuevo_fila_en(int x, int y);
+int  juego_nuevo_boton_en(int x, int y); /* 0 crear, 1 cerrar */
+void ui_dibujar_juego_nuevo(void);
+Zona tutorial_zona(void);
+Zona tutorial_boton_zona(int indice);
+int  tutorial_boton_en(int x, int y);
+void ui_dibujar_tutorial(void);
+Zona ayuda_zona(void);
+int  ayuda_boton_en(int x, int y);
+void ui_dibujar_ayuda(void);
+void juego_nuevo_abrir(void);
+void juego_nuevo_cerrar(void);
+void juego_nuevo_pulsar(int x, int y, int boton);
+void tutorial_abrir(void);
+void tutorial_cerrar(void);
+void tutorial_pulsar(int x, int y, int boton);
+void ayuda_abrir(int def);
+void ayuda_abrir_tipo(const char *tipo);
+void ayuda_cerrar(void);
+void ayuda_pulsar(int x, int y, int boton);
+/* Catalogo y generador (plantillas.c). */
+int  plantillas_total(void);
+const char *plantillas_id(int indice);
+const char *plantillas_nombre(int indice);
+const char *plantillas_descripcion(int indice);
+int  plantillas_indice(const char *id);
+int  plantillas_crear(const char *id, char *ruta, int tam);
+void plantillas_volcar(const char *ruta);
+
 Zona menu_barra_zona(void);
 int  menu_barra_en(int x, int y);
 Zona barra_zona(void);
@@ -1743,6 +1789,9 @@ unsigned int bloques_def_color(int def);
 const char *bloques_categoria_nombre(int cat);
 const char *bloques_def_slot(int def, int indice);
 const char *bloques_def_campo(int def, int indice);
+/* Fase 44: ayuda por bloque. Tabla paralela a DEFS: no reordena nada. */
+const char *bloques_ayuda_def(int def);
+int  bloques_ayuda_indice(const char *tipo);
 int  bloques_def_no_bios(int def);
 int  bloques_nodo_no_bios(int id);
 int  bloques_layout(int x, int y, int ancho, int alto,

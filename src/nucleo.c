@@ -1802,6 +1802,36 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
          * de ejemplo, sin pasar por el menu. Va al final para que la captura
          * muestre ya el gestor con el item y los ajustes puestos. */
         if (strstr(cmd, "--ejemplo") != NULL) ejemplo_crear_juego();
+        /* Fase 44: juego nuevo, tutorial y ayuda por bloque. Van al final,
+         * como --ejemplo, para que ninguna suite anterior cambie de estado. */
+        if (strstr(cmd, "--juego-nuevo") != NULL) {
+            char *pid = arg_valor(cmd, "--plantilla");
+            if (pid && pid[0]) {
+                char ruta_plantilla[MAX_PATH];
+                plantillas_crear(pid, ruta_plantilla, sizeof(ruta_plantilla));
+            } else {
+                juego_nuevo_abrir();
+            }
+        }
+        if (strstr(cmd, "--tutorial") != NULL) {
+            char *tp = arg_valor(cmd, "--tutorial-paso");
+            tutorial_abrir();
+            if (tp) {
+                int paso = atoi(tp);
+                if (paso < 0) paso = 0;
+                if (paso >= TUTORIAL_PASOS) paso = TUTORIAL_PASOS - 1;
+                g.tutorial_paso = paso;
+            }
+        }
+        {
+            char *ab = arg_valor(cmd, "--ayuda-bloque");
+            if (ab && ab[0]) {
+                int def = -1;
+                if (ab[0] >= '0' && ab[0] <= '9') def = atoi(ab);
+                else def = bloques_ayuda_indice(ab);
+                ayuda_abrir(def);
+            }
+        }
         if (herr_arg) {
             int h = atoi(herr_arg);
             if (h >= 0 && h < H_TOTAL) g.herramienta = (Herramienta)h;
@@ -2549,6 +2579,16 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                     }
                     fclose(vf);
                 }
+            }
+        }
+        /* Fase 44: volcado propio. Archivo nuevo para no alterar ni una
+         * linea de los volcados de las suites anteriores. */
+        {
+            char *vp = arg_valor(cmd, "--volcar-plantillas");
+            if (vp) {
+                char vp_ruta[MAX_PATH];
+                recortar_texto(vp_ruta, vp, sizeof(vp_ruta));
+                plantillas_volcar(vp_ruta);
             }
         }
         /* Fase 35: volcado propio, solo cuando se pide de forma explicita

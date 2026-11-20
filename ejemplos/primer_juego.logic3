@@ -1,0 +1,30 @@
+LOGIC3
+version 3
+proyecto "Plataformas" 640 480 1 60 3 00112233
+carpetas "tiles" "maps" "trajes" "sonidos"
+escena 1 "Nivel 1" "" 640 480 00112233
+objeto 1 "Jugador" escena 1 x 48 y 400 w 24 h 24 visible 1 capa 0
+  variable "monedas" 0 0
+  variable "ganado" 0 0
+  evento 1 fotograma
+  evento 2 tecla "derecha" mantener
+  evento 3 tecla "izquierda" mantener
+  evento 4 tecla "arriba" mantener
+objeto 2 "Moneda 1" escena 1 x 144 y 376 w 16 h 16 visible 1 capa 0
+  traje 0 "" 0 0 0 0
+objeto 3 "Moneda 2" escena 1 x 288 y 320 w 16 h 16 visible 1 capa 0
+  traje 0 "" 0 0 0 0
+objeto 4 "Moneda 3" escena 1 x 432 y 376 w 16 h 16 visible 1 capa 0
+  traje 0 "" 0 0 0 0
+objeto 5 "Meta" escena 1 x 560 y 368 w 28 h 28 visible 1 capa 0
+  traje 0 "" 0 0 0 0
+bloque 1 evento 1 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "si toca(2)\nborrar(2)\nmi.variable(\"monedas\") = mi.variable(\"monedas\") + 1\nfin\nsi toca(3)\nborrar(3)\nmi.variable(\"monedas\") = mi.variable(\"monedas\") + 1\nfin\nsi toca(4)\nborrar(4)\nmi.variable(\"monedas\") = mi.variable(\"monedas\") + 1\nfin\nsi toca(5)\nmi.variable(\"ganado\") = 1\nenviar(\"Has llegado a la meta\")\nfin\n"
+bloque 2 evento 2 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "mi.x = mi.x + 3\n"
+bloque 3 evento 3 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "mi.x = mi.x - 3\n"
+bloque 4 evento 4 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "mi.y = mi.y - 4\n"
+FIN
+CRC32 E676189F
