@@ -34,6 +34,11 @@
  *   --volcar-saves ruta  volca el estado final del guardado
  *   --escenas         activa escenas, transiciones, camara y efectos
  *   --volcar-escenas ruta  volca el estado final de escenas y efectos
+ *   --perfil          mide instrucciones, microsegundos y blits por script
+ *   --presupuesto N   microsegundos por fotograma (16667 = 60 FPS); con
+ *                     --perfil avisa y degrada si se pasa
+ *   --volcar-perfil ruta  informe final de perfil y memoria del blob
+ *   --estres N,M      N entidades y M bloques sinteticos para pruebas
  */
 #include <windows.h>
 #include <stdio.h>
@@ -748,6 +753,28 @@ typedef struct EscenasRuntime {
 static EscenasRuntime g_escenas;
 static int g_escenas_activo;
 static const char *g_ruta_volcar_escenas;
+
+/* --- perfilador, presupuestos y estres (fase 42) --- */
+static int g_perfil;
+static const char *g_ruta_volcar_perfil;
+static unsigned long g_presupuesto_us = 16667; /* 60 FPS */
+static int g_estres_entidades;
+static int g_estres_bloques;
+static LARGE_INTEGER g_perfil_frecuencia;
+static unsigned long g_perfil_t0;
+static unsigned long g_perfil_ins0;
+static unsigned long g_perfil_ins_foto;
+static unsigned long g_perfil_us_foto;
+static unsigned long g_perfil_us_total;
+static unsigned long g_perfil_us_max;
+static int g_perfil_blits_foto;
+static int g_perfil_fotogramas;
+static int g_perfil_avisos;
+static int g_perfil_excesos;
+static int g_perfil_limite_blits = RENDER_BLITS_MAX;
+static void perfil_iniciar(void);
+static void perfil_fin(void);
+static void perfil_cache_render(void);
 
 /* Devuelve el indice de la escena con ese id, o -1 si no existe. */
 static int escena_indice(int id) {
@@ -1569,6 +1596,7 @@ static void renderizar(void) {
      * cuando un script los ha pedido con --escenas. */
     aplicar_efectos();
 
+    perfil_cache_render();
     if (g_render_traza && g_traza)
         fprintf(g_traza,
                 "render cam %d %d zoom %d blits %d recortados %d "
@@ -1729,11 +1757,14 @@ static int correr_ventana(HINSTANCE instancia) {
         leer_entrada_ext();
         motor_hud_fotograma(g_entrada_extactiva ? &g_entrada_ext : NULL);
         motor_audio_fotograma();
+        perfil_iniciar();
         actualizar();
         if (g_entrada_extactiva) motor_entrada_siguiente(&g_entrada_ext);
         if (!juego.corriendo) break;
         traza_fotograma();
         renderizar();
+        perfil_cache_render();
+        perfil_fin();
         {
             HDC hdc = GetDC(hwnd);
             BitBlt(hdc, 0, 0, g_ancho, g_alto, memdc, 0, 0, SRCCOPY);
@@ -1850,6 +1881,190 @@ static void atender_pausa_debug(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Perfilador, presupuestos y estres (fase 42)                         */
+/* ------------------------------------------------------------------ */
+
+/* Reloj en microsegundos. QueryPerformanceCounter existe en Windows
+ * 2000; si no da frecuencia se cae al reloj de milisegundos de Win32. */
+static unsigned long perfil_reloj(void *ctx) {
+    LARGE_INTEGER t;
+    (void)ctx;
+    if (g_perfil_frecuencia.QuadPart > 0 && QueryPerformanceCounter(&t))
+        return (unsigned long)((t.QuadPart * (LONGLONG)1000000) /
+                               g_perfil_frecuencia.QuadPart);
+    return GetTickCount() * 1000u;
+}
+
+/* Marca el principio del fotograma, antes de despachar los scripts. */
+static void perfil_iniciar(void) {
+    if (!g_perfil) return;
+    g_perfil_t0 = perfil_reloj(NULL);
+    g_perfil_ins0 = lobo_perfil_instrucciones();
+}
+
+/* Cierra el fotograma: totales, aviso de presupuesto y degradacion. La
+ * degradacion solo baja el numero de blits; nunca duerme mas ni bloquea
+ * el bucle, asi que la ventana sigue respondiendo. */
+static void perfil_fin(void) {
+    unsigned long us;
+    if (!g_perfil) return;
+    us = perfil_reloj(NULL);
+    g_perfil_ins_foto = lobo_perfil_instrucciones() - g_perfil_ins0;
+    g_perfil_us_foto = us >= g_perfil_t0 ? us - g_perfil_t0 : 0;
+    g_perfil_fotogramas++;
+    g_perfil_us_total += g_perfil_us_foto;
+    if (g_perfil_us_foto > g_perfil_us_max) g_perfil_us_max = g_perfil_us_foto;
+    g_perfil_blits_foto = g_render_info.blits;
+    eventos_perfil_blits(&g_eventos, g_perfil_blits_foto);
+
+    if (g_perfil_us_foto > g_presupuesto_us) {
+        g_perfil_excesos++;
+        g_perfil_avisos++;
+        if (g_perfil_excesos >= 3 && g_perfil_limite_blits > 1) {
+            g_perfil_limite_blits /= 2;
+            render_blits_limite(g_perfil_limite_blits);
+        }
+        if (g_traza)
+            fprintf(g_traza,
+                    "presupuesto: excedido en el fotograma %d %lu us "
+                    "(limite %lu)\n",
+                    juego.fotograma, g_perfil_us_foto, g_presupuesto_us);
+        fprintf(stderr,
+                "egine: presupuesto excedido: %lu us en el fotograma %d\n",
+                g_perfil_us_foto, juego.fotograma);
+    } else if (g_perfil_excesos > 0) {
+        g_perfil_excesos--;
+        if (g_perfil_excesos == 0) {
+            g_perfil_limite_blits = RENDER_BLITS_MAX;
+            render_blits_limite(g_perfil_limite_blits);
+        }
+    }
+
+    if (g_traza)
+        fprintf(g_traza,
+                "perfil %d instrucciones %lu us %lu blits %d "
+                "cache %d/%d limite %d\n",
+                juego.fotograma, g_perfil_ins_foto, g_perfil_us_foto,
+                g_perfil_blits_foto, g_render_info.cache_aciertos,
+                g_render_info.cache_cargas, g_perfil_limite_blits);
+}
+
+/* Copia los contadores del cache al RenderInfo del fotograma para que la
+ * traza nueva los vea sin cambiar la traza --render de las suites viejas. */
+static void perfil_cache_render(void) {
+    if (!g_perfil) return;
+    render_cache_info(&g_render_info.cache_aciertos,
+                      &g_render_info.cache_cargas,
+                      &g_render_info.cache_bytes);
+}
+
+/* Informe final: totales, memoria del blob/runtime y un renglon por script
+ * con instrucciones, microsegundos, blits y disparos. */
+static void perfil_volcar(const char *ruta) {
+    FILE *f;
+    unsigned long blob_bytes = 0, cache_bytes = 0, runtime = 0;
+    int archivos = 0, aciertos = 0, cargas = 0, i, n;
+    if (!g_perfil || !ruta) return;
+    f = fopen(ruta, "wt");
+    if (!f) return;
+
+    fprintf(f, "perfil: fotogramas %d us totales %lu us medios %lu us "
+            "maximos %lu\n",
+            g_perfil_fotogramas, g_perfil_us_total,
+            g_perfil_fotogramas ? g_perfil_us_total /
+                                  (unsigned long)g_perfil_fotogramas : 0,
+            g_perfil_us_max);
+    fprintf(f, "perfil: presupuesto %lu avisos %d blits por fotograma %d\n",
+            g_presupuesto_us, g_perfil_avisos, g_perfil_blits_foto);
+
+    activo_memoria_blob(&blob_bytes, &archivos);
+    render_cache_info(&aciertos, &cargas, &cache_bytes);
+    runtime = blob_bytes + cache_bytes + sizeof(Juego) + sizeof(Eventos) +
+              sizeof(EscenasRuntime);
+    runtime += (unsigned long)entidades_num() * sizeof(Entidad);
+    runtime += (unsigned long)juego.mapa.num_celdas * sizeof(MotorCelda);
+    runtime += (unsigned long)juego.mapa.num_celdas; /* flags */
+    runtime += (unsigned long)juego.mapa.num_celdas * MOTOR_CELDA_TAG_LEN;
+    runtime += (unsigned long)juego.mapa.num_imagenes * sizeof(MotorImagen);
+    if (juego.mapa.dibujo_celdas != juego.mapa.celdas)
+        runtime += (unsigned long)juego.mapa.num_dibujo * sizeof(MotorCelda);
+    fprintf(f, "memoria: blob %lu archivos %d trajes %d cargas %d "
+            "imagenes %lu runtime %lu\n",
+            blob_bytes, archivos, aciertos, cargas, cache_bytes, runtime);
+    fprintf(f, "memoria: mapa celdas %d entidades %d tiles %d\n",
+            juego.mapa.num_celdas, entidades_num(), juego.mapa.num_imagenes);
+
+    n = eventos_num(&g_eventos);
+    for (i = 0; i < n; i++) {
+        const PerfilScript *p = eventos_perfil_script(&g_eventos, i);
+        const EventoScript *s = eventos_script(&g_eventos, i);
+        if (!p) continue;
+        fprintf(f, "script %d evento %d tipo %d instrucciones %lu "
+                "microsegundos %lu blits %lu disparos %d\n",
+                i, s ? s->evento : 0, s ? s->tipo : 0, p->instrucciones,
+                p->microsegundos, p->blits, p->disparos);
+    }
+    fclose(f);
+}
+
+/* Genera la carga sintetica de la prueba de estres: entidades repartidas
+ * por la pantalla y una rejilla de bloques con una imagen de un solo
+ * color. Solo se llama con --estres, nunca en las suites antiguas. */
+static void estres_preparar(int entidades, int bloques) {
+    MotorMapa *m = &juego.mapa;
+    int tipo = -1, i, columnas;
+
+    if (entidades > 0 && g_l3.num_objetos > 0)
+        tipo = entidades_tipo_por_objeto(g_l3.objetos[0].id);
+    if (tipo < 0) tipo = entidades_tipo_agregar(-1, "estres", g_l3.escena_inicial,
+                                                0, 0, 12, 12, 1, 0);
+    if (tipo >= 0) {
+        for (i = 0; i < entidades && i < ENTIDADES_MAX; i++) {
+            /* El cupo de altas por fotograma es 32: se reinicia en lotes
+             * para que la prueba de estres alcance las 200 entidades. */
+            if (i > 0 && i % ENTIDADES_NUEVAS_FOTO == 0)
+                entidades_fin_fotograma();
+            entidad_crear(tipo, (i * 37) % (g_ancho > 16 ? g_ancho - 16 : 1),
+                          (i * 53) % (g_alto > 16 ? g_alto - 16 : 1));
+        }
+        entidades_fin_fotograma();
+    }
+
+    if (bloques <= 0) return;
+    if (bloques > 8192) bloques = 8192;
+    columnas = 100;
+    if (columnas > bloques) columnas = bloques;
+    m->num_celdas = bloques;
+    m->lado = 16;
+    m->celdas = (MotorCelda *)calloc((size_t)bloques, sizeof(MotorCelda));
+    m->flags = (unsigned char *)calloc((size_t)bloques, 1);
+    m->tags = (char *)calloc((size_t)bloques, MOTOR_CELDA_TAG_LEN);
+    m->imagenes = (MotorImagen *)calloc(1, sizeof(MotorImagen));
+    if (!m->celdas || !m->flags || !m->tags || !m->imagenes) {
+        motor_mapa_liberar(m);
+        return;
+    }
+    m->num_imagenes = 1;
+    m->imagenes[0].ancho = 16;
+    m->imagenes[0].alto = 16;
+    m->imagenes[0].pixeles = (u32 *)malloc(16 * 16 * sizeof(u32));
+    if (!m->imagenes[0].pixeles) {
+        motor_mapa_liberar(m);
+        return;
+    }
+    for (i = 0; i < 16 * 16; i++) m->imagenes[0].pixeles[i] = 0xFF203840u;
+    for (i = 0; i < bloques; i++) {
+        m->celdas[i].x = i % columnas;
+        m->celdas[i].y = i / columnas;
+        m->celdas[i].imagen = 0;
+        m->flags[i] = MOTOR_CELDA_SOLIDO;
+    }
+    m->dibujo_celdas = m->celdas;
+    m->num_dibujo = bloques;
+    strcpy(juego.mapa_usado, "estres");
+}
+
+/* ------------------------------------------------------------------ */
 /* Modo captura (sin ventana, determinista)                            */
 /* ------------------------------------------------------------------ */
 
@@ -1876,10 +2091,13 @@ static int correr_captura(const char *ruta_bmp, int fotogramas) {
         /* En captura la CLI fija la entrada: no se sondea Win32. */
         motor_hud_fotograma(g_entrada_extactiva ? &g_entrada_ext : NULL);
         motor_audio_fotograma();
+        perfil_iniciar();
         actualizar();
         if (g_entrada_extactiva) motor_entrada_siguiente(&g_entrada_ext);
         traza_fotograma();
         renderizar();
+        perfil_cache_render();
+        perfil_fin();
         i++; /* las pausas no consumen fotogramas del guion */
     }
     if (g_entidades && g_traza)
@@ -1966,9 +2184,11 @@ static int correr_volcar(const char *ruta, int fotogramas) {
         /* En --volcar tampoco hay ventana: respeta la entrada de la CLI. */
         motor_hud_fotograma(g_entrada_extactiva ? &g_entrada_ext : NULL);
         motor_audio_fotograma();
+        perfil_iniciar();
         actualizar();
         if (g_entrada_extactiva) motor_entrada_siguiente(&g_entrada_ext);
         traza_fotograma();
+        perfil_fin();
         i++;
     }
     if (g_entidades && g_traza)
@@ -2122,7 +2342,10 @@ static int opcion(const char *nombre) {
            strcmp(nombre, "--volcar-audio") == 0 ||
             strcmp(nombre, "--saves") == 0 ||
             strcmp(nombre, "--volcar-saves") == 0 ||
-             strcmp(nombre, "--volcar-escenas") == 0;
+             strcmp(nombre, "--volcar-escenas") == 0 ||
+             strcmp(nombre, "--presupuesto") == 0 ||
+             strcmp(nombre, "--volcar-perfil") == 0 ||
+             strcmp(nombre, "--estres") == 0;
 }
 
 int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show) {
@@ -2179,6 +2402,10 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         }
         if (strcmp(__argv[i], "--escenas") == 0) {
             g_escenas_activo = 1;
+            continue;
+        }
+        if (strcmp(__argv[i], "--perfil") == 0) {
+            g_perfil = 1;
             continue;
         }
         if (strcmp(__argv[i], "--comparar") == 0 && i + 2 < __argc) {
@@ -2294,6 +2521,19 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
                 g_ruta_volcar_saves = v;
             } else if (strcmp(__argv[i - 1], "--volcar-escenas") == 0) {
                 g_ruta_volcar_escenas = v;
+            } else if (strcmp(__argv[i - 1], "--presupuesto") == 0) {
+                int us = atoi(v);
+                if (us > 0) g_presupuesto_us = (unsigned long)us;
+                g_perfil = 1;
+            } else if (strcmp(__argv[i - 1], "--volcar-perfil") == 0) {
+                g_ruta_volcar_perfil = v;
+                g_perfil = 1;
+            } else if (strcmp(__argv[i - 1], "--estres") == 0) {
+                int ne = 0, nb = 0;
+                if (sscanf(v, "%d,%d", &ne, &nb) >= 1) {
+                    g_estres_entidades = ne > 0 ? ne : 0;
+                    g_estres_bloques = nb > 0 ? nb : 0;
+                }
             } else if (strcmp(__argv[i - 1], "--observar") == 0) {
                 depurador_observar(v);
             } else if (strcmp(__argv[i - 1], "--break") == 0) {
@@ -2373,6 +2613,10 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         return 1;
     }
     render_iniciar(ruta_logic3 ? ruta_logic3 : "");
+    if (g_perfil) {
+        QueryPerformanceFrequency(&g_perfil_frecuencia);
+        render_rapido(1);
+    }
     motor_hud_imagen_callback(cb_hud_imagen_dibujar, NULL);
 
     memset(&juego, 0, sizeof(juego));
@@ -2467,6 +2711,14 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         scripts_preparar(ruta_bmp == NULL);
     }
 
+    /* Fase 42: eventos_cargar reinicia el planificador, asi que el
+     * perfilador se engancha despues de compilar los scripts. */
+    if (g_perfil) eventos_perfil_activar(&g_eventos, perfil_reloj, NULL);
+
+    /* Fase 42: la carga sintetica se anade despues del proyecto para que
+     * los tipos y el mapa reales sigan intactos. */
+    estres_preparar(g_estres_entidades, g_estres_bloques);
+
     /* Ajustes del proyecto (fase 14): resolucion, ritmo, velocidad y
      * fondo, leidos del trailer del .logic. El LOGIC3 ya los aplico. */
     if (!g_modo_vm) aplicar_ajustes();
@@ -2501,6 +2753,7 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     if (g_ruta_volcar_audio) motor_audio_volcar(g_ruta_volcar_audio);
     if (g_ruta_volcar_saves) motor_save_volcar(g_ruta_volcar_saves);
     if (g_ruta_volcar_escenas) escenas_volcar(g_ruta_volcar_escenas);
+    perfil_volcar(g_ruta_volcar_perfil);
     if (g_grabar_replay) depurador_guardar_replay(g_grabar_replay);
     if (g_ruta_debug) depurador_volcar(g_ruta_debug, &g_memoria, &g_l3, 1);
     if (g_ordenes) {

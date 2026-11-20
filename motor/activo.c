@@ -184,6 +184,24 @@ void activo_virtuales_limpiar(void) {
     g_virtuales = NULL;
 }
 
+/* Fase 42: informe de memoria del blob ya registrado. Se suma el tamano
+ * real de cada copia (nombre, datos y nodo) para que el perfilador pueda
+ * comparar blob y runtime con el presupuesto de la maquina. */
+void activo_memoria_blob(unsigned long *bytes, int *archivos) {
+    EntradaVirtual *e = g_virtuales;
+    unsigned long total = 0;
+    int num = 0;
+    while (e) {
+        total += (unsigned long)sizeof(*e);
+        total += (unsigned long)(strlen(e->nombre) + 1);
+        total += (unsigned long)(e->largo > 0 ? e->largo : 1);
+        num++;
+        e = e->sig;
+    }
+    if (bytes) *bytes = total;
+    if (archivos) *archivos = num;
+}
+
 /* Registra un blob LGB1 (sin el pie) como archivos virtuales del motor.
  * Lo usa la vista previa del editor: reune el proyecto en memoria y lo
  * carga sin escribir ningun archivo. Sustituye a los virtuales que
@@ -477,7 +495,8 @@ void motor_mapa_liberar(MotorMapa *m) {
     free(m->celdas);
     free(m->flags);
     free(m->tags);
-    free(m->dibujo_celdas);
+    /* Fase 42: en el mapa sintetico de --estres ambas tablas son la misma. */
+    if (m->dibujo_celdas != m->celdas) free(m->dibujo_celdas);
     memset(m, 0, sizeof(*m));
 }
 

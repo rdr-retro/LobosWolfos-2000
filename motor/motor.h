@@ -129,6 +129,10 @@ int activo_cargar_proyecto(const char *ruta_logic, MotorMapa *m,
 const char *activo_proyecto_nombre(void);
 int activo_proyecto_ancho(void);
 int activo_proyecto_alto(void);
+
+/* Fase 42: memoria ocupada por los archivos virtuales del blob LGB1
+ * (nombres, cabeceras y datos). No cuenta el ejecutable ni la pila. */
+void activo_memoria_blob(unsigned long *bytes, int *archivos);
 int activo_proyecto_limitar_cuadros(void);
 int activo_proyecto_fps(void);
 int activo_proyecto_velocidad(void);

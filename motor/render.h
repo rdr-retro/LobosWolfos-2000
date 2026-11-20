@@ -44,6 +44,11 @@ typedef struct RenderInfo {
     int recortados; /* descartadas por culling */
     int saltados;   /* descartadas por presupuesto o sin imagen */
     int cam_x, cam_y;
+    /* Fase 42: solo se rellena con --perfil; las trazas --render antiguas
+     * siguen imprimiendo los cinco campos de siempre. */
+    int cache_aciertos;
+    int cache_cargas;
+    unsigned long cache_bytes;
 } RenderInfo;
 
 /* Prepara el cache. `proyecto_ruta` es el .logic3 (o "" si no hay); se
@@ -81,5 +86,20 @@ void render_blit(u32 *fb, int fb_ancho, int fb_alto, int dx, int dy,
                  const MotorImagen *img, int sx, int sy, int sw, int sh,
                  int pivote_x, int pivote_y,
                  int flip_x, int flip_y, int rotacion, int zoom);
+
+/* Fase 42: presupuesto de blits por fotograma. Por defecto sigue siendo
+ * RENDER_BLITS_MAX; la degradacion del perfilador lo baja sin tocar el
+ * valor con el que se capturaron las suites anteriores. */
+void render_blits_limite(int n);
+int render_blits_limite_actual(void);
+
+/* Fase 42: ruta rapida para blits sin rotacion ni zoom, que agrupa los
+ * sprites simples en el blit MMX de motor_blit_alpha. Se activa solo con
+ * --perfil para que los BMP de las fases 30 a 41 sigan byte a byte. */
+void render_rapido(int activo);
+
+/* Fase 42: aciertos y cargas del cache de trajes y bytes de imagenes
+ * descodificadas. Se usa en el informe de memoria de --volcar-perfil. */
+void render_cache_info(int *aciertos, int *cargas, unsigned long *bytes);
 
 #endif /* RENDER_H */

@@ -33,6 +33,12 @@ typedef struct TrajeCache {
 static TrajeCache g_trajes[RENDER_TRAJES_MAX];
 static int g_num_trajes;
 
+/* Fase 42: presupuesto ajustable, ruta rapida y contadores del cache. */
+static int g_blits_limite = RENDER_BLITS_MAX;
+static int g_rapido;
+static int g_cache_aciertos;
+static int g_cache_cargas;
+
 /* Codigo de copia corto (activo.c usa MAX_PATH, aqui no queremos windows.h). */
 static void copiar_ruta(char *dst, int tam, const char *src) {
     int i;
@@ -48,6 +54,9 @@ int render_iniciar(const char *proyecto_ruta) {
                 proyecto_ruta ? proyecto_ruta : "");
     if (!activo_gdiplus_iniciar()) return 0;
     for (i = 0; i < RENDER_TRAJES_MAX; i++) g_trajes[i].estado = -1;
+    g_cache_aciertos = 0;
+    g_cache_cargas = 0;
+    g_blits_limite = RENDER_BLITS_MAX;
     return 1;
 }
 
@@ -89,8 +98,10 @@ static int cache_obtener(const MotorL3Traje *t, MotorImagen *img) {
         } else {
             copiar_ruta(c->ruta, sizeof(c->ruta), ruta);
             c->estado = 1;
+            g_cache_cargas++;
         }
     }
+    if (c->estado == 1) g_cache_aciertos++;
     if (c->estado != 1) return 0;
     if (img) *img = c->imagen;
     return 1;
@@ -278,7 +289,7 @@ int render_dibujar(u32 *fb, int fb_ancho, int fb_alto,
     if (!sel || !sel->imagen.pixeles || sel->sw <= 0 || sel->sh <= 0)
         return 0;
     if (info) {
-        if (info->blits >= RENDER_BLITS_MAX) {
+        if (info->blits >= g_blits_limite) {
             info->saltados++;
             return 0;
         }
@@ -310,12 +321,52 @@ int render_dibujar(u32 *fb, int fb_ancho, int fb_alto,
         return 0;
     }
 
-    render_blit(fb, fb_ancho, fb_alto, x, y, &sel->imagen,
-                sel->sx, sel->sy, sel->sw, sel->sh,
-                sel->pivote_x, sel->pivote_y,
-                sel->flip_x, sel->flip_y, sel->rotacion, zoom);
+    /* Fase 42: los blits simples (sin rotar, sin flip, cuadro completo y
+     * zoom 1) van directos al blit MMX. Es la misma imagen y el mismo
+     * resultado; solo se activa con --perfil para no tocar los BMP
+     * congelados de las fases anteriores. */
+    if (g_rapido && zoom == 1 && sel->rotacion == 0 &&
+        !sel->flip_x && !sel->flip_y &&
+        sel->sx == 0 && sel->sy == 0 &&
+        sel->sw == sel->imagen.ancho && sel->sh == sel->imagen.alto &&
+        sel->pivote_x == 0 && sel->pivote_y == 0) {
+        motor_blit_alpha(fb, fb_ancho, fb_alto, x, y,
+                         sel->imagen.pixeles, sel->sw, sel->sh);
+    } else {
+        render_blit(fb, fb_ancho, fb_alto, x, y, &sel->imagen,
+                    sel->sx, sel->sy, sel->sw, sel->sh,
+                    sel->pivote_x, sel->pivote_y,
+                    sel->flip_x, sel->flip_y, sel->rotacion, zoom);
+    }
     if (info) info->blits++;
     return 1;
+}
+
+void render_blits_limite(int n) {
+    if (n < 1) n = 1;
+    if (n > RENDER_BLITS_MAX) n = RENDER_BLITS_MAX;
+    g_blits_limite = n;
+}
+
+int render_blits_limite_actual(void) {
+    return g_blits_limite;
+}
+
+void render_rapido(int activo) {
+    g_rapido = activo ? 1 : 0;
+}
+
+void render_cache_info(int *aciertos, int *cargas, unsigned long *bytes) {
+    int i;
+    unsigned long n = 0;
+    if (aciertos) *aciertos = g_cache_aciertos;
+    if (cargas) *cargas = g_cache_cargas;
+    for (i = 0; i < g_num_trajes; i++) {
+        const MotorImagen *img = &g_trajes[i].imagen;
+        if (img->pixeles && img->ancho > 0 && img->alto > 0)
+            n += (unsigned long)img->ancho * (unsigned long)img->alto * 4u;
+    }
+    if (bytes) *bytes = n;
 }
 
 void render_camara_iniciar(const MotorL3 *p, RenderCamara *c) {

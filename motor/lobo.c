@@ -48,6 +48,18 @@ void lobo_depurador_parada(int (*fn)(void)) {
     g_hook_debe_parar = fn;
 }
 
+/* Fase 42: contador del perfilador. Solo se lee con lobo_perfil_*; no
+ * interviene en ninguna decision de la VM ni en las pruebas antiguas. */
+static unsigned long g_perfil_instrucciones;
+
+void lobo_perfil_reiniciar(void) {
+    g_perfil_instrucciones = 0;
+}
+
+unsigned long lobo_perfil_instrucciones(void) {
+    return g_perfil_instrucciones;
+}
+
 /* Fase 37: valor de una instruccion de entrada extendida. Con `entrada_ext`
  * a NULL (motores sin raton, --vm-test antiguo) todo devuelve 0, asi que
  * los programas que no usan estas teclas no cambian. */
@@ -2606,6 +2618,7 @@ void lobo_ejecutar(const LoboPrograma *programa, LoboEstado *estado,
             maquina->agotado = 1;
             return;
         }
+        g_perfil_instrucciones++;
         switch (in->op) {
         case LOBO_NUM:
             if (np >= LOBO_PILA_MAX) { maquina->agotado = 1; return; }
@@ -2860,6 +2873,7 @@ int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
         return LOBO_PASO_EVENTO;
     }
     in = &programa->insts[maquina->pc++];
+    g_perfil_instrucciones++;
     if (g_hook_instruccion) g_hook_instruccion(maquina->pc - 1, 0);
 
     switch (in->op) {

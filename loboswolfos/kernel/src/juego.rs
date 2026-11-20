@@ -29,6 +29,7 @@ use crate::motor::{
     MOTOR_ENT_SALTO,
 };
 use crate::mouse;
+use crate::perfil;
 use crate::pit;
 use crate::println;
 use crate::saves;
@@ -240,6 +241,9 @@ impl Juego {
         let e = self.entrada;
 
         self.fotograma += 1;
+        /* Fase 42: marca el fotograma para el perfilador (sin --perfil en
+         * Windows, aqui sin activar(), no lee el reloj ni cuenta nada). */
+        perfil::iniciar_fotograma();
 
         /* Escape cierra siempre, alla donde se mueva el lobo. */
         if e & MOTOR_ENT_CERRAR != 0 {
@@ -277,7 +281,8 @@ impl Juego {
                 unsafe { core::slice::from_raw_parts(celdas_ptr, num_celdas as usize) };
             let programas = unsafe { &*PROGRAMAS.get() };
             let scripts = unsafe { &mut *SCRIPTS.get() };
-            for s in scripts.iter_mut().take(num_scripts) {
+            for (indice, s) in scripts.iter_mut().take(num_scripts).enumerate() {
+                perfil::serie(indice);
                 let mut choca = |cx: i32, cy: i32| choca_caja(cx, cy, celdas, lado);
                 lobo::ejecutar(&programas[s.prog], &mut st, &mut choca, &mut s.maquina);
                 if s.maquina.cerrar {
@@ -287,6 +292,7 @@ impl Juego {
             self.x = st.x;
             self.y = st.y;
             self.cerrar_fotograma();
+            perfil::fin_fotograma();
             return;
         }
 
@@ -319,6 +325,7 @@ impl Juego {
             }
         }
         self.cerrar_fotograma();
+        perfil::fin_fotograma();
     }
 
     /// Cierra el fotograma de la fase 41: acepta un reinicio pedido por un
@@ -601,6 +608,9 @@ pub fn arrancar(mi: &gfx::ModeInfo) -> ! {
     // Compila los botones FUNCIONES del proyecto (fase 8): el resto del
     // juego sigue corriendo aunque alguno no compile.
     scripts_preparar();
+    /* Fase 42: el perfilador se engancha despues de compilar los scripts,
+     * igual que en game.exe con --perfil (eventos_cargar reinicia). */
+    perfil::activar();
     let fb = unsafe { &mut *FB.get() };
 
     let mut juego = Juego {
@@ -677,6 +687,7 @@ pub fn arrancar(mi: &gfx::ModeInfo) -> ! {
             toque |= serie;
         }
         if !juego.corriendo {
+            perfil::informar(juego.mapa.num_celdas, juego.mapa.num_imagenes);
             println!("egine: fin del juego.");
             loop {
                 unsafe { cpu::hlt() };

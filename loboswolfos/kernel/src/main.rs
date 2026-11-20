@@ -35,6 +35,7 @@ mod juego;
 mod lobo;
 mod mouse;
 mod motor;
+mod perfil;
 mod pic;
 mod pit;
 mod png;

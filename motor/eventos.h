@@ -35,6 +35,22 @@
 #define EVENTOS_PRESUPUESTO  512   /* scripts lanzados por fotograma */
 #define EVENTOS_TOCAR_ESPERA 15    /* fotogramas entre dos tocar seguidos */
 
+/* Fase 42: medicion por script. `blits` cuenta los blits de los fotogramas
+ * en que el script se disparo (el render corre despues del despacho, asi que
+ * se atribuye el fotograma completo al conjunto de scripts activos). */
+typedef struct PerfilScript {
+    unsigned long instrucciones;
+    unsigned long microsegundos;
+    unsigned long blits;
+    int disparos;
+    int activo_foto;
+} PerfilScript;
+
+/* Reloj del perfilador: devuelve microsegundos. Lo suministra el huesped
+ * (game.exe usa QueryPerformanceCounter y el kernel usa el PIT), para que
+ * este modulo siga siendo C puro. */
+typedef unsigned long (*EventosReloj)(void *ctx);
+
 /* Tipos de evento: los mismos valores que LOGIC3. */
 enum {
     EVENTO_INICIO = 1,
@@ -95,6 +111,11 @@ typedef struct Eventos {
     int escena;
     FILE *traza;   /* --traza; puede ser NULL */
     int detalle;   /* 1 = volcar eventos ejecutados (--eventos) */
+    /* --- perfilador (fase 42) --- */
+    PerfilScript perfil[EVENTOS_SCRIPTS_MAX];
+    int perfil_activo;
+    EventosReloj reloj;
+    void *reloj_ctx;
 } Eventos;
 
 /* Deja el planificador limpio (no libera programas: para eso esta
@@ -140,5 +161,12 @@ int eventos_avisos(const Eventos *ev);
 int eventos_ejecutados(const Eventos *ev);
 int eventos_cerrar(const Eventos *ev);
 unsigned eventos_entrada(const Eventos *ev, const char *nombre);
+
+/* Perfilador (fase 42). Sin eventos_perfil_activar todo sigue como antes:
+ * no se llama al reloj ni se cuentan instrucciones. */
+void eventos_perfil_activar(Eventos *ev, EventosReloj reloj, void *ctx);
+int eventos_perfil_activo(const Eventos *ev);
+const PerfilScript *eventos_perfil_script(const Eventos *ev, int i);
+void eventos_perfil_blits(Eventos *ev, int blits);
 
 #endif /* EVENTOS_H */

@@ -50,6 +50,12 @@ unsigned eventos_entrada(const Eventos *ev, const char *nombre) {
     return 0;
 }
 
+/* Fase 42: puntos de medida del perfilador. El reloj lo da el huesped; sin
+ * reloj (por ejemplo --vm-test) los microsegundos quedan a cero. */
+static unsigned long perfil_ahora(const Eventos *ev) {
+    return ev->reloj ? ev->reloj(ev->reloj_ctx) : 0;
+}
+
 static const char *tipo_texto(int tipo) {
     switch (tipo) {
     case EVENTO_INICIO: return "inicio";
@@ -275,10 +281,17 @@ static int gastar(Eventos *ev) {
 static int lanzar(Eventos *ev, LoboEstado *estado, int indice, int ent,
                   int repetir, const char *nota) {
     EventoScript *s = &ev->scripts[indice];
+    unsigned long ins0 = 0, t0 = 0;
     if (!gastar(ev)) return 0;
     traza_evento(ev, s, indice, ent, nota);
     s->maquina.entidad = ent;
     estado->fotograma = ev->fotograma;
+    if (ev->perfil_activo) {
+        ins0 = lobo_perfil_instrucciones();
+        t0 = perfil_ahora(ev);
+        ev->perfil[indice].activo_foto = 1;
+        ev->perfil[indice].disparos++;
+    }
     (void)depurador_antes_bloque(s->bloque, s->evento, indice);
     if (repetir)
         lobo_vm_fotograma(&s->programa, estado, &s->maquina);
@@ -286,6 +299,12 @@ static int lanzar(Eventos *ev, LoboEstado *estado, int indice, int ent,
         lobo_vm_evento(&s->programa, estado, &s->maquina);
     (void)depurador_despues_bloque(s->bloque, s->evento, indice,
                                    s->maquina.pc, s->maquina.agotado);
+    if (ev->perfil_activo) {
+        PerfilScript *p = &ev->perfil[indice];
+        unsigned long t1 = perfil_ahora(ev);
+        p->instrucciones += lobo_perfil_instrucciones() - ins0;
+        if (t1 >= t0) p->microsegundos += t1 - t0;
+    }
     if (s->maquina.detener_todo) ev->detener_todo = 1;
     if (s->maquina.cerrar) ev->cerrar = 1;
     return 1;
@@ -294,12 +313,25 @@ static int lanzar(Eventos *ev, LoboEstado *estado, int indice, int ent,
 /* Continua la espera de un script de un disparo sin reiniciarlo. */
 static void reanudar(Eventos *ev, LoboEstado *estado, int indice, int ent) {
     EventoScript *s = &ev->scripts[indice];
+    unsigned long ins0 = 0, t0 = 0;
     s->maquina.entidad = ent;
     estado->fotograma = ev->fotograma;
+    if (ev->perfil_activo) {
+        ins0 = lobo_perfil_instrucciones();
+        t0 = perfil_ahora(ev);
+        ev->perfil[indice].activo_foto = 1;
+        ev->perfil[indice].disparos++;
+    }
     (void)depurador_antes_bloque(s->bloque, s->evento, indice);
     lobo_vm_reanudar(&s->programa, estado, &s->maquina);
     (void)depurador_despues_bloque(s->bloque, s->evento, indice,
                                    s->maquina.pc, s->maquina.agotado);
+    if (ev->perfil_activo) {
+        PerfilScript *p = &ev->perfil[indice];
+        unsigned long t1 = perfil_ahora(ev);
+        p->instrucciones += lobo_perfil_instrucciones() - ins0;
+        if (t1 >= t0) p->microsegundos += t1 - t0;
+    }
     if (s->maquina.detener_todo) ev->detener_todo = 1;
     if (s->maquina.cerrar) ev->cerrar = 1;
 }
@@ -335,6 +367,9 @@ void eventos_fotograma(Eventos *ev, LoboEstado *estado, int fotograma,
     ev->fotograma = fotograma;
     ev->eventos_fotograma = 0;
     ev->avisado = 0;
+    if (ev->perfil_activo)
+        for (i = 0; i < ev->num_scripts; i++)
+            ev->perfil[i].activo_foto = 0;
     estado->fotograma = fotograma;
     estado->entrada = entrada;
 
@@ -551,4 +586,30 @@ int eventos_ejecutados(const Eventos *ev) {
 
 int eventos_cerrar(const Eventos *ev) {
     return ev ? ev->cerrar : 0;
+}
+
+void eventos_perfil_activar(Eventos *ev, EventosReloj reloj, void *ctx) {
+    if (!ev) return;
+    memset(ev->perfil, 0, sizeof(ev->perfil));
+    ev->perfil_activo = 1;
+    ev->reloj = reloj;
+    ev->reloj_ctx = ctx;
+}
+
+int eventos_perfil_activo(const Eventos *ev) {
+    return ev ? ev->perfil_activo : 0;
+}
+
+const PerfilScript *eventos_perfil_script(const Eventos *ev, int i) {
+    if (!ev || !ev->perfil_activo || i < 0 || i >= ev->num_scripts)
+        return NULL;
+    return &ev->perfil[i];
+}
+
+void eventos_perfil_blits(Eventos *ev, int blits) {
+    int i;
+    if (!ev || !ev->perfil_activo || blits <= 0) return;
+    for (i = 0; i < ev->num_scripts; i++)
+        if (ev->perfil[i].activo_foto)
+            ev->perfil[i].blits += (unsigned long)blits;
 }

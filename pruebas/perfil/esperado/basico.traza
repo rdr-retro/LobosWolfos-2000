@@ -1,0 +1,34 @@
+vm: 3 scripts
+vm: script 0 bloque 1 objeto 1 evento 1
+vm: script 1 bloque 2 objeto 1 evento 2
+vm: script 2 bloque 3 objeto 1 evento 3
+1 16 16
+vm 0:2:4:0 1:0:0:0 2:2:4:0
+perfil 1 instrucciones 8 us <us> blits 0 cache 0/0 limite 256
+2 16 16
+vm 0:2:4:0 1:0:0:0 2:2:4:0
+perfil 2 instrucciones 4 us <us> blits 0 cache 0/0 limite 256
+3 16 16
+vm 0:2:4:0 1:0:0:0 2:2:4:0
+perfil 3 instrucciones 4 us <us> blits 0 cache 0/0 limite 256
+4 16 16
+vm 0:2:4:0 1:0:0:0 2:2:4:0
+perfil 4 instrucciones 4 us <us> blits 0 cache 0/0 limite 256
+5 16 16
+vm 0:2:4:0 1:0:0:0 2:2:4:0
+perfil 5 instrucciones 4 us <us> blits 0 cache 0/0 limite 256
+6 16 16
+vm 0:2:4:0 1:0:0:0 2:2:4:0
+perfil 6 instrucciones 4 us <us> blits 0 cache 0/0 limite 256
+7 16 16
+vm 0:2:4:0 1:0:0:0 2:2:4:0
+perfil 7 instrucciones 4 us <us> blits 0 cache 0/0 limite 256
+8 16 16
+vm 0:2:4:0 1:0:0:0 2:2:4:0
+perfil 8 instrucciones 4 us <us> blits 0 cache 0/0 limite 256
+9 16 16
+vm 0:2:4:0 1:0:0:0 2:2:4:0
+perfil 9 instrucciones 4 us <us> blits 0 cache 0/0 limite 256
+10 16 16
+vm 0:2:4:0 1:0:0:0 2:2:4:0
+perfil 10 instrucciones 4 us <us> blits 0 cache 0/0 limite 256

@@ -511,4 +511,10 @@ int lobo_vm_reanudar(const LoboPrograma *programa, LoboEstado *estado,
 /* Reinicia una maquina (locales a cero y VM lista) para un uso nuevo. */
 void lobo_maquina_reiniciar(LoboMaquina *maquina);
 
+/* Fase 42: contador global de instrucciones para el perfilador. Crece en
+ * lobo_paso y en lobo_ejecutar; el planificador mide la diferencia antes y
+ * despues de lanzar cada script. No cambia el resultado de ningun script. */
+void lobo_perfil_reiniciar(void);
+unsigned long lobo_perfil_instrucciones(void);
+
 #endif /* LOBO_H */

@@ -1,0 +1,4 @@
+perfil: fotogramas 30 us totales <us> us medios <us> us maximos <us>
+perfil: presupuesto 16667 avisos 0 blits por fotograma 203
+memoria: blob <blob> archivos 0 trajes 6090 cargas 3 imagenes <bytes> runtime <runtime>
+memoria: mapa celdas 5000 entidades 203 tiles 1

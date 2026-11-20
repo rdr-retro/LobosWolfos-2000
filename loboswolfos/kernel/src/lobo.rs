@@ -1762,6 +1762,8 @@ pub fn ejecutar<F: FnMut(i32, i32) -> bool>(
             maquina.agotado = true;
             return;
         }
+        /* Fase 42: cuenta igual que motor/lobo.c; sin perfil no hace nada. */
+        crate::perfil::contar_instruccion();
         match in_.op {
             LOBO_NUM => {
                 if np >= LOBO_PILA_MAX {
