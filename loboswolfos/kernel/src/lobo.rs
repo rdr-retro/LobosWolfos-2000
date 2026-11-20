@@ -119,6 +119,16 @@ pub const LOBO_DETENER_SONIDO: u8 = 83;
 pub const LOBO_VOLUMEN: u8 = 84;
 pub const LOBO_VOLUMEN_ACTUAL: u8 = 85;
 
+/* Fase 40: guardado, records y ajustes. Tambien van al final para no
+ * mover ningun opcode anterior (espejo de motor/lobo.h en Windows). */
+pub const LOBO_GUARDAR: u8 = 86;
+pub const LOBO_CARGAR: u8 = 87;
+pub const LOBO_BORRAR_SAVE: u8 = 88;
+pub const LOBO_RECORD: u8 = 89;
+pub const LOBO_RECORD_ACTUAL: u8 = 90;
+pub const LOBO_AJUSTE: u8 = 91;
+pub const LOBO_AJUSTE_ACTUAL: u8 = 92;
+
 /* Textos constantes de un programa (espejo de motor/lobo.h). Un valor
  * de la pila con esta marca alta es un handle de texto. */
 pub const LOBO_TEXTOS_MAX: usize = 64;
@@ -822,6 +832,28 @@ fn nombre_conocido(nombre: &[u8]) -> (i32, bool, bool) {
     if nombre_es(nombre, b"volumen_actual") {
         return (LOBO_VOLUMEN_ACTUAL as i32, false, true);
     }
+    /* Fase 40: builtins del guardado. */
+    if nombre_es(nombre, b"guardar") {
+        return (LOBO_GUARDAR as i32, false, true);
+    }
+    if nombre_es(nombre, b"cargar") {
+        return (LOBO_CARGAR as i32, false, true);
+    }
+    if nombre_es(nombre, b"borrar_save") {
+        return (LOBO_BORRAR_SAVE as i32, false, true);
+    }
+    if nombre_es(nombre, b"record") {
+        return (LOBO_RECORD as i32, false, true);
+    }
+    if nombre_es(nombre, b"record_actual") {
+        return (LOBO_RECORD_ACTUAL as i32, false, true);
+    }
+    if nombre_es(nombre, b"ajuste") {
+        return (LOBO_AJUSTE as i32, false, true);
+    }
+    if nombre_es(nombre, b"ajuste_actual") {
+        return (LOBO_AJUSTE_ACTUAL as i32, false, true);
+    }
     (-1, false, false)
 }
 
@@ -837,6 +869,10 @@ fn hud_argumentos(op: i32) -> i32 {
         LOBO_HUD_BARRA => 7,
         LOBO_SONAR | LOBO_MUSICA | LOBO_VOLUMEN => 1,
         LOBO_DETENER_SONIDO | LOBO_VOLUMEN_ACTUAL => 0,
+        /* Fase 40: guardado, records y ajustes. */
+        LOBO_GUARDAR | LOBO_RECORD | LOBO_AJUSTE => 2,
+        LOBO_CARGAR | LOBO_RECORD_ACTUAL | LOBO_AJUSTE_ACTUAL => 1,
+        LOBO_BORRAR_SAVE => 0,
         _ => 0,
     }
 }
@@ -1053,9 +1089,10 @@ impl<'a> LoboParser<'a> {
                     return self.emitir(LOBO_RATON_BOTON, 0);
                 }
                 /* Fase 38: vidas, puntos, dialogo y elementos del HUD.
-                 * Fase 39: el rango sigue hasta los builtins del audio. */
+                 * Fase 39: el rango sigue hasta el audio.
+                 * Fase 40: sigue hasta los builtins del guardado. */
                 if conocido >= LOBO_HUD_VIDAS as i32
-                    && conocido <= LOBO_VOLUMEN_ACTUAL as i32
+                    && conocido <= LOBO_AJUSTE_ACTUAL as i32
                 {
                     return self.llamada_hud(conocido, hud_argumentos(conocido));
                 }
@@ -2148,6 +2185,54 @@ pub fn ejecutar<F: FnMut(i32, i32) -> bool>(
             }
             LOBO_VOLUMEN_ACTUAL => {
                 if !hud_meter(&mut pila, &mut np, crate::audio::volumen_actual()) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            /* Fase 40: guardado, records y ajustes. Los textos entre
+             * comillas llegan como handles, igual que en el audio. */
+            LOBO_GUARDAR | LOBO_RECORD | LOBO_AJUSTE => {
+                let Some(valor) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(handle) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let clave = resolver_texto(programa, handle).unwrap_or(b"");
+                let resultado = match in_.op {
+                    LOBO_GUARDAR => crate::saves::guardar(clave, valor),
+                    LOBO_RECORD => crate::saves::record(clave, valor),
+                    _ => {
+                        let anterior = crate::saves::ajuste_actual(clave);
+                        crate::saves::ajuste(clave, valor);
+                        anterior
+                    }
+                };
+                if !hud_meter(&mut pila, &mut np, resultado) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_CARGAR | LOBO_RECORD_ACTUAL | LOBO_AJUSTE_ACTUAL => {
+                let Some(handle) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let clave = resolver_texto(programa, handle).unwrap_or(b"");
+                let resultado = match in_.op {
+                    LOBO_CARGAR => crate::saves::cargar(clave),
+                    LOBO_RECORD_ACTUAL => crate::saves::record_actual(clave),
+                    _ => crate::saves::ajuste_actual(clave),
+                };
+                if !hud_meter(&mut pila, &mut np, resultado) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_BORRAR_SAVE => {
+                if !hud_meter(&mut pila, &mut np, crate::saves::borrar()) {
                     maquina.agotado = true;
                     return;
                 }

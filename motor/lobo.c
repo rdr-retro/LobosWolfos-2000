@@ -509,6 +509,15 @@ static int lobo_nombre_conocido(const char *nombre, int *es_tecla,
     if (lobo_igual(nombre, "detener_sonido")) return LOBO_DETENER_SONIDO;
     if (lobo_igual(nombre, "volumen")) return LOBO_VOLUMEN;
     if (lobo_igual(nombre, "volumen_actual")) return LOBO_VOLUMEN_ACTUAL;
+    /* Fase 40: guardado, records y ajustes. Como el audio, el valor
+     * devuelto es el opcode y la aridad se deduce de el. */
+    if (lobo_igual(nombre, "guardar")) return LOBO_GUARDAR;
+    if (lobo_igual(nombre, "cargar")) return LOBO_CARGAR;
+    if (lobo_igual(nombre, "borrar_save")) return LOBO_BORRAR_SAVE;
+    if (lobo_igual(nombre, "record")) return LOBO_RECORD;
+    if (lobo_igual(nombre, "record_actual")) return LOBO_RECORD_ACTUAL;
+    if (lobo_igual(nombre, "ajuste")) return LOBO_AJUSTE;
+    if (lobo_igual(nombre, "ajuste_actual")) return LOBO_AJUSTE_ACTUAL;
     *es_funcion = 0;
     return -1;
 }
@@ -1053,6 +1062,37 @@ static int lobo_llamada_audio(LoboParser *p, int op, int n) {
     return lobo_emitir(p, op, 0);
 }
 
+/* Fase 40: numero de argumentos de cada builtin de persistencia. */
+static int lobo_save_argumentos(int op) {
+    switch (op) {
+    case LOBO_GUARDAR:
+    case LOBO_RECORD:
+    case LOBO_AJUSTE: return 2;
+    case LOBO_CARGAR:
+    case LOBO_RECORD_ACTUAL:
+    case LOBO_AJUSTE_ACTUAL: return 1;
+    default: return 0;
+    }
+}
+
+/* Igual que lobo_llamada_audio: lee los argumentos de izquierda a derecha
+ * y deja la instruccion lista para consumirlos en orden inverso. */
+static int lobo_llamada_save(LoboParser *p, int op, int n) {
+    int i;
+    for (i = 0; i < n; i++) {
+        if (i && !lobo_comer_op(p, ",")) {
+            lobo_error(p, "se esperaba , entre argumentos del guardado");
+            return 0;
+        }
+        if (!lobo_expresion(p)) return 0;
+    }
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar la llamada de guardado");
+        return 0;
+    }
+    return lobo_emitir(p, op, 0);
+}
+
 /* aleatorio(a, b): extremos incluidos, semilla por maquina. */
 static int lobo_llamada_aleatorio(LoboParser *p) {
     if (!lobo_expresion(p)) return 0;
@@ -1365,6 +1405,11 @@ static int lobo_primario(LoboParser *p) {
                 conocido <= LOBO_VOLUMEN_ACTUAL)
                 return lobo_llamada_audio(p, conocido,
                                           lobo_audio_argumentos(conocido));
+            /* Fase 40: guardar, cargar, borrar_save y records. */
+            if (conocido >= LOBO_GUARDAR &&
+                conocido <= LOBO_AJUSTE_ACTUAL)
+                return lobo_llamada_save(p, conocido,
+                                         lobo_save_argumentos(conocido));
             if (conocido != LOBO_CHOCAR) return 0;
             if (!lobo_expresion(p)) return 0;
             if (!lobo_comer_op(p, ",")) {
@@ -3454,6 +3499,70 @@ int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
         if (ok && estado->volumen_actual)
             actual = estado->volumen_actual(estado->ctx_audio);
         if (ok) lobo_vm_push(maquina, actual, &ok);
+        break;
+    }
+    /* --- fase 40: guardado, records y ajustes ---
+     * Los textos entre comillas llegan como handles y se resuelven al
+     * nombre de la clave. Sin callbacks no se toca ningun archivo. */
+    case LOBO_GUARDAR:
+    case LOBO_RECORD:
+    case LOBO_AJUSTE: {
+        const char *clave;
+        int valor = 0;
+        int resultado = 0;
+        a = lobo_vm_pop(maquina, &ok); /* valor (el ultimo argumento) */
+        b = lobo_vm_pop(maquina, &ok); /* texto de la clave */
+        valor = a;
+        clave = lobo_texto_resolver(programa, estado->memoria, b);
+        if (ok && clave) {
+            switch (in->op) {
+            case LOBO_GUARDAR:
+                resultado = estado->guardar ?
+                    estado->guardar(estado->ctx_save, clave, valor) : 1;
+                break;
+            case LOBO_RECORD:
+                resultado = estado->record ?
+                    estado->record(estado->ctx_save, clave, valor) : valor;
+                break;
+            default:
+                resultado = estado->ajuste ?
+                    estado->ajuste(estado->ctx_save, clave, valor) : valor;
+                break;
+            }
+        }
+        if (ok) lobo_vm_push(maquina, resultado, &ok);
+        break;
+    }
+    case LOBO_CARGAR:
+    case LOBO_RECORD_ACTUAL:
+    case LOBO_AJUSTE_ACTUAL: {
+        const char *clave;
+        int resultado = 0;
+        a = lobo_vm_pop(maquina, &ok);
+        clave = lobo_texto_resolver(programa, estado->memoria, a);
+        if (ok && clave) {
+            switch (in->op) {
+            case LOBO_CARGAR:
+                if (estado->cargar)
+                    resultado = estado->cargar(estado->ctx_save, clave);
+                break;
+            case LOBO_RECORD_ACTUAL:
+                if (estado->record_actual)
+                    resultado = estado->record_actual(estado->ctx_save, clave);
+                break;
+            default:
+                if (estado->ajuste_actual)
+                    resultado = estado->ajuste_actual(estado->ctx_save, clave);
+                break;
+            }
+        }
+        if (ok) lobo_vm_push(maquina, resultado, &ok);
+        break;
+    }
+    case LOBO_BORRAR_SAVE: {
+        int resultado = estado->borrar_save ?
+            estado->borrar_save(estado->ctx_save) : 1;
+        if (ok) lobo_vm_push(maquina, resultado, &ok);
         break;
     }
     default:

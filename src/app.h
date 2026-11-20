@@ -437,7 +437,7 @@ typedef unsigned char  u8;
 #define BLOQUES_MAX             256
 #define BLOQUES_HISTORIAL_MAX   16
 #define BLOQUES_CATEGORIAS      6
-#define BLOQUES_DEFS            20
+#define BLOQUES_DEFS            27
 #define BLOQUES_NOMBRE_MAX      32
 #define BLOQUES_CAMPO_MAX       24
 #define BLOQUES_SLOT_MAX        16
@@ -1685,6 +1685,8 @@ void datos_rueda(int x, int y, int delta, int ctrl);
 void datos_tecla(int vk, int ctrl, int shift);
 void datos_caracter(int ch);
 void datos_volcar(const char *ruta);
+void datos_saves_herramienta(const char *carpeta, const char *salida,
+                             const char *borrar);
 const char *datos_ultimo_error(void);
 int  datos_refs_sustituidas(void);
 

@@ -38,6 +38,7 @@ mod pic;
 mod pit;
 mod png;
 mod ps2;
+mod saves;
 mod serial;
 mod sync;
 mod vga;

@@ -267,7 +267,15 @@ enum {
     LOBO_MUSICA,         /* pila: texto; apila 1 si se pudo reproducir */
     LOBO_DETENER_SONIDO, /* pila: -; apila 0 */
     LOBO_VOLUMEN,        /* pila: valor; apila el volumen anterior */
-    LOBO_VOLUMEN_ACTUAL  /* pila: -; apila el volumen actual */
+    LOBO_VOLUMEN_ACTUAL, /* pila: -; apila el volumen actual */
+    /* --- fase 40: guardado, records y persistencia --- */
+    LOBO_GUARDAR,         /* pila: texto clave, valor; apila 1 si se guardo */
+    LOBO_CARGAR,          /* pila: texto clave; apila el valor (0 si no esta) */
+    LOBO_BORRAR_SAVE,     /* pila: -; apila 1 si se pudo borrar */
+    LOBO_RECORD,          /* pila: texto clave, valor; apila el record */
+    LOBO_RECORD_ACTUAL,   /* pila: texto clave; apila el record */
+    LOBO_AJUSTE,          /* pila: texto nombre, valor; apila el anterior */
+    LOBO_AJUSTE_ACTUAL    /* pila: texto nombre; apila el ajuste */
 };
 
 /* Una instruccion del programa compilado. */
@@ -387,6 +395,16 @@ typedef struct LoboEstado {
     int (*volumen)(void *ctx, int valor);
     int (*volumen_actual)(void *ctx);
     void *ctx_audio;
+    /* --- fase 40: guardado y records. Sin callbacks (editor y --vm-test)
+      * las llamadas devuelven un valor neutro y no tocan ningun archivo. */
+    int (*guardar)(void *ctx, const char *clave, int valor);
+    int (*cargar)(void *ctx, const char *clave);
+    int (*borrar_save)(void *ctx);
+    int (*record)(void *ctx, const char *clave, int valor);
+    int (*record_actual)(void *ctx, const char *clave);
+    int (*ajuste)(void *ctx, const char *nombre, int valor);
+    int (*ajuste_actual)(void *ctx, const char *nombre);
+    void *ctx_save;
 } LoboEstado;
 
 /* Un frame de llamada: donde volver y el estado que hay que restaurar. */

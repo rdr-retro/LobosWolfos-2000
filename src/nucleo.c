@@ -2586,6 +2586,31 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 productividad_volcar(pv_ruta);
             }
         }
+        /* Fase 40: herramienta de saves del editor, detras de flags nuevos. */
+        {
+            char *sc = arg_valor(cmd, "--saves-carpeta");
+            char *sv = arg_valor(cmd, "--saves-volcar");
+            char *sb = arg_valor(cmd, "--saves-borrar");
+            if (sv) {
+                char salida[MAX_PATH], carpeta[MAX_PATH], borrar[MAX_PATH];
+                int n;
+                n = 0;
+                while (sv[n] && sv[n] != ' ' && sv[n] != '\t' &&
+                       n < MAX_PATH - 1) { salida[n] = sv[n]; n++; }
+                salida[n] = 0;
+                n = 0;
+                if (sc)
+                    while (sc[n] && sc[n] != ' ' && sc[n] != '\t' &&
+                           n < MAX_PATH - 1) { carpeta[n] = sc[n]; n++; }
+                carpeta[n] = 0;
+                n = 0;
+                if (sb)
+                    while (sb[n] && sb[n] != ' ' && sb[n] != '\t' &&
+                           n < MAX_PATH - 1) { borrar[n] = sb[n]; n++; }
+                borrar[n] = 0;
+                datos_saves_herramienta(carpeta, salida, borrar);
+            }
+        }
         /* Vuelca el lobo generado (fase 33) como texto plano. */
         {
             char *codigo_arg = arg_valor(cmd, "--volcar-codigo");

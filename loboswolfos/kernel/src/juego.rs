@@ -31,6 +31,7 @@ use crate::motor::{
 use crate::mouse;
 use crate::pit;
 use crate::println;
+use crate::saves;
 use crate::sync::SyncCell;
 
 const VENTANA_ANCHO: i32 = 640;
@@ -511,6 +512,7 @@ pub fn arrancar(mi: &gfx::ModeInfo) -> ! {
     sprite_crear();
     lobo::hud_limpiar(); // fase 38: estado del HUD limpio al arrancar
     audio::limpiar(); // fase 39: sin notas y altavoz apagado al arrancar
+    saves::limpiar(); // fase 40: tabla de guardado vacia al arrancar
     let Some(mapa) = activo::cargar_todo() else {
         println!("egine: sin proyecto que cargar; el kernel se queda en modo texto.");
         crate::bucle_texto()

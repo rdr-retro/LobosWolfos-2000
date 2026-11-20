@@ -100,7 +100,24 @@ static const DefBloque DEFS[BLOQUES_DEFS] = {
     { "sonido.volumen", "volumen", 5, FORMA_PILA, 0x006E3FA0u,
       { 1, 0 }, { "valor", "" }, { "valor", "" } },
     { "sonido.volumen_actual", "volumen actual", 5, FORMA_REPORTERO,
-      0x006E3FA0u, { 0, 0 }, { "", "" }, { "", "" } }
+      0x006E3FA0u, { 0, 0 }, { "", "" }, { "", "" } },
+    /* Fase 40: guardado, records y ajustes. Van detras del sonido, en la
+     * categoria CODIGO, para no desplazar ninguna fila de las suites
+     * anteriores. */
+    { "datos.guardar", "guardar", 5, FORMA_PILA, 0x00506090u,
+      { 1, 1 }, { "clave", "valor" }, { "valor", "" } },
+    { "datos.cargar", "cargar", 5, FORMA_REPORTERO, 0x00506090u,
+      { 1, 0 }, { "clave", "" }, { "", "" } },
+    { "datos.borrar_save", "borrar save", 5, FORMA_PILA, 0x00506090u,
+      { 0, 0 }, { "", "" }, { "", "" } },
+    { "datos.record", "record", 5, FORMA_PILA, 0x00506090u,
+      { 1, 1 }, { "clave", "valor" }, { "valor", "" } },
+    { "datos.record_actual", "record actual", 5, FORMA_REPORTERO,
+      0x00506090u, { 1, 0 }, { "clave", "" }, { "", "" } },
+    { "datos.ajuste", "ajuste", 5, FORMA_PILA, 0x00506090u,
+      { 1, 1 }, { "nombre", "valor" }, { "valor", "" } },
+    { "datos.ajuste_actual", "ajuste actual", 5, FORMA_REPORTERO,
+      0x00506090u, { 1, 0 }, { "nombre", "" }, { "", "" } }
 };
 
 static NodoBloque nodos[BLOQUES_MAX];

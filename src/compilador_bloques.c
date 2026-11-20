@@ -29,7 +29,14 @@ enum {
     DEF_SONIDO_MUSICA,
     DEF_SONIDO_DETENER,
     DEF_SONIDO_VOLUMEN,
-    DEF_SONIDO_VOLUMEN_ACTUAL
+    DEF_SONIDO_VOLUMEN_ACTUAL,
+    DEF_GUARDAR,
+    DEF_CARGAR,
+    DEF_BORRAR_SAVE,
+    DEF_RECORD,
+    DEF_RECORD_ACTUAL,
+    DEF_AJUSTE,
+    DEF_AJUSTE_ACTUAL
 };
 
 static char codigo[COMPILADOR_CODIGO_MAX];
@@ -280,6 +287,41 @@ void generar_sentencia(int id, int profundo) {
         anadir_texto("volumen_actual()", id);
         return;
     }
+    /* Fase 40: guardado, records y ajustes con las llamadas que acepta
+     * la VM. Los reporteros se resuelven dentro de la sentencia que los
+     * usa; aqui solo se genera su texto cuando cuelgan de algo. */
+    if (def == DEF_GUARDAR || def == DEF_RECORD || def == DEF_AJUSTE) {
+        char clave[96];
+        copiar_escapado(clave, sizeof(clave),
+                        bloques_nodo_campo(id, 0));
+        if (!clave[0])
+            copiar_texto(clave, sizeof(clave),
+                         def == DEF_AJUSTE ? "nombre" : "clave");
+        anadir_linea(id, "%s(\"%s\", %d)",
+                     def == DEF_GUARDAR ? "guardar" :
+                     (def == DEF_RECORD ? "record" : "ajuste"),
+                     clave, campo_entero(bloques_nodo_campo(id, 1)));
+        return;
+    }
+    if (def == DEF_CARGAR || def == DEF_RECORD_ACTUAL ||
+        def == DEF_AJUSTE_ACTUAL) {
+        char clave[96];
+        copiar_escapado(clave, sizeof(clave),
+                        bloques_nodo_campo(id, 0));
+        if (!clave[0])
+            copiar_texto(clave, sizeof(clave),
+                         def == DEF_AJUSTE_ACTUAL ? "nombre" : "clave");
+        anadir_linea(id, "%s(\"%s\")",
+                     def == DEF_CARGAR ? "cargar" :
+                     (def == DEF_RECORD_ACTUAL ? "record_actual" :
+                                                 "ajuste_actual"),
+                     clave);
+        return;
+    }
+    if (def == DEF_BORRAR_SAVE) {
+        anadir_texto("borrar_save()", id);
+        return;
+    }
     /* Definicion desconocida: se deja una linea que el validador marcara. */
     anadir_linea(id, "bloque_desconocido %d", id);
 }
@@ -317,7 +359,10 @@ void compilador_bloques_generar(void) {
         if (bloques_nodo_padre(id) == 0 &&
             bloques_nodo_def(id) != DEF_SUMA &&
             bloques_nodo_def(id) != DEF_MAYOR &&
-            bloques_nodo_def(id) != DEF_SONIDO_VOLUMEN_ACTUAL)
+            bloques_nodo_def(id) != DEF_SONIDO_VOLUMEN_ACTUAL &&
+            bloques_nodo_def(id) != DEF_CARGAR &&
+            bloques_nodo_def(id) != DEF_RECORD_ACTUAL &&
+            bloques_nodo_def(id) != DEF_AJUSTE_ACTUAL)
             generar_sentencia(id, 0);
     }
     codigo[longitud] = 0;

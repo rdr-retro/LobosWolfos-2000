@@ -30,6 +30,8 @@
  *   --audio-sonido n=ruta  asocia el nombre de un sonido a un WAV
  *   --volumen N       volumen maestro inicial (0..100, activa el audio)
  *   --volcar-audio ruta  volca el estado final del mezclador
+ *   --saves ruta      carpeta de saves (activa guardar/cargar/record)
+ *   --volcar-saves ruta  volca el estado final del guardado
  */
 #include <windows.h>
 #include <stdio.h>
@@ -47,6 +49,7 @@
 #include "panel_debug.h"
 #include "hud.h"
 #include "audio.h"
+#include "save.h"
 
 #define VENTANA_ANCHO 640
 #define VENTANA_ALTO  480
@@ -89,6 +92,11 @@ static const char *g_ruta_volcar_hud;
  * hasta pedir --audio, --audio-sonido, --volumen o --volcar-audio. */
 static int g_audio_activo;
 static const char *g_ruta_volcar_audio;
+
+/* Fase 40: guardado. Sin --saves no se abre ningun .sav y las salidas de
+ * las suites anteriores siguen byte a byte identicas. */
+static int g_saves_activo;
+static const char *g_ruta_volcar_saves;
 
 /* Ajustes del proyecto aplicados al motor (fase 14). */
 static int g_ancho = VENTANA_ANCHO;
@@ -664,6 +672,43 @@ static int cb_volumen_actual(void *ctx) {
     return motor_audio_volumen_actual();
 }
 
+/* --- fase 40: callbacks del guardado ------------------------------- */
+
+static int cb_guardar(void *ctx, const char *clave, int valor) {
+    (void)ctx;
+    return motor_save_guardar(clave, valor);
+}
+
+static int cb_cargar(void *ctx, const char *clave) {
+    (void)ctx;
+    return motor_save_cargar(clave);
+}
+
+static int cb_borrar_save(void *ctx) {
+    (void)ctx;
+    return motor_save_borrar();
+}
+
+static int cb_record(void *ctx, const char *clave, int valor) {
+    (void)ctx;
+    return motor_save_record(clave, valor);
+}
+
+static int cb_record_actual(void *ctx, const char *clave) {
+    (void)ctx;
+    return motor_save_record_actual(clave);
+}
+
+static int cb_ajuste(void *ctx, const char *nombre, int valor) {
+    (void)ctx;
+    return motor_save_ajuste(nombre, valor);
+}
+
+static int cb_ajuste_actual(void *ctx, const char *nombre) {
+    (void)ctx;
+    return motor_save_ajuste_actual(nombre);
+}
+
 /* Estado compartido por los scripts de un fotograma: posicion del lobo,
  * teclas, memoria de la VM y callbacks de entidades. */
 static void estado_preparar(LoboEstado *st) {
@@ -717,6 +762,16 @@ static void estado_preparar(LoboEstado *st) {
         st->volumen = cb_volumen;
         st->volumen_actual = cb_volumen_actual;
         st->ctx_audio = NULL;
+    }
+    if (g_saves_activo) {
+        st->guardar = cb_guardar;
+        st->cargar = cb_cargar;
+        st->borrar_save = cb_borrar_save;
+        st->record = cb_record;
+        st->record_actual = cb_record_actual;
+        st->ajuste = cb_ajuste;
+        st->ajuste_actual = cb_ajuste_actual;
+        st->ctx_save = NULL;
     }
 }
 
@@ -1646,7 +1701,9 @@ static int opcion(const char *nombre) {
            strcmp(nombre, "--volcar-hud") == 0 ||
            strcmp(nombre, "--audio-sonido") == 0 ||
            strcmp(nombre, "--volumen") == 0 ||
-           strcmp(nombre, "--volcar-audio") == 0;
+           strcmp(nombre, "--volcar-audio") == 0 ||
+            strcmp(nombre, "--saves") == 0 ||
+            strcmp(nombre, "--volcar-saves") == 0;
 }
 
 int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show) {
@@ -1664,6 +1721,7 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     motor_entrada_iniciar(&g_entrada_ext);
     motor_hud_limpiar();
     motor_audio_limpiar();
+    motor_save_limpiar();
     for (i = 1; i < __argc; i++) {
         if (strcmp(__argv[i], "--entidades") == 0) {
             g_entidades = 1;
@@ -1805,6 +1863,12 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
                 motor_audio_volumen(atoi(v));
             } else if (strcmp(__argv[i - 1], "--volcar-audio") == 0) {
                 g_ruta_volcar_audio = v;
+            } else if (strcmp(__argv[i - 1], "--saves") == 0) {
+                g_saves_activo = 1;
+                motor_save_activar(1);
+                motor_save_directorio(v);
+            } else if (strcmp(__argv[i - 1], "--volcar-saves") == 0) {
+                g_ruta_volcar_saves = v;
             } else if (strcmp(__argv[i - 1], "--observar") == 0) {
                 depurador_observar(v);
             } else if (strcmp(__argv[i - 1], "--break") == 0) {
@@ -1905,6 +1969,11 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         motor_audio_base(ruta_logic3 ? ruta_logic3
                                      : (ruta_logica ? ruta_logica : ""));
 
+    /* Fase 40: el nombre del save sale del mismo proyecto. Sin --saves no
+     * se abre ningun archivo, aunque se calcule la ruta para el volcado. */
+    motor_save_base(ruta_logic3 ? ruta_logic3
+                                : (ruta_logica ? ruta_logica : ""));
+
     if (ruta_logic3) {
         char error[MOTOR_L3_ERROR_MAX];
         char ruta_mapa_l3[MAX_PATH];
@@ -2004,6 +2073,7 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         motor_entrada_volcar(&g_entrada_ext, g_ruta_volcar_entrada);
     if (g_ruta_volcar_hud) motor_hud_volcar(g_ruta_volcar_hud);
     if (g_ruta_volcar_audio) motor_audio_volcar(g_ruta_volcar_audio);
+    if (g_ruta_volcar_saves) motor_save_volcar(g_ruta_volcar_saves);
     if (g_grabar_replay) depurador_guardar_replay(g_grabar_replay);
     if (g_ruta_debug) depurador_volcar(g_ruta_debug, &g_memoria, &g_l3, 1);
     if (g_ordenes) {

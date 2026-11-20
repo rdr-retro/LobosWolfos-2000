@@ -1421,3 +1421,68 @@ void datos_volcar(const char *ruta) {
     }
     fclose(f);
 }
+
+/* Fase 40: herramienta del editor para ver y borrar saves sin tocar los
+ * menus (solo se llama desde los flags nuevos --saves-*). */
+void datos_saves_herramienta(const char *carpeta, const char *salida,
+                             const char *borrar) {
+    WIN32_FIND_DATAA datos;
+    HANDLE busqueda;
+    FILE *f;
+    char patron[MAX_PATH];
+    char ruta[MAX_PATH];
+    int n = 0;
+    int borrado = 0;
+
+    if (!salida || !salida[0]) return;
+    f = fopen(salida, "wt");
+    if (!f) return;
+    fprintf(f, "saves: carpeta %s\n", carpeta ? carpeta : "");
+    if (borrar && borrar[0]) {
+        _snprintf(ruta, sizeof(ruta), "%s\\%s.sav",
+                  carpeta ? carpeta : "", borrar);
+        ruta[sizeof(ruta) - 1] = '\0';
+        borrado = DeleteFileA(ruta) ? 1 : 0;
+        fprintf(f, "saves: borrar %s %d\n", borrar, borrado);
+    }
+    _snprintf(patron, sizeof(patron), "%s\\*.sav", carpeta ? carpeta : "");
+    patron[sizeof(patron) - 1] = '\0';
+    busqueda = FindFirstFileA(patron, &datos);
+    if (busqueda != INVALID_HANDLE_VALUE) {
+        do {
+            if (datos.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+            _snprintf(ruta, sizeof(ruta), "%s\\%s",
+                      carpeta ? carpeta : "", datos.cFileName);
+            ruta[sizeof(ruta) - 1] = '\0';
+            {
+                FILE *s = fopen(ruta, "rt");
+                char linea[128];
+                char clave[64];
+                int valor = 0;
+                int entradas = 0;
+                int valido = 0;
+                if (s) {
+                    if (fgets(linea, sizeof(linea), s) &&
+                        strncmp(linea, "lw2ksave 1", 10) == 0) {
+                        valido = 1;
+                        while (fgets(linea, sizeof(linea), s)) {
+                            if (linea[0] == '\n' || linea[0] == '\r') continue;
+                            if (sscanf(linea, "%63s %d", clave, &valor) != 2) {
+                                valido = 0;
+                                break;
+                            }
+                            entradas++;
+                        }
+                    }
+                    fclose(s);
+                }
+                fprintf(f, "saves: save %s %d %d\n", datos.cFileName,
+                        entradas, valido);
+                n++;
+            }
+        } while (FindNextFileA(busqueda, &datos));
+        FindClose(busqueda);
+    }
+    fprintf(f, "saves: archivos %d\n", n);
+    fclose(f);
+}

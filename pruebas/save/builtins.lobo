@@ -1,0 +1,7 @@
+guardar("vidas", 3)
+x = cargar("vidas")
+borrar_save()
+record("puntos", 500)
+a = record_actual("puntos")
+ajuste("volumen", 70)
+b = ajuste_actual("volumen")
