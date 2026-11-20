@@ -275,7 +275,19 @@ enum {
     LOBO_RECORD,          /* pila: texto clave, valor; apila el record */
     LOBO_RECORD_ACTUAL,   /* pila: texto clave; apila el record */
     LOBO_AJUSTE,          /* pila: texto nombre, valor; apila el anterior */
-    LOBO_AJUSTE_ACTUAL    /* pila: texto nombre; apila el ajuste */
+    LOBO_AJUSTE_ACTUAL,   /* pila: texto nombre; apila el ajuste */
+    /* --- fase 41: escenas, transiciones, camara y efectos --- */
+    LOBO_CAMBIAR_ESCENA,  /* pila: id; apila 1 si la escena existe */
+    LOBO_ESCENA_ACTUAL,   /* pila: -; apila el id de la escena activa */
+    LOBO_TRANSICION,      /* pila: tipo, fotogramas; apila 0 */
+    LOBO_CAMARA_OBJETIVO, /* pila: id; apila el objetivo anterior */
+    LOBO_CAMARA_ZOOM,     /* pila: zoom; apila el zoom anterior */
+    LOBO_CAMARA_LIMITES,  /* pila: x, y, ancho, alto; apila 0 */
+    LOBO_CAMARA_SUAVIZAR, /* pila: pasos; apila el suavizado anterior */
+    LOBO_PARPADEO,        /* pila: id, periodo; apila 0 */
+    LOBO_TEMBLOR,         /* pila: intensidad, fotogramas; apila 0 */
+    LOBO_FLASH,           /* pila: color, fotogramas; apila 0 */
+    LOBO_FADE             /* pila: color, alpha, fotogramas; apila 0 */
 };
 
 /* Una instruccion del programa compilado. */
@@ -405,6 +417,16 @@ typedef struct LoboEstado {
     int (*ajuste)(void *ctx, const char *nombre, int valor);
     int (*ajuste_actual)(void *ctx, const char *nombre);
     void *ctx_save;
+    /* --- fase 41: escenas, camara y efectos. Sin callbacks (editor y
+     * --vm-test) las llamadas devuelven un valor neutro y no dibujan nada.
+     * `campo` de camara: 0 objetivo, 1 zoom, 2 limites, 3 suavizado.
+     * `campo` de efecto: 0 transicion, 1 parpadeo, 2 temblor, 3 flash,
+     * 4 fade. Los argumentos llegan en el orden del builtin. */
+    int (*cambiar_escena)(void *ctx, int id);
+    int (*escena_actual)(void *ctx);
+    int (*camara)(void *ctx, int campo, int a, int b, int c, int d);
+    int (*efecto)(void *ctx, int campo, int a, int b, int c, int d);
+    void *ctx_escenas;
 } LoboEstado;
 
 /* Un frame de llamada: donde volver y el estado que hay que restaurar. */

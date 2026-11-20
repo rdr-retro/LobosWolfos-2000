@@ -129,6 +129,22 @@ pub const LOBO_RECORD_ACTUAL: u8 = 90;
 pub const LOBO_AJUSTE: u8 = 91;
 pub const LOBO_AJUSTE_ACTUAL: u8 = 92;
 
+/* Fase 41: escenas, transiciones, camara y efectos. Van al final para no
+ * mover ningun opcode anterior (espejo de motor/lobo.h en Windows). */
+pub const LOBO_CAMBIAR_ESCENA: u8 = 93;
+pub const LOBO_ESCENA_ACTUAL: u8 = 94;
+pub const LOBO_TRANSICION: u8 = 95;
+pub const LOBO_CAMARA_OBJETIVO: u8 = 96;
+pub const LOBO_CAMARA_ZOOM: u8 = 97;
+pub const LOBO_CAMARA_LIMITES: u8 = 98;
+pub const LOBO_CAMARA_SUAVIZAR: u8 = 99;
+pub const LOBO_PARPADEO: u8 = 100;
+pub const LOBO_TEMBLOR: u8 = 101;
+pub const LOBO_FLASH: u8 = 102;
+pub const LOBO_FADE: u8 = 103;
+/* reiniciar_escena no es un opcode nuevo: reutiliza el 49 del motor C. */
+pub const LOBO_REINICIAR_ESCENA: u8 = 49;
+
 /* Textos constantes de un programa (espejo de motor/lobo.h). Un valor
  * de la pila con esta marca alta es un handle de texto. */
 pub const LOBO_TEXTOS_MAX: usize = 64;
@@ -854,6 +870,44 @@ fn nombre_conocido(nombre: &[u8]) -> (i32, bool, bool) {
     if nombre_es(nombre, b"ajuste_actual") {
         return (LOBO_AJUSTE_ACTUAL as i32, false, true);
     }
+    /* Fase 41: escenas, transiciones, camara y efectos. Como en la fase 40,
+     * el valor devuelto es el opcode y la aridad se deduce de el. */
+    if nombre_es(nombre, b"cambiar_escena") {
+        return (LOBO_CAMBIAR_ESCENA as i32, false, true);
+    }
+    if nombre_es(nombre, b"escena_actual") {
+        return (LOBO_ESCENA_ACTUAL as i32, false, true);
+    }
+    if nombre_es(nombre, b"transicion") {
+        return (LOBO_TRANSICION as i32, false, true);
+    }
+    if nombre_es(nombre, b"reiniciar_escena") {
+        return (LOBO_REINICIAR_ESCENA as i32, false, true);
+    }
+    if nombre_es(nombre, b"camara_objetivo") {
+        return (LOBO_CAMARA_OBJETIVO as i32, false, true);
+    }
+    if nombre_es(nombre, b"camara_zoom") {
+        return (LOBO_CAMARA_ZOOM as i32, false, true);
+    }
+    if nombre_es(nombre, b"camara_limites") {
+        return (LOBO_CAMARA_LIMITES as i32, false, true);
+    }
+    if nombre_es(nombre, b"camara_suavizar") {
+        return (LOBO_CAMARA_SUAVIZAR as i32, false, true);
+    }
+    if nombre_es(nombre, b"parpadeo") {
+        return (LOBO_PARPADEO as i32, false, true);
+    }
+    if nombre_es(nombre, b"temblor") {
+        return (LOBO_TEMBLOR as i32, false, true);
+    }
+    if nombre_es(nombre, b"flash") {
+        return (LOBO_FLASH as i32, false, true);
+    }
+    if nombre_es(nombre, b"fade") {
+        return (LOBO_FADE as i32, false, true);
+    }
     (-1, false, false)
 }
 
@@ -873,6 +927,13 @@ fn hud_argumentos(op: i32) -> i32 {
         LOBO_GUARDAR | LOBO_RECORD | LOBO_AJUSTE => 2,
         LOBO_CARGAR | LOBO_RECORD_ACTUAL | LOBO_AJUSTE_ACTUAL => 1,
         LOBO_BORRAR_SAVE => 0,
+        /* Fase 41: escenas, camara y efectos (espejo de lobo_escena_argumentos). */
+        LOBO_CAMBIAR_ESCENA | LOBO_CAMARA_OBJETIVO | LOBO_CAMARA_ZOOM
+        | LOBO_CAMARA_SUAVIZAR => 1,
+        LOBO_TRANSICION | LOBO_PARPADEO | LOBO_TEMBLOR | LOBO_FLASH => 2,
+        LOBO_FADE => 3,
+        LOBO_CAMARA_LIMITES => 4,
+        LOBO_ESCENA_ACTUAL | LOBO_REINICIAR_ESCENA => 0,
         _ => 0,
     }
 }
@@ -969,6 +1030,26 @@ impl<'a> LoboParser<'a> {
         }
         if !self.comer_op(b")") {
             self.error("se esperaba ) para cerrar la llamada del HUD");
+            return false;
+        }
+        self.emitir(op as u8, 0)
+    }
+
+    /// Igual que `llamada_hud`, con los mensajes de la fase 41 del C.
+    fn llamada_escena(&mut self, op: i32, n: i32) -> bool {
+        let mut i = 0;
+        while i < n {
+            if i > 0 && !self.comer_op(b",") {
+                self.error("se esperaba , entre argumentos de escena");
+                return false;
+            }
+            if !self.expresion() {
+                return false;
+            }
+            i += 1;
+        }
+        if !self.comer_op(b")") {
+            self.error("se esperaba ) para cerrar la llamada");
             return false;
         }
         self.emitir(op as u8, 0)
@@ -1088,6 +1169,11 @@ impl<'a> LoboParser<'a> {
                     }
                     return self.emitir(LOBO_RATON_BOTON, 0);
                 }
+                /* Fase 41: reiniciar_escena reutiliza el opcode 49 del motor
+                 * C, fuera del rango de los builtins del HUD. */
+                if conocido == LOBO_REINICIAR_ESCENA as i32 {
+                    return self.llamada_escena(conocido, 0);
+                }
                 /* Fase 38: vidas, puntos, dialogo y elementos del HUD.
                  * Fase 39: el rango sigue hasta el audio.
                  * Fase 40: sigue hasta los builtins del guardado. */
@@ -1095,6 +1181,12 @@ impl<'a> LoboParser<'a> {
                     && conocido <= LOBO_AJUSTE_ACTUAL as i32
                 {
                     return self.llamada_hud(conocido, hud_argumentos(conocido));
+                }
+                /* Fase 41: escenas, camara y efectos (93..103). */
+                if conocido >= LOBO_CAMBIAR_ESCENA as i32
+                    && conocido <= LOBO_FADE as i32
+                {
+                    return self.llamada_escena(conocido, hud_argumentos(conocido));
                 }
                 if conocido != LOBO_CHOCAR as i32 {
                     return false;
@@ -2233,6 +2325,148 @@ pub fn ejecutar<F: FnMut(i32, i32) -> bool>(
             }
             LOBO_BORRAR_SAVE => {
                 if !hud_meter(&mut pila, &mut np, crate::saves::borrar()) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            /* Fase 41: escenas, camara y efectos. Los argumentos se apilan de
+             * izquierda a derecha y se consumen al reverso, igual que en el C. */
+            LOBO_CAMBIAR_ESCENA => {
+                let Some(id) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                if !hud_meter(&mut pila, &mut np, crate::escenas::cambiar_escena(id)) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_ESCENA_ACTUAL => {
+                if !hud_meter(&mut pila, &mut np, crate::escenas::escena_actual()) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_REINICIAR_ESCENA => {
+                if !hud_meter(&mut pila, &mut np, crate::escenas::reiniciar()) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_CAMARA_OBJETIVO | LOBO_CAMARA_ZOOM | LOBO_CAMARA_SUAVIZAR => {
+                let Some(v) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let campo = match in_.op {
+                    LOBO_CAMARA_OBJETIVO => crate::escenas::CAM_OBJETIVO,
+                    LOBO_CAMARA_ZOOM => crate::escenas::CAM_ZOOM,
+                    _ => crate::escenas::CAM_SUAVIZAR,
+                };
+                let anterior = crate::escenas::camara(campo, v, 0, 0, 0);
+                if !hud_meter(&mut pila, &mut np, anterior) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_CAMARA_LIMITES => {
+                let Some(alto) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(ancho) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(y) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(x) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                crate::escenas::camara(crate::escenas::CAM_LIMITES, x, y, ancho, alto);
+                if !hud_meter(&mut pila, &mut np, 0) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_TRANSICION => {
+                let Some(b) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(a) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let r = crate::escenas::efecto(crate::escenas::EF_TRANSICION, a, b, 0, 0);
+                if !hud_meter(&mut pila, &mut np, r) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_PARPADEO => {
+                let Some(b) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(a) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let r = crate::escenas::efecto(crate::escenas::EF_PARPADEO, a, b, 0, 0);
+                if !hud_meter(&mut pila, &mut np, r) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_TEMBLOR => {
+                let Some(b) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(a) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let r = crate::escenas::efecto(crate::escenas::EF_TEMBLOR, a, b, 0, 0);
+                if !hud_meter(&mut pila, &mut np, r) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_FLASH => {
+                let Some(b) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(a) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let r = crate::escenas::efecto(crate::escenas::EF_FLASH, a, b, 0, 0);
+                if !hud_meter(&mut pila, &mut np, r) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_FADE => {
+                let Some(c) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(b) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let Some(a) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let r = crate::escenas::efecto(crate::escenas::EF_FADE, a, b, c, 0);
+                if !hud_meter(&mut pila, &mut np, r) {
                     maquina.agotado = true;
                     return;
                 }

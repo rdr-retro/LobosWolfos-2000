@@ -32,6 +32,8 @@
  *   --volcar-audio ruta  volca el estado final del mezclador
  *   --saves ruta      carpeta de saves (activa guardar/cargar/record)
  *   --volcar-saves ruta  volca el estado final del guardado
+ *   --escenas         activa escenas, transiciones, camara y efectos
+ *   --volcar-escenas ruta  volca el estado final de escenas y efectos
  */
 #include <windows.h>
 #include <stdio.h>
@@ -709,6 +711,292 @@ static int cb_ajuste_actual(void *ctx, const char *nombre) {
     return motor_save_ajuste_actual(nombre);
 }
 
+/* --- fase 41: escenas, transiciones, camara y efectos --------------- */
+typedef struct EscenasRuntime {
+    int activo;            /* 1 con --escenas, 0 sin callbacks */
+    int inicial;           /* id de la escena que arranco */
+    int actual;            /* id de la escena visible */
+    int cambios;           /* cambios de escena aplicados */
+    int reinicios;         /* reiniciar_escena() vistos */
+    int pendiente;         /* id pedido por cambiar_escena(), 0 = ninguno */
+    char ruta[MAX_PATH];   /* .logic3 del que salen los mapas */
+    int objetivo;          /* objetivo de camara anterior */
+    int zoom;              /* zoom anterior */
+    int limites[4];        /* limites anteriores */
+    int suave;             /* pasos de suavizado */
+    int cam_listo;         /* camara suavizada ya inicializada */
+    int cam_x, cam_y;      /* camara suavizada entera */
+    struct {
+        int activo;
+        int tipo;          /* 0 ninguna, 1 negro, 2 blanco */
+        int duracion;
+        int transcurrido;
+        int fase;          /* 1 cubriendo, 2 descubriendo */
+    } trans;
+    int parpadeo_id;
+    int parpadeo_periodo;
+    int temblor_intensidad;
+    int temblor_restantes;
+    int flash_color;
+    int flash_restantes;
+    int flash_duracion;
+    int fade_color;
+    int fade_alpha;
+    int fade_restantes;
+} EscenasRuntime;
+
+static EscenasRuntime g_escenas;
+static int g_escenas_activo;
+static const char *g_ruta_volcar_escenas;
+
+/* Devuelve el indice de la escena con ese id, o -1 si no existe. */
+static int escena_indice(int id) {
+    int i;
+    for (i = 0; i < g_l3.num_escenas; i++)
+        if (g_l3.escenas[i].id == id) return i;
+    return -1;
+}
+
+/* Aplica el cambio pedido por un script. Se llama al final del fotograma,
+ * nunca desde la VM: recargar el mapa a mitad de un evento desordenaria
+ * los scripts que aun estan leyendo las entidades de la escena vieja.
+ * La memoria de la VM (g_memoria) no se toca: el progreso se conserva. */
+static void aplicar_cambio_escena(int id) {
+    int indice = escena_indice(id);
+    char ruta[MAX_PATH];
+
+    if (indice < 0) return;
+    g_eventos.escena = id;
+    g_escenas.actual = id;
+    g_escenas.cambios++;
+    if (g_l3.escenas[indice].fondo)
+        g_fondo = (u32)g_l3.escenas[indice].fondo;
+
+    motor_mapa_liberar(&juego.mapa);
+    if (g_l3.escenas[indice].mapa[0] &&
+        resolver_mapa_l3(g_escenas.ruta, g_l3.escenas[indice].mapa,
+                         ruta, sizeof(ruta)) &&
+        activo_cargar_mapa(ruta, &juego.mapa)) {
+        copiar_texto(juego.mapa_usado, sizeof(juego.mapa_usado), ruta);
+    } else {
+        juego.mapa_usado[0] = '\0';
+    }
+
+    entidades_vaciar();
+    instanciar_escena(id);
+    entidades_fin_fotograma();
+    eventos_escena_iniciar(&g_eventos, NULL);
+
+    /* Los efectos son de la escena que los pidio; la transicion sigue
+     * activa para descubrir la nueva. */
+    g_escenas.parpadeo_id = 0;
+    g_escenas.parpadeo_periodo = 0;
+    g_escenas.temblor_intensidad = 0;
+    g_escenas.temblor_restantes = 0;
+    g_escenas.flash_restantes = 0;
+    g_escenas.fade_restantes = 0;
+    g_escenas.cam_listo = 0;
+}
+
+/* Callbacks de LoboEstado. Sin --escenas quedan a NULL y la VM devuelve
+ * valores neutros, igual que pasa con el audio o el guardado. */
+static int cb_cambiar_escena(void *ctx, int id) {
+    (void)ctx;
+    if (escena_indice(id) < 0) return 0;
+    g_escenas.pendiente = id;
+    return 1;
+}
+
+static int cb_escena_actual(void *ctx) {
+    (void)ctx;
+    return g_escenas.actual;
+}
+
+static int cb_camara(void *ctx, int campo, int a, int b, int c, int d) {
+    int anterior;
+    (void)ctx;
+    (void)d;
+    switch (campo) {
+    case 0:
+        anterior = g_camara.objetivo;
+        g_camara.objetivo = a;
+        g_escenas.objetivo = a;
+        return anterior;
+    case 1:
+        anterior = g_camara.zoom;
+        g_camara.zoom = (a == 2 || a == 4) ? a : 1;
+        g_escenas.zoom = g_camara.zoom;
+        return anterior;
+    case 2:
+        g_camara.x = a;
+        g_camara.y = b;
+        g_camara.ancho = c;
+        g_camara.alto = d;
+        g_escenas.limites[0] = a;
+        g_escenas.limites[1] = b;
+        g_escenas.limites[2] = c;
+        g_escenas.limites[3] = d;
+        return 0;
+    case 3:
+        anterior = g_escenas.suave;
+        g_escenas.suave = a > 0 ? a : 0;
+        g_escenas.cam_listo = 0;
+        return anterior;
+    default:
+        return 0;
+    }
+}
+
+static int cb_efecto(void *ctx, int campo, int a, int b, int c, int d) {
+    int n;
+    (void)ctx;
+    (void)d;
+    switch (campo) {
+    case 0:
+        n = b > 0 ? b : 0;
+        if (n > 100000) n = 100000;
+        g_escenas.trans.activo = n > 0;
+        g_escenas.trans.tipo = a;
+        g_escenas.trans.duracion = n;
+        g_escenas.trans.transcurrido = 0;
+        g_escenas.trans.fase = 1;
+        break;
+    case 1:
+        g_escenas.parpadeo_id = a;
+        g_escenas.parpadeo_periodo = b > 0 ? b : 1;
+        break;
+    case 2:
+        n = b > 0 ? b : 0;
+        if (n > 100000) n = 100000;
+        g_escenas.temblor_intensidad = a > 0 ? a : 0;
+        g_escenas.temblor_restantes = n;
+        break;
+    case 3:
+        n = b > 0 ? b : 0;
+        if (n > 100000) n = 100000;
+        g_escenas.flash_color = a;
+        g_escenas.flash_duracion = n;
+        g_escenas.flash_restantes = n;
+        break;
+    case 4:
+        n = c > 0 ? c : 0;
+        if (n > 100000) n = 100000;
+        g_escenas.fade_color = a;
+        g_escenas.fade_alpha = b > 0 ? (b < 255 ? b : 255) : 0;
+        g_escenas.fade_restantes = n;
+        break;
+    default:
+        break;
+    }
+    return 0;
+}
+
+/* Prepara el estado de escenas despues de cargar el LOGIC3 y la camara. */
+static void escenas_preparar(const MotorL3 *p, const char *ruta) {
+    memset(&g_escenas, 0, sizeof(g_escenas));
+    g_escenas.activo = g_escenas_activo;
+    g_escenas.inicial = p->escena_inicial;
+    g_escenas.actual = p->escena_inicial;
+    copiar_texto(g_escenas.ruta, sizeof(g_escenas.ruta),
+                 ruta ? ruta : "");
+    g_escenas.objetivo = g_camara.objetivo;
+    g_escenas.zoom = g_camara.zoom;
+    g_escenas.limites[0] = g_camara.x;
+    g_escenas.limites[1] = g_camara.y;
+    g_escenas.limites[2] = g_camara.ancho;
+    g_escenas.limites[3] = g_camara.alto;
+}
+
+/* Avanza transiciones y efectos y aplica el cambio de escena pendiente.
+ * Con transicion el cambio ocurre a mitad de la cobertura. */
+static void escenas_fotograma(void) {
+    int mitad, id;
+
+    if (g_escenas.temblor_restantes > 0) g_escenas.temblor_restantes--;
+    if (g_escenas.flash_restantes > 0) g_escenas.flash_restantes--;
+    if (g_escenas.fade_restantes > 0) g_escenas.fade_restantes--;
+
+    if (!g_escenas.trans.activo) {
+        id = g_escenas.pendiente;
+        g_escenas.pendiente = 0;
+        if (id) aplicar_cambio_escena(id);
+        return;
+    }
+    if (g_escenas.trans.duracion <= 0) {
+        g_escenas.trans.activo = 0;
+        return;
+    }
+    g_escenas.trans.transcurrido++;
+    mitad = (g_escenas.trans.duracion + 1) / 2;
+    if (g_escenas.trans.fase == 1 &&
+        g_escenas.trans.transcurrido >= mitad) {
+        id = g_escenas.pendiente;
+        g_escenas.pendiente = 0;
+        g_escenas.trans.fase = 2;
+        if (id) aplicar_cambio_escena(id);
+    }
+    if (g_escenas.trans.transcurrido >= g_escenas.trans.duracion)
+        g_escenas.trans.activo = 0;
+}
+
+/* Traza opcional de escenas: una linea por fotograma, detras de las
+ * trazas clasicas, solo cuando se ha pedido --escenas. */
+static void traza_escenas(void) {
+    if (!g_traza || !g_escenas_activo) return;
+    fprintf(g_traza,
+            "escena %d camara %d %d zoom %d suave %d "
+            "trans %d %d %d parpadeo %d %d temblor %d %d "
+            "flash %d %d fade %d %d %d cambios %d reinicios %d\n",
+            g_escenas.actual, g_escenas.cam_x, g_escenas.cam_y,
+            g_camara.zoom, g_escenas.suave,
+            g_escenas.trans.tipo, g_escenas.trans.duracion,
+            g_escenas.trans.transcurrido,
+            g_escenas.parpadeo_id, g_escenas.parpadeo_periodo,
+            g_escenas.temblor_intensidad, g_escenas.temblor_restantes,
+            g_escenas.flash_color, g_escenas.flash_restantes,
+            g_escenas.fade_color, g_escenas.fade_alpha,
+            g_escenas.fade_restantes,
+            g_escenas.cambios, g_escenas.reinicios);
+}
+
+/* Volcado propio de la fase 41 (--volcar-escenas). */
+static void escenas_volcar(const char *ruta) {
+    FILE *f = fopen(ruta, "wt");
+    int i;
+    if (!f) return;
+    fprintf(f, "escenas: activo %d\n", g_escenas.activo);
+    fprintf(f, "escenas: inicial %d\n", g_escenas.inicial);
+    fprintf(f, "escenas: actual %d\n", g_escenas.actual);
+    fprintf(f, "escenas: numero %d\n", g_l3.num_escenas);
+    for (i = 0; i < g_l3.num_escenas; i++) {
+        const MotorL3Escena *e = &g_l3.escenas[i];
+        fprintf(f, "escena %d \"%s\" mapa %s fondo %08X\n",
+                e->id, e->nombre, e->mapa, e->fondo);
+    }
+    fprintf(f, "escenas: mapa %s\n",
+            juego.mapa_usado[0] ? juego.mapa_usado : "-");
+    fprintf(f, "escenas: camara objetivo %d zoom %d "
+            "limites %d,%d,%d,%d suavizar %d\n",
+            g_camara.objetivo, g_camara.zoom,
+            g_camara.x, g_camara.y, g_camara.ancho, g_camara.alto,
+            g_escenas.suave);
+    fprintf(f, "escenas: transicion tipo %d duracion %d transcurrido %d fase %d\n",
+            g_escenas.trans.tipo, g_escenas.trans.duracion,
+            g_escenas.trans.transcurrido, g_escenas.trans.fase);
+    fprintf(f, "escenas: parpadeo id %d periodo %d\n",
+            g_escenas.parpadeo_id, g_escenas.parpadeo_periodo);
+    fprintf(f, "escenas: temblor intensidad %d restantes %d\n",
+            g_escenas.temblor_intensidad, g_escenas.temblor_restantes);
+    fprintf(f, "escenas: flash color %d restantes %d\n",
+            g_escenas.flash_color, g_escenas.flash_restantes);
+    fprintf(f, "escenas: fade color %d alpha %d restantes %d\n",
+            g_escenas.fade_color, g_escenas.fade_alpha,
+            g_escenas.fade_restantes);
+    fprintf(f, "escenas: cambios %d reinicios %d\n",
+            g_escenas.cambios, g_escenas.reinicios);
+    fclose(f);
+}
+
 /* Estado compartido por los scripts de un fotograma: posicion del lobo,
  * teclas, memoria de la VM y callbacks de entidades. */
 static void estado_preparar(LoboEstado *st) {
@@ -772,6 +1060,13 @@ static void estado_preparar(LoboEstado *st) {
         st->ajuste = cb_ajuste;
         st->ajuste_actual = cb_ajuste_actual;
         st->ctx_save = NULL;
+    }
+    if (g_escenas_activo) {
+        st->cambiar_escena = cb_cambiar_escena;
+        st->escena_actual = cb_escena_actual;
+        st->camara = cb_camara;
+        st->efecto = cb_efecto;
+        st->ctx_escenas = NULL;
     }
 }
 
@@ -918,6 +1213,7 @@ static void traza_fotograma(void) {
     }
     fprintf(g_traza, "\n");
     traza_entidades();
+    traza_escenas();
 }
 
 /* ------------------------------------------------------------------ */
@@ -955,11 +1251,15 @@ static void actualizar(void) {
         /* Las bajas se aplican cuando ya no queda ningun script del
          * fotograma mirando la entidad. */
         entidades_fin_fotograma();
-        if (g_eventos.reiniciar) reiniciar_escena_juego(&st);
+        if (g_eventos.reiniciar) {
+            g_escenas.reinicios++;
+            reiniciar_escena_juego(&st);
+        }
         if (eventos_cerrar(&g_eventos)) juego.corriendo = 0;
         aplicar_fisica(&st);
         juego.x = st.x;
         juego.y = st.y;
+        escenas_fotograma();
         return;
     }
 
@@ -977,6 +1277,7 @@ static void actualizar(void) {
         aplicar_fisica(&st);
         juego.x = st.x;
         juego.y = st.y;
+        escenas_fotograma();
         return;
     }
 
@@ -998,6 +1299,7 @@ static void actualizar(void) {
             if (choca_con_mapa(juego.x, juego.y)) juego.y -= vy;
         }
     }
+    escenas_fotograma();
 }
 
 /* ------------------------------------------------------------------ */
@@ -1023,6 +1325,74 @@ static void rellenar_rect(int x, int y, int w, int h, u32 color) {
             juego.fb[py * juego.fb_ancho + px] = color;
         }
     }
+}
+
+/* Mezcla entera de dos colores 0xAARRGGBB; el alpha entrante va aparte. */
+static u32 mezclar_color(u32 dst, u32 src, int alpha) {
+    int a = alpha, inv, r, g, b;
+    if (a < 0) a = 0;
+    if (a > 255) a = 255;
+    inv = 255 - a;
+    r = (((int)((dst >> 16) & 0xFFu) * inv +
+          (int)((src >> 16) & 0xFFu) * a) / 255) & 0xFF;
+    g = (((int)((dst >> 8) & 0xFFu) * inv +
+          (int)((src >> 8) & 0xFFu) * a) / 255) & 0xFF;
+    b = (((int)(dst & 0xFFu) * inv +
+          (int)(src & 0xFFu) * a) / 255) & 0xFF;
+    return 0xFF000000u | ((u32)r << 16) | ((u32)g << 8) | (u32)b;
+}
+
+static void rellenar_rect_alpha(int x, int y, int w, int h, u32 color,
+                                int alpha) {
+    int i, j;
+    if (alpha <= 0) return;
+    if (alpha > 255) alpha = 255;
+    for (j = 0; j < h; j++) {
+        int py = y + j;
+        if (py < 0 || py >= juego.fb_alto) continue;
+        for (i = 0; i < w; i++) {
+            int px = x + i, indice;
+            if (px < 0 || px >= juego.fb_ancho) continue;
+            indice = py * juego.fb_ancho + px;
+            juego.fb[indice] = mezclar_color(juego.fb[indice], color, alpha);
+        }
+    }
+}
+
+/* Opacidad de la transicion: sube mientras cubre y baja al descubrir. */
+static int transicion_alpha(void) {
+    int mitad, parte;
+    if (!g_escenas.trans.activo || g_escenas.trans.duracion <= 0) return 0;
+    if (g_escenas.trans.fase == 1) {
+        mitad = (g_escenas.trans.duracion + 1) / 2;
+        return 255 * g_escenas.trans.transcurrido / mitad;
+    }
+    mitad = (g_escenas.trans.duracion + 1) / 2;
+    parte = g_escenas.trans.duracion - mitad;
+    if (parte <= 0) return 0;
+    return 255 * (g_escenas.trans.duracion -
+                  g_escenas.trans.transcurrido) / parte;
+}
+
+/* Capas de la fase 41 sobre el fotograma ya terminado. Sin --escenas los
+ * efectos estan a cero y esta funcion no escribe ni un pixel. */
+static void aplicar_efectos(void) {
+    int a;
+    u32 color;
+    if (!g_escenas_activo || !juego.fb) return;
+    if (g_escenas.trans.activo) {
+        a = transicion_alpha();
+        color = g_escenas.trans.tipo == 2 ? 0x00FFFFFFu : 0x00000000u;
+        rellenar_rect_alpha(0, 0, juego.fb_ancho, juego.fb_alto, color, a);
+    }
+    if (g_escenas.flash_restantes > 0 && g_escenas.flash_duracion > 0) {
+        a = 255 * g_escenas.flash_restantes / g_escenas.flash_duracion;
+        rellenar_rect_alpha(0, 0, juego.fb_ancho, juego.fb_alto,
+                            g_escenas.flash_color, a);
+    }
+    if (g_escenas.fade_restantes > 0 && g_escenas.fade_alpha > 0)
+        rellenar_rect_alpha(0, 0, juego.fb_ancho, juego.fb_alto,
+                            g_escenas.fade_color, g_escenas.fade_alpha);
 }
 
 /* Digito de 3x5 a escala 2 (6x10 pixeles). */
@@ -1064,6 +1434,10 @@ static void dibujar_entidades(int cam_x, int cam_y, int zoom) {
         RenderSeleccion sel;
         int sx, sy, w, h;
         if (!e || !e->visible) continue;
+        if (g_escenas_activo && g_escenas.parpadeo_id == e->id &&
+            g_escenas.parpadeo_periodo > 0 &&
+            (juego.fotograma / g_escenas.parpadeo_periodo) % 2 == 1)
+            continue;
         sx = (e->x - cam_x) * zoom;
         sy = (e->y - cam_y) * zoom;
 
@@ -1095,11 +1469,51 @@ static void renderizar(void) {
     int cam_x = 0, cam_y = 0;
     int zoom = g_camara.zoom;
     MotorImagen sprite;
+    int dx, dy, paso, radio;
 
     if (zoom < 1) zoom = 1;
     render_camara_calcular(&g_camara, juego.fb_ancho, juego.fb_alto,
                            juego.x + SPRITE_LADO / 2,
                            juego.y + SPRITE_LADO / 2, &cam_x, &cam_y);
+    /* Suavizado entero de camara: ni un solo pixel de diferencia en las
+     * capturas antiguas porque solo se activa con --escenas. */
+    if (g_escenas_activo && g_escenas.suave > 1) {
+        if (!g_escenas.cam_listo) {
+            g_escenas.cam_x = cam_x;
+            g_escenas.cam_y = cam_y;
+            g_escenas.cam_listo = 1;
+        } else {
+            dx = cam_x - g_escenas.cam_x;
+            dy = cam_y - g_escenas.cam_y;
+            if (dx != 0) {
+                paso = (dx > 0 ? dx : -dx) / g_escenas.suave;
+                if ((dx > 0 ? dx : -dx) % g_escenas.suave) paso++;
+                if (paso < 1) paso = 1;
+                g_escenas.cam_x += dx > 0 ? paso : -paso;
+                if ((dx > 0 && g_escenas.cam_x > cam_x) ||
+                    (dx < 0 && g_escenas.cam_x < cam_x))
+                    g_escenas.cam_x = cam_x;
+            }
+            if (dy != 0) {
+                paso = (dy > 0 ? dy : -dy) / g_escenas.suave;
+                if ((dy > 0 ? dy : -dy) % g_escenas.suave) paso++;
+                if (paso < 1) paso = 1;
+                g_escenas.cam_y += dy > 0 ? paso : -paso;
+                if ((dy > 0 && g_escenas.cam_y > cam_y) ||
+                    (dy < 0 && g_escenas.cam_y < cam_y))
+                    g_escenas.cam_y = cam_y;
+            }
+        }
+        cam_x = g_escenas.cam_x;
+        cam_y = g_escenas.cam_y;
+    }
+    if (g_escenas_activo && g_escenas.temblor_restantes > 0 &&
+        g_escenas.temblor_intensidad > 0) {
+        radio = g_escenas.temblor_intensidad;
+        if (radio > 32) radio = 32;
+        cam_x += ((juego.fotograma * 37 + 11) % (2 * radio + 1)) - radio;
+        cam_y += ((juego.fotograma * 53 + 7) % (2 * radio + 1)) - radio;
+    }
     memset(&g_render_info, 0, sizeof(g_render_info));
     g_render_info.cam_x = cam_x;
     g_render_info.cam_y = cam_y;
@@ -1150,6 +1564,10 @@ static void renderizar(void) {
      * dejan el mundo visible en el centro de la pantalla (fase 38). */
     if (g_hud_activo)
         motor_hud_dibujar(juego.fb, juego.fb_ancho, juego.fb_alto);
+
+    /* Los efectos de la fase 41 van encima de todo, pero solo existen
+     * cuando un script los ha pedido con --escenas. */
+    aplicar_efectos();
 
     if (g_render_traza && g_traza)
         fprintf(g_traza,
@@ -1703,7 +2121,8 @@ static int opcion(const char *nombre) {
            strcmp(nombre, "--volumen") == 0 ||
            strcmp(nombre, "--volcar-audio") == 0 ||
             strcmp(nombre, "--saves") == 0 ||
-            strcmp(nombre, "--volcar-saves") == 0;
+            strcmp(nombre, "--volcar-saves") == 0 ||
+             strcmp(nombre, "--volcar-escenas") == 0;
 }
 
 int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show) {
@@ -1756,6 +2175,10 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         if (strcmp(__argv[i], "--audio") == 0) {
             g_audio_activo = 1;
             motor_audio_activar(1);
+            continue;
+        }
+        if (strcmp(__argv[i], "--escenas") == 0) {
+            g_escenas_activo = 1;
             continue;
         }
         if (strcmp(__argv[i], "--comparar") == 0 && i + 2 < __argc) {
@@ -1869,6 +2292,8 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
                 motor_save_directorio(v);
             } else if (strcmp(__argv[i - 1], "--volcar-saves") == 0) {
                 g_ruta_volcar_saves = v;
+            } else if (strcmp(__argv[i - 1], "--volcar-escenas") == 0) {
+                g_ruta_volcar_escenas = v;
             } else if (strcmp(__argv[i - 1], "--observar") == 0) {
                 depurador_observar(v);
             } else if (strcmp(__argv[i - 1], "--break") == 0) {
@@ -2052,6 +2477,7 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     render_camara_iniciar(g_modo_vm ? &g_l3 : NULL, &g_camara);
     render_camara_aplicar(&g_camara, g_camara_objetivo, g_zoom_override,
                           g_limites_override ? g_limites : NULL);
+    if (g_modo_vm) escenas_preparar(&g_l3, ruta_logic3);
 
     ordenes_iniciales_debug();
     if (ruta_bmp) {
@@ -2074,6 +2500,7 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     if (g_ruta_volcar_hud) motor_hud_volcar(g_ruta_volcar_hud);
     if (g_ruta_volcar_audio) motor_audio_volcar(g_ruta_volcar_audio);
     if (g_ruta_volcar_saves) motor_save_volcar(g_ruta_volcar_saves);
+    if (g_ruta_volcar_escenas) escenas_volcar(g_ruta_volcar_escenas);
     if (g_grabar_replay) depurador_guardar_replay(g_grabar_replay);
     if (g_ruta_debug) depurador_volcar(g_ruta_debug, &g_memoria, &g_l3, 1);
     if (g_ordenes) {

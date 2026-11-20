@@ -598,7 +598,12 @@ fn parsear_proyecto(blob: &[u8]) -> Option<(&[u8], &'static str)> {
 /// (las celdas en .bss, los pixeles en la arena de arriba).
 pub fn cargar(blob: &[u8]) -> Option<MotorMapa> {
     let (mav, origen) = parsear_proyecto(blob)?;
+    cargar_mav(blob, mav, origen)
+}
 
+///Monta un mapa concreto del blob (fase 41: mapa por escena). El resto del
+/// proyecto (funciones, tiles ya registrados) queda intacto.
+fn cargar_mav(blob: &[u8], mav: &[u8], origen: &str) -> Option<MotorMapa> {
     let mut lado = extraer_entero(mav, "tile_size").unwrap_or(32);
     lado = lado.clamp(4, 256);
     let tiles_dir = extraer_cadena(mav, "tiles_dir").unwrap_or(b"tiles");
@@ -668,6 +673,54 @@ pub fn cargar(blob: &[u8]) -> Option<MotorMapa> {
         imagenes: imagenes.as_mut_ptr(),
         num_imagenes: num_imagenes as i32,
     })
+}
+
+/// Carga un mapa del blob por nombre (fase 41). Acepta tanto "nivel2.mav"
+/// como "maps/nivel2.mav", igual que `resolver_mapa_l3` del motor C.
+pub fn cargar_mapa_nombre(blob: &[u8], nombre: &str) -> Option<MotorMapa> {
+    let mut buf = [0u8; 96];
+    let clave = if nombre.starts_with("maps/") {
+        nombre
+    } else {
+        unir_ruta(&mut buf, "maps", nombre)
+    };
+    let datos = buscar_entrada(blob, clave)?;
+    cargar_mav(blob, datos, clave)
+}
+
+/// Carga el enesimo mapa `maps/*.mav` del blob, en orden de llegada (fase
+/// 41). La BIOS no lee LOGIC3, asi que no conoce el nombre del mapa de cada
+/// escena: la escena 1 toma el primero y la 2 el segundo, que es como el
+/// editor guarda los mapas de los proyectos de prueba. Si no hay tantos,
+/// devuelve None y el juego conserva el mapa que tenia.
+pub fn mapa_por_indice(blob: &[u8], indice: i32) -> Option<MotorMapa> {
+    if indice <= 0 {
+        return None;
+    }
+    let mut pos = 0usize;
+    let mut visto = 0i32;
+    while pos + 8 <= blob.len() {
+        let ln = u32::from_le_bytes([blob[pos], blob[pos + 1], blob[pos + 2], blob[pos + 3]])
+            as usize;
+        let ld = u32::from_le_bytes([blob[pos + 4], blob[pos + 5], blob[pos + 6], blob[pos + 7]])
+            as usize;
+        if pos + 8 + ln + ld > blob.len() {
+            break;
+        }
+        let nombre = &blob[pos + 8..pos + 8 + ln];
+        let datos = &blob[pos + 8 + ln..pos + 8 + ln + ld];
+        if nombre.starts_with(b"maps/") && nombre.ends_with(b".mav") {
+            visto += 1;
+            if visto == indice {
+                if let Ok(clave) = core::str::from_utf8(nombre) {
+                    return cargar_mav(blob, datos, clave);
+                }
+                return None;
+            }
+        }
+        pos += 8 + ln + ld;
+    }
+    None
 }
 
 /// Decodifica un tile del blob a la arena de pixeles y rellena la
@@ -743,6 +796,15 @@ fn mapa_vacio() -> MotorMapa {
     }
 }
 
+/// Copia del blob leido al arrancar, para recargar mapas por escena sin
+/// volver a tocar el disco (fase 41).
+static BLOB_CARGADO: SyncCell<Option<&'static [u8]>> = SyncCell::new(None);
+
+/// Devuelve el blob del juego ya leido por `cargar_todo`.
+pub fn blob_cargado() -> Option<&'static [u8]> {
+    unsafe { *BLOB_CARGADO.get() }
+}
+
 /// Lee la zona de juego del disco (blob LGB1) y carga el mapa.
 ///
 /// El mapa es opcional (fase 12): si el proyecto no tiene ninguno, o no
@@ -750,5 +812,6 @@ fn mapa_vacio() -> MotorMapa {
 /// Devuelve None solo si no hay bloque de juego en el disco.
 pub fn cargar_todo() -> Option<MotorMapa> {
     let blob = cargar_blob()?;
+    unsafe { *BLOB_CARGADO.get() = Some(blob) };
     Some(cargar(blob).unwrap_or_else(mapa_vacio))
 }

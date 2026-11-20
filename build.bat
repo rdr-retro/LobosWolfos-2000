@@ -85,7 +85,7 @@ echo Listo: "%SALIDA%"
 exit /b 0
 
 rem ------------------------------------------------------------------
-rem  Modo pruebas: build.bat prueba [conformidad^|logic3^|vm^|entidades^|eventos^|colisiones^|render^|estudio^|bloques^|compilador^|depurador^|datos^|productividad^|entrada^|hud^|regresion^|actualizar]
+rem  Modo pruebas: build.bat prueba [conformidad^|logic3^|vm^|entidades^|eventos^|colisiones^|render^|estudio^|bloques^|compilador^|depurador^|datos^|productividad^|entrada^|hud^|audio^|save^|escenas^|regresion^|actualizar]
 rem  Compila el editor con la configuracion normal y pasa las suites.
 rem ------------------------------------------------------------------
 :pruebas
@@ -112,6 +112,7 @@ if /i "%~2"=="entrada" goto pruebas_entrada
 if /i "%~2"=="hud" goto pruebas_hud
 if /i "%~2"=="audio" goto pruebas_audio
 if /i "%~2"=="save" goto pruebas_save
+if /i "%~2"=="escenas" goto pruebas_escenas
 
 echo.
 echo === Suite de conformidad del lenguaje ===
@@ -180,6 +181,10 @@ if errorlevel 1 exit /b 1
 echo.
 echo === Guardado, records y persistencia (fase 40) ===
 %PS% "%AQUI%pruebas\save.ps1"
+if errorlevel 1 exit /b 1
+echo.
+echo === Escenas multiples, camara y efectos (fase 41) ===
+%PS% "%AQUI%pruebas\escenas.ps1"
 if errorlevel 1 exit /b 1
 echo.
 echo === Regresion visual del editor ===
@@ -254,6 +259,10 @@ exit /b %ERRORLEVEL%
 %PS% "%AQUI%pruebas\save.ps1"
 exit /b %ERRORLEVEL%
 
+:pruebas_escenas
+%PS% "%AQUI%pruebas\escenas.ps1"
+exit /b %ERRORLEVEL%
+
 :pruebas_regresion
 %PS% "%AQUI%pruebas\regresion.ps1"
 exit /b %ERRORLEVEL%
@@ -292,6 +301,8 @@ if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\audio.ps1" -Actualizar
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\save.ps1" -Actualizar
+if errorlevel 1 exit /b 1
+%PS% "%AQUI%pruebas\escenas.ps1" -Actualizar
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\regresion.ps1" -Actualizar
 exit /b %ERRORLEVEL%

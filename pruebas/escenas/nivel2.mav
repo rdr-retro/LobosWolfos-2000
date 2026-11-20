@@ -1,0 +1,14 @@
+-- Mapa propio de la fase 41: nivel 2.
+return {
+    version = 2,
+    tile_size = 32,
+    tiles_dir = "tiles",
+    tiles = {
+        { x = 0, y = 0, image = "tile_2.png", w = 32, h = 32, solido = false },
+        { x = 1, y = 0, image = "tile_2.png", w = 32, h = 32, solido = false },
+        { x = 2, y = 0, image = "tile_2.png", w = 32, h = 32, solido = false },
+        { x = 0, y = 1, image = "tile_2.png", w = 32, h = 32, solido = false },
+        { x = 1, y = 1, image = "tile_2.png", w = 32, h = 32, solido = false },
+        { x = 2, y = 1, image = "tile_2.png", w = 32, h = 32, solido = false }
+    }
+}

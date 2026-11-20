@@ -26,6 +26,7 @@ mod bios;
 mod cmos;
 mod console;
 mod cpu;
+mod escenas;
 mod gfx;
 mod idt;
 mod inflate;

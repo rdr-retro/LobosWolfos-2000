@@ -286,6 +286,7 @@ impl Juego {
             }
             self.x = st.x;
             self.y = st.y;
+            self.cerrar_fotograma();
             return;
         }
 
@@ -315,6 +316,28 @@ impl Juego {
             self.y += vy;
             if self.choca(self.x, self.y) {
                 self.y -= vy;
+            }
+        }
+        self.cerrar_fotograma();
+    }
+
+    /// Cierra el fotograma de la fase 41: acepta un reinicio pedido por un
+    /// script, avanza transiciones y efectos, y aplica el cambio de escena
+    /// al final (nunca desde la VM, para no recargar el mapa a mitad de un
+    /// evento). La memoria de los scripts no se toca: el progreso se guarda.
+    fn cerrar_fotograma(&mut self) {
+        if crate::escenas::reinicio_pedido() {
+            crate::escenas::reinicio_aceptado();
+            self.x = 16;
+            self.y = 16;
+            self.buscar_spawn();
+        }
+        if let Some(id) = crate::escenas::fotograma() {
+            if let Some(blob) = activo::blob_cargado() {
+                if let Some(mapa) = activo::mapa_por_indice(blob, id) {
+                    self.mapa = mapa;
+                    self.sin_mapa = self.mapa.num_celdas == 0;
+                }
             }
         }
     }
@@ -394,15 +417,27 @@ impl Juego {
                 VENTANA_ANCHO as usize,
             );
             gfx::dibujar_hud(&lienzo, &lobo::hud_estado());
+            aplicar_efectos(fb);
             return;
         }
 
-        let (cam_x, cam_y) = self.camara.calcular(self.x, self.y);
-        let zoom = if self.camara.zoom == 2 || self.camara.zoom == 4 {
-            self.camara.zoom
-        } else {
-            1
+        /* Fase 41: zoom, limites, suavizado y temblor los manda el estado
+         * de escenas. Los scripts antiguos no tocan ese estado y siguen
+         * viendo la camara por defecto del proyecto. */
+        let est = crate::escenas::estado();
+        let cam = Camara {
+            x: est.limites[0],
+            y: est.limites[1],
+            ancho: est.limites[2],
+            alto: est.limites[3],
+            zoom: est.zoom,
         };
+        let zoom = if est.zoom == 2 || est.zoom == 4 { est.zoom } else { 1 };
+        let (base_x, base_y) = cam.calcular(self.x, self.y);
+        let (suave_x, suave_y) = crate::escenas::suavizar(base_x, base_y);
+        let (temblor_x, temblor_y) = crate::escenas::temblor(self.fotograma);
+        let cam_x = suave_x + temblor_x;
+        let cam_y = suave_y + temblor_y;
 
         motor::limpiar(fb.as_mut_ptr(), VENTANA_ANCHO, VENTANA_ALTO, FONDO);
         motor::mapa_render(
@@ -413,38 +448,77 @@ impl Juego {
             cam_y,
             &self.mapa,
         );
-        let sprite = unsafe { &*SPRITE.get() };
         let lienzo = gfx::Canvas::from_buffer(
             fb.as_mut_ptr(),
             VENTANA_ANCHO,
             VENTANA_ALTO,
             VENTANA_ANCHO as usize,
         );
-        lienzo.blit_ex(
-            sprite.as_ptr(),
-            SPRITE_LADO as usize,
-            self.x - cam_x,
-            self.y - cam_y,
-            0,
-            0,
-            SPRITE_LADO,
-            SPRITE_LADO,
-            0,
-            0,
-            false,
-            false,
-            0,
-            zoom,
-        );
+        /* El parpadeo oculta al lobo en los fotogramas impares del periodo,
+         * igual que hace el C con la entidad senalada. */
+        let oculto = est.parpadeo_id > 0
+            && est.parpadeo_periodo > 0
+            && (self.fotograma / est.parpadeo_periodo) % 2 == 1;
+        if !oculto {
+            let sprite = unsafe { &*SPRITE.get() };
+            lienzo.blit_ex(
+                sprite.as_ptr(),
+                SPRITE_LADO as usize,
+                self.x - cam_x,
+                self.y - cam_y,
+                0,
+                0,
+                SPRITE_LADO,
+                SPRITE_LADO,
+                0,
+                0,
+                false,
+                false,
+                0,
+                zoom,
+            );
+        }
         /* Fase 38: la capa del HUD va justo despues del mundo. Si ningun
          * script ha pedido HUD, dibujar_hud no toca el framebuffer. */
-        let lienzo = gfx::Canvas::from_buffer(
-            fb.as_mut_ptr(),
-            VENTANA_ANCHO,
-            VENTANA_ALTO,
-            VENTANA_ANCHO as usize,
-        );
         gfx::dibujar_hud(&lienzo, &lobo::hud_estado());
+        aplicar_efectos(fb);
+    }
+}
+
+/// Capas de la fase 41 sobre el fotograma terminado: transicion, flash y
+/// fade. Sin ningun efecto activo no escribe ni un pixel.
+fn aplicar_efectos(fb: &mut [u32]) {
+    let lienzo = gfx::Canvas::from_buffer(
+        fb.as_mut_ptr(),
+        VENTANA_ANCHO,
+        VENTANA_ALTO,
+        VENTANA_ANCHO as usize,
+    );
+    let est = crate::escenas::estado();
+
+    let a = crate::escenas::transicion_alpha();
+    if a > 0 {
+        let color = if est.trans_tipo == 2 { 0x00FFFFFF } else { 0x000000 };
+        for y in 0..VENTANA_ALTO {
+            for x in 0..VENTANA_ANCHO {
+                lienzo.blend(x, y, color, a as u32);
+            }
+        }
+    }
+    let a = crate::escenas::flash_alpha();
+    if a > 0 {
+        for y in 0..VENTANA_ALTO {
+            for x in 0..VENTANA_ANCHO {
+                lienzo.blend(x, y, est.flash_color as u32, a as u32);
+            }
+        }
+    }
+    if est.fade_restantes > 0 && est.fade_alpha > 0 {
+        for y in 0..VENTANA_ALTO {
+            for x in 0..VENTANA_ANCHO {
+                lienzo.blend(x, y, est.fade_color as u32, est.fade_alpha as u32);
+            }
+        }
     }
 }
 
@@ -513,6 +587,7 @@ pub fn arrancar(mi: &gfx::ModeInfo) -> ! {
     lobo::hud_limpiar(); // fase 38: estado del HUD limpio al arrancar
     audio::limpiar(); // fase 39: sin notas y altavoz apagado al arrancar
     saves::limpiar(); // fase 40: tabla de guardado vacia al arrancar
+    crate::escenas::limpiar(); // fase 41: escena 1, efectos a cero
     let Some(mapa) = activo::cargar_todo() else {
         println!("egine: sin proyecto que cargar; el kernel se queda en modo texto.");
         crate::bucle_texto()
@@ -617,6 +692,11 @@ pub fn arrancar(mi: &gfx::ModeInfo) -> ! {
         if segundo != ultimo_segundo {
             ultimo_segundo = segundo;
             println!("egine: sprite en ({}, {}).", juego.x, juego.y);
+            let est = crate::escenas::estado();
+            println!(
+                "egine: escena {} cambios {} reinicios {}.",
+                est.actual, est.cambios, est.reinicios
+            );
         }
 
         // Duerme hasta la proxima IRQ0.

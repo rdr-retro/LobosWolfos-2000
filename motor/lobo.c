@@ -518,6 +518,20 @@ static int lobo_nombre_conocido(const char *nombre, int *es_tecla,
     if (lobo_igual(nombre, "record_actual")) return LOBO_RECORD_ACTUAL;
     if (lobo_igual(nombre, "ajuste")) return LOBO_AJUSTE;
     if (lobo_igual(nombre, "ajuste_actual")) return LOBO_AJUSTE_ACTUAL;
+    /* Fase 41: escenas, transiciones, camara y efectos. Como en la fase 40,
+     * el valor devuelto es el opcode y la aridad se deduce de el. */
+    if (lobo_igual(nombre, "cambiar_escena")) return LOBO_CAMBIAR_ESCENA;
+    if (lobo_igual(nombre, "escena_actual")) return LOBO_ESCENA_ACTUAL;
+    if (lobo_igual(nombre, "transicion")) return LOBO_TRANSICION;
+    if (lobo_igual(nombre, "reiniciar_escena")) return LOBO_REINICIAR_ESCENA;
+    if (lobo_igual(nombre, "camara_objetivo")) return LOBO_CAMARA_OBJETIVO;
+    if (lobo_igual(nombre, "camara_zoom")) return LOBO_CAMARA_ZOOM;
+    if (lobo_igual(nombre, "camara_limites")) return LOBO_CAMARA_LIMITES;
+    if (lobo_igual(nombre, "camara_suavizar")) return LOBO_CAMARA_SUAVIZAR;
+    if (lobo_igual(nombre, "parpadeo")) return LOBO_PARPADEO;
+    if (lobo_igual(nombre, "temblor")) return LOBO_TEMBLOR;
+    if (lobo_igual(nombre, "flash")) return LOBO_FLASH;
+    if (lobo_igual(nombre, "fade")) return LOBO_FADE;
     *es_funcion = 0;
     return -1;
 }
@@ -1093,6 +1107,43 @@ static int lobo_llamada_save(LoboParser *p, int op, int n) {
     return lobo_emitir(p, op, 0);
 }
 
+/* Fase 41: numero de argumentos de los builtins de escenas y efectos. */
+static int lobo_escena_argumentos(int op) {
+    switch (op) {
+    case LOBO_CAMBIAR_ESCENA:
+    case LOBO_CAMARA_OBJETIVO:
+    case LOBO_CAMARA_ZOOM:
+    case LOBO_CAMARA_SUAVIZAR: return 1;
+    case LOBO_TRANSICION:
+    case LOBO_PARPADEO:
+    case LOBO_TEMBLOR:
+    case LOBO_FLASH: return 2;
+    case LOBO_FADE: return 3;
+    case LOBO_CAMARA_LIMITES: return 4;
+    case LOBO_ESCENA_ACTUAL:
+    case LOBO_REINICIAR_ESCENA: return 0;
+    default: return 0;
+    }
+}
+
+/* Igual que lobo_llamada_save: lee los argumentos de izquierda a derecha
+ * y deja la instruccion lista para consumirlos en orden inverso. */
+static int lobo_llamada_escena(LoboParser *p, int op, int n) {
+    int i;
+    for (i = 0; i < n; i++) {
+        if (i && !lobo_comer_op(p, ",")) {
+            lobo_error(p, "se esperaba , entre argumentos de escena");
+            return 0;
+        }
+        if (!lobo_expresion(p)) return 0;
+    }
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar la llamada de escena");
+        return 0;
+    }
+    return lobo_emitir(p, op, 0);
+}
+
 /* aleatorio(a, b): extremos incluidos, semilla por maquina. */
 static int lobo_llamada_aleatorio(LoboParser *p) {
     if (!lobo_expresion(p)) return 0;
@@ -1410,6 +1461,13 @@ static int lobo_primario(LoboParser *p) {
                 conocido <= LOBO_AJUSTE_ACTUAL)
                 return lobo_llamada_save(p, conocido,
                                          lobo_save_argumentos(conocido));
+            /* Fase 41: escenas, transiciones, camara y efectos. */
+            if (conocido >= LOBO_CAMBIAR_ESCENA &&
+                conocido <= LOBO_FADE)
+                return lobo_llamada_escena(
+                    p, conocido, lobo_escena_argumentos(conocido));
+            if (conocido == LOBO_REINICIAR_ESCENA)
+                return lobo_llamada_escena(p, conocido, 0);
             if (conocido != LOBO_CHOCAR) return 0;
             if (!lobo_expresion(p)) return 0;
             if (!lobo_comer_op(p, ",")) {
@@ -3563,6 +3621,105 @@ int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
         int resultado = estado->borrar_save ?
             estado->borrar_save(estado->ctx_save) : 1;
         if (ok) lobo_vm_push(maquina, resultado, &ok);
+        break;
+    }
+    /* --- fase 41: escenas, transiciones, camara y efectos ---
+     * Sin callbacks el valor es neutro, pero la pila sigue cuadrando. */
+    case LOBO_CAMBIAR_ESCENA: {
+        int resultado = 0;
+        a = lobo_vm_pop(maquina, &ok);
+        if (ok && estado->cambiar_escena)
+            resultado = estado->cambiar_escena(estado->ctx_escenas, a);
+        if (ok) lobo_vm_push(maquina, resultado, &ok);
+        break;
+    }
+    case LOBO_ESCENA_ACTUAL: {
+        int actual = 0;
+        if (estado->escena_actual)
+            actual = estado->escena_actual(estado->ctx_escenas);
+        if (ok) lobo_vm_push(maquina, actual, &ok);
+        break;
+    }
+    case LOBO_TRANSICION: {
+        int fotogramas, tipo;
+        fotogramas = lobo_vm_pop(maquina, &ok);
+        tipo = lobo_vm_pop(maquina, &ok);
+        if (ok && estado->efecto)
+            estado->efecto(estado->ctx_escenas, 0, tipo, fotogramas, 0, 0);
+        if (ok) lobo_vm_push(maquina, 0, &ok);
+        break;
+    }
+    case LOBO_CAMARA_OBJETIVO: {
+        int anterior = 0;
+        a = lobo_vm_pop(maquina, &ok);
+        if (ok && estado->camara)
+            anterior = estado->camara(estado->ctx_escenas, 0, a, 0, 0, 0);
+        if (ok) lobo_vm_push(maquina, anterior, &ok);
+        break;
+    }
+    case LOBO_CAMARA_ZOOM: {
+        int anterior = 1;
+        a = lobo_vm_pop(maquina, &ok);
+        if (ok && estado->camara)
+            anterior = estado->camara(estado->ctx_escenas, 1, a, 0, 0, 0);
+        if (ok) lobo_vm_push(maquina, anterior, &ok);
+        break;
+    }
+    case LOBO_CAMARA_LIMITES: {
+        int alto, ancho, y, x;
+        alto = lobo_vm_pop(maquina, &ok);
+        ancho = lobo_vm_pop(maquina, &ok);
+        y = lobo_vm_pop(maquina, &ok);
+        x = lobo_vm_pop(maquina, &ok);
+        if (ok && estado->camara)
+            estado->camara(estado->ctx_escenas, 2, x, y, ancho, alto);
+        if (ok) lobo_vm_push(maquina, 0, &ok);
+        break;
+    }
+    case LOBO_CAMARA_SUAVIZAR: {
+        int anterior = 0;
+        a = lobo_vm_pop(maquina, &ok);
+        if (ok && estado->camara)
+            anterior = estado->camara(estado->ctx_escenas, 3, a, 0, 0, 0);
+        if (ok) lobo_vm_push(maquina, anterior, &ok);
+        break;
+    }
+    case LOBO_PARPADEO: {
+        int periodo, id;
+        periodo = lobo_vm_pop(maquina, &ok);
+        id = lobo_vm_pop(maquina, &ok);
+        if (ok && estado->efecto)
+            estado->efecto(estado->ctx_escenas, 1, id, periodo, 0, 0);
+        if (ok) lobo_vm_push(maquina, 0, &ok);
+        break;
+    }
+    case LOBO_TEMBLOR: {
+        int fotogramas, intensidad;
+        fotogramas = lobo_vm_pop(maquina, &ok);
+        intensidad = lobo_vm_pop(maquina, &ok);
+        if (ok && estado->efecto)
+            estado->efecto(estado->ctx_escenas, 2, intensidad, fotogramas,
+                           0, 0);
+        if (ok) lobo_vm_push(maquina, 0, &ok);
+        break;
+    }
+    case LOBO_FLASH: {
+        int fotogramas, color;
+        fotogramas = lobo_vm_pop(maquina, &ok);
+        color = lobo_vm_pop(maquina, &ok);
+        if (ok && estado->efecto)
+            estado->efecto(estado->ctx_escenas, 3, color, fotogramas, 0, 0);
+        if (ok) lobo_vm_push(maquina, 0, &ok);
+        break;
+    }
+    case LOBO_FADE: {
+        int fotogramas, alpha, color;
+        fotogramas = lobo_vm_pop(maquina, &ok);
+        alpha = lobo_vm_pop(maquina, &ok);
+        color = lobo_vm_pop(maquina, &ok);
+        if (ok && estado->efecto)
+            estado->efecto(estado->ctx_escenas, 4, color, alpha, fotogramas, 0);
+        if (ok) lobo_vm_push(maquina, 0, &ok);
         break;
     }
     default:

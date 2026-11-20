@@ -1,0 +1,13 @@
+LOGIC3
+version 3
+proyecto "Fase 41 camara" 320 200 1 60 3 00112233
+carpetas "tiles" "maps" "trajes" "sonidos"
+camara objetivo 0 limites 0 0 320 200 zoom 1
+escena 1 "Nivel 1" "nivel1.mav" 320 200 00112233
+objeto 1 "Lobo" escena 1 x 16 y 16 w 24 h 24 visible 1 capa 0
+  traje 0 "" 0 0 0 0
+  evento 1 inicio
+bloque 1 evento 1 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "camara_objetivo(1)\ncamara_zoom(2)\ncamara_limites(0, 0, 320, 200)\ncamara_suavizar(3)\nparpadeo(1, 6)\ntemblor(2, 5)\nflash(16711680, 3)\nfade(255, 4, 2)\nx = 16\ny = 16"
+FIN
+CRC32 8B9EFB30

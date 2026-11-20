@@ -1,0 +1,28 @@
+vm: 3 scripts
+vm: script 0 bloque 1 objeto 1 evento 1
+vm: script 1 bloque 2 objeto 1 evento 2
+vm: script 2 bloque 3 objeto 2 evento 3
+1 16 16
+vm 0:2:21:0 1:2:7:0 2:0:0:0
+escena 1 camara 0 0 zoom 2 suave 0 trans 1 4 1 parpadeo 0 0 temblor 0 0 flash 0 0 fade 0 0 0 cambios 0 reinicios 0
+2 16 16
+vm 0:0:0:0 1:0:0:0 2:0:0:0
+escena 2 camara 0 0 zoom 2 suave 0 trans 1 4 2 parpadeo 0 0 temblor 0 0 flash 0 0 fade 0 0 0 cambios 1 reinicios 0
+3 32 32
+vm 0:0:0:0 1:0:0:0 2:2:27:0
+escena 2 camara 0 0 zoom 2 suave 3 trans 1 4 3 parpadeo 1 6 temblor 2 4 flash 16711680 2 fade 255 4 1 cambios 1 reinicios 0
+4 32 32
+vm 0:0:0:0 1:0:0:0 2:2:27:0
+escena 2 camara 0 0 zoom 2 suave 3 trans 1 4 4 parpadeo 1 6 temblor 2 3 flash 16711680 1 fade 255 4 0 cambios 1 reinicios 0
+5 32 32
+vm 0:0:0:0 1:0:0:0 2:2:27:0
+escena 2 camara 0 0 zoom 2 suave 3 trans 1 4 4 parpadeo 1 6 temblor 2 2 flash 16711680 0 fade 255 4 0 cambios 1 reinicios 0
+6 32 32
+vm 0:0:0:0 1:0:0:0 2:2:27:0
+escena 2 camara 0 0 zoom 2 suave 3 trans 1 4 4 parpadeo 1 6 temblor 2 1 flash 16711680 0 fade 255 4 0 cambios 1 reinicios 0
+7 32 32
+vm 0:0:0:0 1:0:0:0 2:2:27:0
+escena 2 camara 0 0 zoom 2 suave 3 trans 1 4 4 parpadeo 1 6 temblor 2 0 flash 16711680 0 fade 255 4 0 cambios 1 reinicios 0
+8 32 32
+vm 0:0:0:0 1:0:0:0 2:2:27:0
+escena 2 camara 0 0 zoom 2 suave 3 trans 1 4 4 parpadeo 1 6 temblor 2 0 flash 16711680 0 fade 255 4 0 cambios 1 reinicios 0

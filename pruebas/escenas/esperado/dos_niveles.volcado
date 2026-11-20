@@ -1,0 +1,14 @@
+escenas: activo 1
+escenas: inicial 1
+escenas: actual 2
+escenas: numero 2
+escena 1 "Nivel 1" mapa nivel1.mav fondo 00112233
+escena 2 "Nivel 2" mapa nivel2.mav fondo 22334455
+escenas: mapa <mapa>
+escenas: camara objetivo 1 zoom 2 limites 0,0,320,200 suavizar 3
+escenas: transicion tipo 1 duracion 4 transcurrido 4 fase 2
+escenas: parpadeo id 1 periodo 6
+escenas: temblor intensidad 2 restantes 0
+escenas: flash color 16711680 restantes 0
+escenas: fade color 255 alpha 4 restantes 0
+escenas: cambios 1 reinicios 0

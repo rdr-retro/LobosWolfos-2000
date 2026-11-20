@@ -1,0 +1,16 @@
+# Fase 41: builtins de escenas sin callbacks (banco --vm-test).
+entero a = cambiar_escena(2)
+entero b = escena_actual()
+entero c = transicion(1, 4)
+entero d = camara_objetivo(1)
+entero e = camara_zoom(2)
+entero f = camara_limites(0, 0, 320, 200)
+entero g = camara_suavizar(3)
+entero h = parpadeo(1, 6)
+entero i = temblor(2, 5)
+entero j = flash(16711680, 3)
+entero k = fade(255, 4, 2)
+entero r = reiniciar_escena()
+reiniciar_escena()
+x = a + b + c + d + e + f + g + h + i + j + k + r
+y = 16

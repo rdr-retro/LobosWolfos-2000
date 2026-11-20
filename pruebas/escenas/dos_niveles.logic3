@@ -1,0 +1,23 @@
+LOGIC3
+version 3
+proyecto "Fase 41" 320 200 1 60 3 00112233
+carpetas "tiles" "maps" "trajes" "sonidos"
+camara objetivo 1 limites 0 0 320 200 zoom 1
+variable global progreso entero 0
+escena 1 "Nivel 1" "nivel1.mav" 320 200 00112233
+escena 2 "Nivel 2" "nivel2.mav" 320 200 22334455
+objeto 1 "Lobo" escena 1 x 16 y 16 w 24 h 24 visible 1 capa 0
+  traje 0 "" 0 0 0 0
+  evento 1 inicio
+  evento 2 fotograma
+objeto 2 "Lobo2" escena 2 x 32 y 32 w 24 h 24 visible 1 capa 0
+  traje 0 "" 0 0 0 0
+  evento 3 inicio
+bloque 1 evento 1 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "progreso = progreso + 10\ntransicion(1, 4)\ncamara_limites(0, 0, 320, 200)\ncamara_zoom(2)\nx = 16\ny = 16"
+bloque 2 evento 2 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "si escena_actual() == 1\n  cambiar_escena(2)\nfin"
+bloque 3 evento 3 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "parpadeo(1, 6)\ntemblor(2, 5)\nflash(16711680, 3)\nfade(255, 4, 2)\ncamara_objetivo(1)\ncamara_suavizar(3)\nx = 32\ny = 32"
+FIN
+CRC32 7C942853
