@@ -502,6 +502,13 @@ static int lobo_nombre_conocido(const char *nombre, int *es_tecla,
     if (lobo_igual(nombre, "hud_imagen")) return LOBO_HUD_IMAGEN;
     if (lobo_igual(nombre, "hud_boton")) return LOBO_HUD_BOTON;
     if (lobo_igual(nombre, "hud_plantilla")) return LOBO_HUD_PLANTILLA;
+    /* Fase 39: sonido, musica y volumen. Igual que el HUD, el valor es el
+     * opcode y el numero de argumentos se deduce de el. */
+    if (lobo_igual(nombre, "sonar")) return LOBO_SONAR;
+    if (lobo_igual(nombre, "musica")) return LOBO_MUSICA;
+    if (lobo_igual(nombre, "detener_sonido")) return LOBO_DETENER_SONIDO;
+    if (lobo_igual(nombre, "volumen")) return LOBO_VOLUMEN;
+    if (lobo_igual(nombre, "volumen_actual")) return LOBO_VOLUMEN_ACTUAL;
     *es_funcion = 0;
     return -1;
 }
@@ -1018,6 +1025,34 @@ static int lobo_llamada_hud(LoboParser *p, int op, int n) {
     return lobo_emitir(p, op, 0);
 }
 
+/* Fase 39: numero de argumentos de cada built-in de audio. */
+static int lobo_audio_argumentos(int op) {
+    switch (op) {
+    case LOBO_SONAR:
+    case LOBO_MUSICA:
+    case LOBO_VOLUMEN: return 1;
+    default: return 0;
+    }
+}
+
+/* Igual que lobo_llamada_hud: lee los argumentos de izquierda a derecha y
+ * deja la instruccion lista para consumirlos en orden inverso. */
+static int lobo_llamada_audio(LoboParser *p, int op, int n) {
+    int i;
+    for (i = 0; i < n; i++) {
+        if (i && !lobo_comer_op(p, ",")) {
+            lobo_error(p, "se esperaba , entre argumentos de audio");
+            return 0;
+        }
+        if (!lobo_expresion(p)) return 0;
+    }
+    if (!lobo_comer_op(p, ")")) {
+        lobo_error(p, "se esperaba ) para cerrar la llamada de audio");
+        return 0;
+    }
+    return lobo_emitir(p, op, 0);
+}
+
 /* aleatorio(a, b): extremos incluidos, semilla por maquina. */
 static int lobo_llamada_aleatorio(LoboParser *p) {
     if (!lobo_expresion(p)) return 0;
@@ -1325,6 +1360,11 @@ static int lobo_primario(LoboParser *p) {
                 conocido <= LOBO_HUD_PLANTILLA)
                 return lobo_llamada_hud(p, conocido,
                                         lobo_hud_argumentos(conocido));
+            /* Fase 39: sonar, musica, detener_sonido y volumen. */
+            if (conocido >= LOBO_SONAR &&
+                conocido <= LOBO_VOLUMEN_ACTUAL)
+                return lobo_llamada_audio(p, conocido,
+                                          lobo_audio_argumentos(conocido));
             if (conocido != LOBO_CHOCAR) return 0;
             if (!lobo_expresion(p)) return 0;
             if (!lobo_comer_op(p, ",")) {
@@ -3378,6 +3418,44 @@ int lobo_paso(const LoboPrograma *programa, LoboEstado *estado,
             estado->hud_plantilla(estado->ctx_hud, a);
         if (ok) lobo_vm_push(maquina, 0, &ok);
         break;
+    /* --- fase 39: sonido y musica simple --- */
+    case LOBO_SONAR:
+    case LOBO_MUSICA: {
+        const char *nombre;
+        int resultado = 0;
+        a = lobo_vm_pop(maquina, &ok);
+        nombre = lobo_texto_resolver(programa, estado->memoria, a);
+        if (ok && nombre) {
+            if (in->op == LOBO_SONAR) {
+                if (estado->sonar)
+                    resultado = estado->sonar(estado->ctx_audio, nombre);
+            } else if (estado->musica) {
+                resultado = estado->musica(estado->ctx_audio, nombre);
+            }
+        }
+        if (ok) lobo_vm_push(maquina, resultado, &ok);
+        break;
+    }
+    case LOBO_DETENER_SONIDO:
+        if (ok && estado->detener_sonido)
+            estado->detener_sonido(estado->ctx_audio);
+        if (ok) lobo_vm_push(maquina, 0, &ok);
+        break;
+    case LOBO_VOLUMEN: {
+        int anterior = 80;
+        a = lobo_vm_pop(maquina, &ok);
+        if (ok && estado->volumen)
+            anterior = estado->volumen(estado->ctx_audio, a);
+        if (ok) lobo_vm_push(maquina, anterior, &ok);
+        break;
+    }
+    case LOBO_VOLUMEN_ACTUAL: {
+        int actual = 80;
+        if (ok && estado->volumen_actual)
+            actual = estado->volumen_actual(estado->ctx_audio);
+        if (ok) lobo_vm_push(maquina, actual, &ok);
+        break;
+    }
     default:
         ok = 0;
         break;

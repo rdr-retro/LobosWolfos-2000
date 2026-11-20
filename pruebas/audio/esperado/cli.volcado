@@ -1,0 +1,19 @@
+audio: activo 1
+audio: dispositivo 0
+audio: volumen 70
+audio: base <casos>
+audio: sonar 1
+audio: musica 1
+audio: vueltas 2
+audio: sonidos 2
+audio: sonido 0 moneda 256 22050 512
+audio: sonido 1 tema 512 11025 512
+audio: canales 8
+audio: canal 0 libre
+audio: canal 1 libre
+audio: canal 2 libre
+audio: canal 3 libre
+audio: canal 4 libre
+audio: canal 5 libre
+audio: canal 6 libre
+audio: canal 7 tema 80 100 1 2

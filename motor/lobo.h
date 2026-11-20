@@ -261,7 +261,13 @@ enum {
     LOBO_HUD_BARRA,     /* pila: color, max, valor, h, w, y, x; apila 1 */
     LOBO_HUD_IMAGEN,    /* pila: y, x, id; apila 1 */
     LOBO_HUD_BOTON,     /* pila: etiqueta, h, w, y, x, id; apila 1 si clic */
-    LOBO_HUD_PLANTILLA  /* pila: cual (1 pausa, 2 fin); apila 0 */
+    LOBO_HUD_PLANTILLA, /* pila: cual (1 pausa, 2 fin); apila 0 */
+    /* --- fase 39: sonido y musica simple --- */
+    LOBO_SONAR,          /* pila: texto; apila 1 si se pudo reproducir */
+    LOBO_MUSICA,         /* pila: texto; apila 1 si se pudo reproducir */
+    LOBO_DETENER_SONIDO, /* pila: -; apila 0 */
+    LOBO_VOLUMEN,        /* pila: valor; apila el volumen anterior */
+    LOBO_VOLUMEN_ACTUAL  /* pila: -; apila el volumen actual */
 };
 
 /* Una instruccion del programa compilado. */
@@ -373,6 +379,14 @@ typedef struct LoboEstado {
                      const char *etiqueta);
     int (*hud_plantilla)(void *ctx, int cual);
     void *ctx_hud;
+    /* --- fase 39: audio. Sin callbacks (editor y --vm-test) las llamadas
+      * no hacen nada pero apilan un valor, asi la pila sigue cuadrando. */
+    int (*sonar)(void *ctx, const char *nombre);
+    int (*musica)(void *ctx, const char *nombre);
+    int (*detener_sonido)(void *ctx);
+    int (*volumen)(void *ctx, int valor);
+    int (*volumen_actual)(void *ctx);
+    void *ctx_audio;
 } LoboEstado;
 
 /* Un frame de llamada: donde volver y el estado que hay que restaurar. */

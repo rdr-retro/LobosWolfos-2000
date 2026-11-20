@@ -21,6 +21,7 @@ use core::arch::global_asm;
 use core::panic::PanicInfo;
 
 mod activo;
+mod audio;
 mod bios;
 mod cmos;
 mod console;

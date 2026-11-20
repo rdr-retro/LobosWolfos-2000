@@ -26,6 +26,10 @@
  *   --puntos N        puntuacion inicial del HUD (activa el HUD)
  *   --dialogo a|b|c   tres lineas del dialogo (activa el HUD)
  *   --volcar-hud ruta volca el estado final del HUD
+ *   --audio           activa sonar(), musica() y volumen() en los scripts
+ *   --audio-sonido n=ruta  asocia el nombre de un sonido a un WAV
+ *   --volumen N       volumen maestro inicial (0..100, activa el audio)
+ *   --volcar-audio ruta  volca el estado final del mezclador
  */
 #include <windows.h>
 #include <stdio.h>
@@ -42,6 +46,7 @@
 #include "depurador.h"
 #include "panel_debug.h"
 #include "hud.h"
+#include "audio.h"
 
 #define VENTANA_ANCHO 640
 #define VENTANA_ALTO  480
@@ -79,6 +84,11 @@ static int g_rueda_acum;
  * sigan siendo byte a byte identicas. */
 static int g_hud_activo;
 static const char *g_ruta_volcar_hud;
+
+/* Fase 39: audio. Igual que el HUD, no se carga ningun WAV ni se volca nada
+ * hasta pedir --audio, --audio-sonido, --volumen o --volcar-audio. */
+static int g_audio_activo;
+static const char *g_ruta_volcar_audio;
 
 /* Ajustes del proyecto aplicados al motor (fase 14). */
 static int g_ancho = VENTANA_ANCHO;
@@ -627,6 +637,33 @@ static int cb_hud_plantilla(void *ctx, int cual) {
     return 0;
 }
 
+/* --- fase 39: callbacks del mezclador ----------------------------- */
+
+static int cb_sonar(void *ctx, const char *nombre) {
+    (void)ctx;
+    return motor_audio_sonar(nombre);
+}
+
+static int cb_musica(void *ctx, const char *nombre) {
+    (void)ctx;
+    return motor_audio_musica(nombre);
+}
+
+static int cb_detener_sonido(void *ctx) {
+    (void)ctx;
+    return motor_audio_detener();
+}
+
+static int cb_volumen(void *ctx, int valor) {
+    (void)ctx;
+    return motor_audio_volumen(valor);
+}
+
+static int cb_volumen_actual(void *ctx) {
+    (void)ctx;
+    return motor_audio_volumen_actual();
+}
+
 /* Estado compartido por los scripts de un fotograma: posicion del lobo,
  * teclas, memoria de la VM y callbacks de entidades. */
 static void estado_preparar(LoboEstado *st) {
@@ -672,6 +709,14 @@ static void estado_preparar(LoboEstado *st) {
         st->hud_boton = cb_hud_boton;
         st->hud_plantilla = cb_hud_plantilla;
         st->ctx_hud = NULL;
+    }
+    if (g_audio_activo) {
+        st->sonar = cb_sonar;
+        st->musica = cb_musica;
+        st->detener_sonido = cb_detener_sonido;
+        st->volumen = cb_volumen;
+        st->volumen_actual = cb_volumen_actual;
+        st->ctx_audio = NULL;
     }
 }
 
@@ -1210,6 +1255,7 @@ static int correr_ventana(HINSTANCE instancia) {
         juego.entrada = leer_teclado();
         leer_entrada_ext();
         motor_hud_fotograma(g_entrada_extactiva ? &g_entrada_ext : NULL);
+        motor_audio_fotograma();
         actualizar();
         if (g_entrada_extactiva) motor_entrada_siguiente(&g_entrada_ext);
         if (!juego.corriendo) break;
@@ -1356,6 +1402,7 @@ static int correr_captura(const char *ruta_bmp, int fotogramas) {
         if (g_grabar_replay) depurador_grabar_entrada(i, entrada);
         /* En captura la CLI fija la entrada: no se sondea Win32. */
         motor_hud_fotograma(g_entrada_extactiva ? &g_entrada_ext : NULL);
+        motor_audio_fotograma();
         actualizar();
         if (g_entrada_extactiva) motor_entrada_siguiente(&g_entrada_ext);
         traza_fotograma();
@@ -1445,6 +1492,7 @@ static int correr_volcar(const char *ruta, int fotogramas) {
         if (g_grabar_replay) depurador_grabar_entrada(i, entrada);
         /* En --volcar tampoco hay ventana: respeta la entrada de la CLI. */
         motor_hud_fotograma(g_entrada_extactiva ? &g_entrada_ext : NULL);
+        motor_audio_fotograma();
         actualizar();
         if (g_entrada_extactiva) motor_entrada_siguiente(&g_entrada_ext);
         traza_fotograma();
@@ -1595,7 +1643,10 @@ static int opcion(const char *nombre) {
            strcmp(nombre, "--vidas") == 0 ||
            strcmp(nombre, "--puntos") == 0 ||
            strcmp(nombre, "--dialogo") == 0 ||
-           strcmp(nombre, "--volcar-hud") == 0;
+           strcmp(nombre, "--volcar-hud") == 0 ||
+           strcmp(nombre, "--audio-sonido") == 0 ||
+           strcmp(nombre, "--volumen") == 0 ||
+           strcmp(nombre, "--volcar-audio") == 0;
 }
 
 int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show) {
@@ -1612,6 +1663,7 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     depurador_iniciar();
     motor_entrada_iniciar(&g_entrada_ext);
     motor_hud_limpiar();
+    motor_audio_limpiar();
     for (i = 1; i < __argc; i++) {
         if (strcmp(__argv[i], "--entidades") == 0) {
             g_entidades = 1;
@@ -1641,6 +1693,11 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         if (strcmp(__argv[i], "--hud") == 0) {
             g_hud_activo = 1;
             motor_hud_activar(1);
+            continue;
+        }
+        if (strcmp(__argv[i], "--audio") == 0) {
+            g_audio_activo = 1;
+            motor_audio_activar(1);
             continue;
         }
         if (strcmp(__argv[i], "--comparar") == 0 && i + 2 < __argc) {
@@ -1730,6 +1787,24 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
                 fijar_dialogo_cli(v);
             } else if (strcmp(__argv[i - 1], "--volcar-hud") == 0) {
                 g_ruta_volcar_hud = v;
+            } else if (strcmp(__argv[i - 1], "--audio-sonido") == 0) {
+                char nombre[AUDIO_NOMBRE_MAX];
+                const char *ruta = strchr(v, '=');
+                g_audio_activo = 1;
+                motor_audio_activar(1);
+                if (ruta && ruta > v) {
+                    int n = (int)(ruta - v);
+                    if (n >= AUDIO_NOMBRE_MAX) n = AUDIO_NOMBRE_MAX - 1;
+                    memcpy(nombre, v, (size_t)n);
+                    nombre[n] = '\0';
+                    motor_audio_cargar(nombre, ruta + 1);
+                }
+            } else if (strcmp(__argv[i - 1], "--volumen") == 0) {
+                g_audio_activo = 1;
+                motor_audio_activar(1);
+                motor_audio_volumen(atoi(v));
+            } else if (strcmp(__argv[i - 1], "--volcar-audio") == 0) {
+                g_ruta_volcar_audio = v;
             } else if (strcmp(__argv[i - 1], "--observar") == 0) {
                 depurador_observar(v);
             } else if (strcmp(__argv[i - 1], "--break") == 0) {
@@ -1824,6 +1899,12 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     if (!ruta_logica && !ruta_mapa && !ruta_logic3 && activo_blob_cargar() > 0)
         ruta_logica = "proyecto.logic";
 
+    /* Fase 39: los nombres de sonar()/musica() sin --audio-sonido se buscan
+     * como sonidos\ nombre.wav junto al proyecto. */
+    if (g_audio_activo)
+        motor_audio_base(ruta_logic3 ? ruta_logic3
+                                     : (ruta_logica ? ruta_logica : ""));
+
     if (ruta_logic3) {
         char error[MOTOR_L3_ERROR_MAX];
         char ruta_mapa_l3[MAX_PATH];
@@ -1913,6 +1994,8 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         resultado = correr_volcar(ruta_volcar, fotogramas);
     } else {
         buscar_spawn();
+        /* Solo la ventana abre waveOut: las capturas son headless. */
+        if (g_audio_activo) motor_audio_dispositivo(1);
         resultado = correr_ventana(instancia);
     }
     /* Fase 37: el volcado de entrada se escribe al final del guion, tanto en
@@ -1920,6 +2003,7 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     if (g_ruta_volcar_entrada)
         motor_entrada_volcar(&g_entrada_ext, g_ruta_volcar_entrada);
     if (g_ruta_volcar_hud) motor_hud_volcar(g_ruta_volcar_hud);
+    if (g_ruta_volcar_audio) motor_audio_volcar(g_ruta_volcar_audio);
     if (g_grabar_replay) depurador_guardar_replay(g_grabar_replay);
     if (g_ruta_debug) depurador_volcar(g_ruta_debug, &g_memoria, &g_l3, 1);
     if (g_ordenes) {

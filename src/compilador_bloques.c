@@ -24,7 +24,12 @@ enum {
     DEF_HUD_PUNTOS,
     DEF_HUD_DIALOGO,
     DEF_HUD_TEXTO,
-    DEF_HUD_PLANTILLA
+    DEF_HUD_PLANTILLA,
+    DEF_SONIDO_SONAR,
+    DEF_SONIDO_MUSICA,
+    DEF_SONIDO_DETENER,
+    DEF_SONIDO_VOLUMEN,
+    DEF_SONIDO_VOLUMEN_ACTUAL
 };
 
 static char codigo[COMPILADOR_CODIGO_MAX];
@@ -147,6 +152,10 @@ static void generar_expresion(int id, const char *slot, int campo,
             snprintf(dst, (size_t)tam, "(%s > %s)", a, b);
             return;
         }
+        if (hdef == DEF_SONIDO_VOLUMEN_ACTUAL) {
+            copiar_texto(dst, tam, "volumen_actual()");
+            return;
+        }
         dst[0] = 0;
         return;
     }
@@ -249,6 +258,28 @@ void generar_sentencia(int id, int profundo) {
                      campo_entero(bloques_nodo_campo(id, 0)));
         return;
     }
+    /* Fase 39: bloques de sonido con las llamadas que acepta la VM. */
+    if (def == DEF_SONIDO_SONAR || def == DEF_SONIDO_MUSICA) {
+        char nombre[96];
+        copiar_escapado(nombre, sizeof(nombre), bloques_nodo_campo(id, 0));
+        if (!nombre[0]) copiar_texto(nombre, sizeof(nombre), "moneda");
+        anadir_linea(id, "%s(\"%s\")",
+                     def == DEF_SONIDO_SONAR ? "sonar" : "musica", nombre);
+        return;
+    }
+    if (def == DEF_SONIDO_DETENER) {
+        anadir_texto("detener_sonido()", id);
+        return;
+    }
+    if (def == DEF_SONIDO_VOLUMEN) {
+        anadir_linea(id, "volumen(%d)",
+                     campo_entero(bloques_nodo_campo(id, 0)));
+        return;
+    }
+    if (def == DEF_SONIDO_VOLUMEN_ACTUAL) {
+        anadir_texto("volumen_actual()", id);
+        return;
+    }
     /* Definicion desconocida: se deja una linea que el validador marcara. */
     anadir_linea(id, "bloque_desconocido %d", id);
 }
@@ -285,7 +316,8 @@ void compilador_bloques_generar(void) {
          * si cuelgan solos no producen codigo por si mismos. */
         if (bloques_nodo_padre(id) == 0 &&
             bloques_nodo_def(id) != DEF_SUMA &&
-            bloques_nodo_def(id) != DEF_MAYOR)
+            bloques_nodo_def(id) != DEF_MAYOR &&
+            bloques_nodo_def(id) != DEF_SONIDO_VOLUMEN_ACTUAL)
             generar_sentencia(id, 0);
     }
     codigo[longitud] = 0;

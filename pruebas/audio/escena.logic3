@@ -1,0 +1,11 @@
+LOGIC3
+version 3
+proyecto "Fase 39" 320 200 1 60 3 00112233
+carpetas "tiles" "maps" "trajes" "sonidos"
+escena 1 "Escena" "" 320 200 00112233
+objeto 1 "Lobo" escena 1 x 16 y 16 w 24 h 24 visible 1 capa 0
+  traje 0 "" 0 0 0 0
+  evento 1 inicio
+bloque 1 evento 1 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "sonar(\"moneda\")\nmusica(\"tema\")\nx = 16\ny = 16\n"
+FIN

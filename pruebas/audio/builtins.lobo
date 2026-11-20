@@ -1,0 +1,9 @@
+# Fase 39: los cinco builtins de audio sin callbacks (banco --vm-test).
+# Sin --audio las llamadas no suenan pero apilan un valor y la pila cuadra.
+entero a = sonar("moneda")
+entero b = musica("tema")
+entero c = detener_sonido()
+entero d = volumen(35)
+entero e = volumen_actual()
+x = a + b + c + d + e
+y = 16

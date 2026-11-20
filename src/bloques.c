@@ -88,7 +88,19 @@ static const DefBloque DEFS[BLOQUES_DEFS] = {
     { "hud.texto", "hud texto", 5, FORMA_PILA, 0x002E6E8Eu,
       { 1, 1 }, { "texto", "y" }, { "texto", "" } },
     { "hud.plantilla", "hud plantilla", 5, FORMA_PILA, 0x002E6E8Eu,
-      { 1, 0 }, { "cual", "" }, { "cual", "" } }
+      { 1, 0 }, { "cual", "" }, { "cual", "" } },
+    /* Fase 39: bloques de sonido, detras de los del HUD para no desplazar
+     * ninguna fila de las suites anteriores. */
+    { "sonido.sonar", "sonar", 5, FORMA_PILA, 0x006E3FA0u,
+      { 1, 0 }, { "sonido", "" }, { "sonido", "" } },
+    { "sonido.musica", "musica", 5, FORMA_PILA, 0x006E3FA0u,
+      { 1, 0 }, { "musica", "" }, { "musica", "" } },
+    { "sonido.detener", "detener sonido", 5, FORMA_PILA, 0x006E3FA0u,
+      { 0, 0 }, { "", "" }, { "", "" } },
+    { "sonido.volumen", "volumen", 5, FORMA_PILA, 0x006E3FA0u,
+      { 1, 0 }, { "valor", "" }, { "valor", "" } },
+    { "sonido.volumen_actual", "volumen actual", 5, FORMA_REPORTERO,
+      0x006E3FA0u, { 0, 0 }, { "", "" }, { "", "" } }
 };
 
 static NodoBloque nodos[BLOQUES_MAX];

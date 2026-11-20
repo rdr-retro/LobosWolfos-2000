@@ -111,6 +111,14 @@ pub const LOBO_HUD_IMAGEN: u8 = 78;
 pub const LOBO_HUD_BOTON: u8 = 79;
 pub const LOBO_HUD_PLANTILLA: u8 = 80;
 
+/* Fase 39: audio. Se anaden al final, detras del HUD, para no mover
+ * ningun opcode anterior (espejo de motor/lobo.h en Windows). */
+pub const LOBO_SONAR: u8 = 81;
+pub const LOBO_MUSICA: u8 = 82;
+pub const LOBO_DETENER_SONIDO: u8 = 83;
+pub const LOBO_VOLUMEN: u8 = 84;
+pub const LOBO_VOLUMEN_ACTUAL: u8 = 85;
+
 /* Textos constantes de un programa (espejo de motor/lobo.h). Un valor
  * de la pila con esta marca alta es un handle de texto. */
 pub const LOBO_TEXTOS_MAX: usize = 64;
@@ -798,10 +806,27 @@ fn nombre_conocido(nombre: &[u8]) -> (i32, bool, bool) {
     if nombre_es(nombre, b"hud_plantilla") {
         return (LOBO_HUD_PLANTILLA as i32, false, true);
     }
+    /* Fase 39: builtins del audio. */
+    if nombre_es(nombre, b"sonar") {
+        return (LOBO_SONAR as i32, false, true);
+    }
+    if nombre_es(nombre, b"musica") {
+        return (LOBO_MUSICA as i32, false, true);
+    }
+    if nombre_es(nombre, b"detener_sonido") {
+        return (LOBO_DETENER_SONIDO as i32, false, true);
+    }
+    if nombre_es(nombre, b"volumen") {
+        return (LOBO_VOLUMEN as i32, false, true);
+    }
+    if nombre_es(nombre, b"volumen_actual") {
+        return (LOBO_VOLUMEN_ACTUAL as i32, false, true);
+    }
     (-1, false, false)
 }
 
-/// Numero de argumentos de cada builtin del HUD (como en motor/lobo.c).
+/// Numero de argumentos de cada builtin del HUD y del audio (como en
+/// motor/lobo.c). Las funciones sin argumentos devuelven 0.
 fn hud_argumentos(op: i32) -> i32 {
     match op as u8 {
         LOBO_HUD_VIDAS | LOBO_HUD_PUNTOS | LOBO_HUD_PLANTILLA => 1,
@@ -810,6 +835,8 @@ fn hud_argumentos(op: i32) -> i32 {
         LOBO_HUD_TEXTO | LOBO_HUD_RECT => 5,
         LOBO_HUD_BOTON => 6,
         LOBO_HUD_BARRA => 7,
+        LOBO_SONAR | LOBO_MUSICA | LOBO_VOLUMEN => 1,
+        LOBO_DETENER_SONIDO | LOBO_VOLUMEN_ACTUAL => 0,
         _ => 0,
     }
 }
@@ -1025,9 +1052,10 @@ impl<'a> LoboParser<'a> {
                     }
                     return self.emitir(LOBO_RATON_BOTON, 0);
                 }
-                /* Fase 38: vidas, puntos, dialogo y elementos del HUD. */
+                /* Fase 38: vidas, puntos, dialogo y elementos del HUD.
+                 * Fase 39: el rango sigue hasta los builtins del audio. */
                 if conocido >= LOBO_HUD_VIDAS as i32
-                    && conocido <= LOBO_HUD_PLANTILLA as i32
+                    && conocido <= LOBO_VOLUMEN_ACTUAL as i32
                 {
                     return self.llamada_hud(conocido, hud_argumentos(conocido));
                 }
@@ -2069,6 +2097,57 @@ pub fn ejecutar<F: FnMut(i32, i32) -> bool>(
                     hud.plantilla = cual;
                 }
                 if !hud_meter(&mut pila, &mut np, 0) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            /* Fase 39: audio. Un texto entre comillas llega como handle y
+             * se resuelve al nombre del efecto o de la musica. Los
+             * argumentos se consumen en orden inverso, como en el C. */
+            LOBO_SONAR => {
+                let Some(handle) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let texto = resolver_texto(programa, handle).unwrap_or(b"");
+                crate::audio::sonar(texto);
+                if !hud_meter(&mut pila, &mut np, 1) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_MUSICA => {
+                let Some(handle) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let texto = resolver_texto(programa, handle).unwrap_or(b"");
+                crate::audio::musica(texto);
+                if !hud_meter(&mut pila, &mut np, 1) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_DETENER_SONIDO => {
+                crate::audio::detener();
+                if !hud_meter(&mut pila, &mut np, 0) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_VOLUMEN => {
+                let Some(valor) = hud_sacar(&mut pila, &mut np) else {
+                    maquina.agotado = true;
+                    return;
+                };
+                let anterior = crate::audio::volumen(valor);
+                if !hud_meter(&mut pila, &mut np, anterior) {
+                    maquina.agotado = true;
+                    return;
+                }
+            }
+            LOBO_VOLUMEN_ACTUAL => {
+                if !hud_meter(&mut pila, &mut np, crate::audio::volumen_actual()) {
                     maquina.agotado = true;
                     return;
                 }

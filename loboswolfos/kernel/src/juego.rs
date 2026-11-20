@@ -18,6 +18,7 @@
 //!     y el movimiento por defecto queda fuera (como juego.c).
 
 use crate::activo;
+use crate::audio;
 use crate::cpu;
 use crate::gfx;
 use crate::input;
@@ -263,6 +264,9 @@ impl Juego {
             /* Fase 38: cierra el fotograma del HUD (clic y avance de
              * dialogo) con la misma entrada que van a ver los scripts. */
             lobo::hud_fotograma(&ext);
+            /* Fase 39: cierra un tic del audio antes de correr los scripts;
+             * sin audio activo no hace E/S ni cambia nada. */
+            audio::fotograma();
             /* El mapa se copia a datos sueltos para que el cierre de
              * choca() no tome prestado el Juego mientras corren. */
             let celdas_ptr = self.mapa.celdas;
@@ -506,6 +510,7 @@ fn bits_de_serie(tecla: u8) -> u32 {
 pub fn arrancar(mi: &gfx::ModeInfo) -> ! {
     sprite_crear();
     lobo::hud_limpiar(); // fase 38: estado del HUD limpio al arrancar
+    audio::limpiar(); // fase 39: sin notas y altavoz apagado al arrancar
     let Some(mapa) = activo::cargar_todo() else {
         println!("egine: sin proyecto que cargar; el kernel se queda en modo texto.");
         crate::bucle_texto()
