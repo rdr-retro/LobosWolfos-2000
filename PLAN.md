@@ -871,6 +871,19 @@ el motor ya compila.
   del editor se actualizan. `build.bat prueba` pasa las 23 suites. Release
   `v2.0-beta` actualizada con los binarios, sus SHA-256 y la nota CRLF.
 
+- **21-11-2026 (icono nuevo)** - `recursos/newlogo.png` pasa a ser la fuente
+  del icono de la aplicacion. Se regenera `recursos/logo.ico` con cinco
+  entradas DIB/BMP sin comprimir (16, 32, 48, 64 y 90 px), 32 bpp con canal
+  alfa y mascara AND. El logo original es una franja de 1197x707 dentro de un
+  lienzo de 1254x1254, asi que se recorta a su area no transparente y se escala
+  conservando la proporcion, centrado con relleno transparente, para evitar la
+  distorsion de estirarlo a cuadrado. La mascara AND marca como transparente
+  todo pixel con alfa menor que 128 para que el fondo tambien funcione en
+  Windows 2000. `src/recurso.rc` mantiene `IDI_APP ICON "recursos\\logo.ico"`.
+  Se actualizan los hashes BMP de las capturas que muestran el icono.
+  `build.bat prueba` pasa las 23 suites. Release `v2.0-beta` actualizada con
+  los binarios, sus SHA-256 y la nota CRLF.
+
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,
