@@ -1,0 +1,4 @@
+programa_modo=1 programa_piezas=3 programa_sel=1 programa_paleta=6 programa_grupos=0000000 programa_undo=4 programa_redo=0
+programa_pieza=1:sistema.escena:198,172:0:mapa.mav:0
+programa_pieza=2:sistema.actor:418,172:3:Actor:lobo
+programa_pieza=3:sistema.teclado:308,342:0:1:teclado

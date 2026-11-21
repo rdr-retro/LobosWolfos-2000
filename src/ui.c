@@ -4804,6 +4804,285 @@ static void elementos_dibujar_panel(void) {
     }
 }
 
+/* ------------------------------------------------------------------ */
+/* Constructor de programa (fase 47): paleta, tarjetas, enlaces e       */
+/* inspector. Solo pinta geometria calculada en programa.c.            */
+/* ------------------------------------------------------------------ */
+static void ui_dibujar_marcos_paneles(void);
+
+/* Los identificadores viajan en ASCII dentro del proyecto; la vista muestra
+ * la forma acentuada cuando hace falta. */
+static const char *programa_valor_vista(const char *valor) {
+    if (valor && strcmp(valor, "raton") == 0) return "ratón";
+    if (valor && strcmp(valor, "funcion") == 0) return "función";
+    return valor ? valor : "";
+}
+
+static void programa_pintar_puerto(int x, int y, unsigned int color,
+                                   int entrada) {
+    dibujar_circulo(x, y, 5, 0x00FFFFFFu, 1);
+    dibujar_circulo(x, y, 3, color, 1);
+    if (entrada) dibujar_rect(x - 1, y - 1, x + 1, y + 1, 0x00202020u);
+}
+
+static void programa_pintar_tarjeta(int x0, int y0, int ancho, int alto,
+                                    int def, int id, int seleccionado,
+                                    int valido,
+                                    const char *valor, const char *valor2) {
+    unsigned int color = programa_def_color(def);
+    int cy = y0 + alto / 2;
+    char etiqueta[32];
+    const char *entrada = programa_def_puerto(def, 0);
+    const char *salida = programa_def_puerto(def, 1);
+
+    dibujar_rect(x0, y0, x0 + ancho, y0 + alto, color);
+    dibujar_rect(x0, y0, x0 + ancho, y0 + 14, 0x00202020u);
+    dibujar_rect(x0, y0 + 14, x0 + ancho, y0 + 15, 0x00FFFFFFu);
+    dibujar_marco(x0, y0, x0 + ancho, y0 + alto,
+                  seleccionado ? BOTON_SELECCION : 0x00202020u);
+    if (seleccionado) {
+        dibujar_marco(x0 + 2, y0 + 2, x0 + ancho - 2, y0 + alto - 2,
+                      0x00FFFFFFu);
+    }
+
+    dibujar_rect(x0 + 7, y0 + 21, x0 + 19, y0 + 33, 0x00FFFFFFu);
+    dibujar_circulo(x0 + 13, y0 + 45, 6, 0x00FFFFFFu, 1);
+    texto_recortado(x0 + 26, y0 + 3, programa_def_nombre(def),
+                    0x00FFFFFFu, ancho - 32);
+    formatear(etiqueta, sizeof(etiqueta), "#%d", id);
+    fuente_dibujar(x0 + ancho - fuente_texto_ancho(etiqueta) - 5, y0 + 3,
+                   etiqueta, 0x00FFFFFFu);
+
+    if (!valido) {
+        dibujar_rect(x0 + ancho - 15, y0 + 18, x0 + ancho - 5, y0 + 28,
+                     0x00C02020u);
+        dibujar_marco(x0 + ancho - 15, y0 + 18, x0 + ancho - 5, y0 + 28,
+                      0x00FFFFFFu);
+        fuente_dibujar(x0 + ancho - 12, y0 + 20, "!", 0x00FFFFFFu);
+    }
+
+    if (valor && valor[0])
+        texto_recortado(x0 + 26, y0 + 22, programa_valor_vista(valor),
+                        0x00FFFFFFu, ancho - 30);
+    if (valor2 && valor2[0])
+        texto_recortado(x0 + 26, y0 + 38, programa_valor_vista(valor2),
+                        0x00D8E8F8u, ancho - 30);
+    fuente_dibujar(x0 + 26, y0 + 55, programa_def_tipo(def), 0x00C0D8ECu);
+
+    if (entrada && strcmp(entrada, "-") != 0)
+        programa_pintar_puerto(x0, cy, color, 1);
+    if (salida && strcmp(salida, "-") != 0)
+        programa_pintar_puerto(x0 + ancho, cy, color, 0);
+}
+
+static int programa_indice_id(int id) {
+    int i;
+    if (id <= 0) return -1;
+    for (i = 0; i < g.num_programa_piezas; i++)
+        if (g.programa_piezas[i].id == id) return i;
+    return -1;
+}
+
+static void programa_dibujar_paleta(void) {
+    Zona z = programa_paleta_zona();
+    int visibles = z.alto / PROGRAMA_FILA_ALTO;
+    int total = programa_fila_total();
+    int i;
+
+    fuente_dibujar(SIDEBAR_MARGEN, AREA_SUP_ALTO + 8,
+                   "PALETA DE PIEZAS", TEXTO_UI);
+    for (i = 0; i < visibles && i + g.programa_scroll < total; i++) {
+        int fila = i + g.programa_scroll;
+        int grupo = -1, def = -1;
+        Zona f = programa_fila_zona(fila);
+        if (!programa_fila_info(fila, &grupo, &def)) continue;
+        if (def < 0) {
+            dibujar_rect_z(f, 0x002E3B48u);
+            dibujar_chevron(f.x + 12, f.y + f.alto / 2,
+                            !g.programa_grupo[grupo], 0x00FFFFFFu);
+            fuente_dibujar(f.x + 24, f.y + (f.alto - 7) / 2,
+                           programa_def_grupo_nombre(grupo), 0x00FFFFFFu);
+        } else {
+            unsigned int color = programa_def_color(def);
+            int activo = g.programa_paleta_sel == def ||
+                         g.programa_paleta_pulsada == def;
+            dibujar_rect_z(f, color);
+            dibujar_marco_z(f, activo ? BOTON_SELECCION : 0x00202020u);
+            dibujar_rect(f.x + 6, f.y + 7, f.x + 16, f.y + 17, 0x00FFFFFFu);
+            texto_recortado(f.x + 23, f.y + (f.alto - 7) / 2,
+                            programa_def_nombre(def), 0x00FFFFFFu,
+                            zona_derecha(f) - f.x - 27);
+        }
+    }
+}
+
+static void programa_dibujar_inspector(void) {
+    Zona z = programa_inspector_zona();
+    char texto[96];
+    int idx = g.programa_sel;
+    int def;
+
+    fuente_dibujar(z.x, z.y - 14, "INSPECTOR", TEXTO_UI);
+    dibujar_rect_z(z, BARRA);
+    dibujar_marco_z(z, BARRA_BORDE);
+    if (idx < 0 || idx >= g.num_programa_piezas) {
+        fuente_dibujar(z.x + 10, z.y + 12,
+                       "Selecciona una pieza del lienzo", TEXTO_UI);
+        fuente_dibujar(z.x + 10, z.y + 30,
+                       "Arrastra desde la paleta o pulsa una pieza",
+                       SEPARADOR);
+        dibujar_rect_z(programa_scripts_zona(), BARRA);
+        dibujar_marco_z(programa_scripts_zona(), BARRA_BORDE);
+        fuente_dibujar(programa_scripts_zona().x + 8,
+                       programa_scripts_zona().y + 7, "Ir a bloques", TEXTO_UI);
+        return;
+    }
+
+    def = g.programa_piezas[idx].def;
+    dibujar_rect(z.x + 10, z.y + 10, z.x + 34, z.y + 34,
+                 programa_def_color(def));
+    dibujar_marco(z.x + 10, z.y + 10, z.x + 34, z.y + 34, 0x00202020u);
+    texto_recortado(z.x + 42, z.y + 10, g.programa_piezas[idx].nombre,
+                    TEXTO_UI, z.ancho - 52);
+    formatear(texto, sizeof(texto), "id %d   %s",
+              g.programa_piezas[idx].id, programa_def_tipo(def));
+    texto_recortado(z.x + 42, z.y + 26, texto, SEPARADOR, z.ancho - 52);
+    formatear(texto, sizeof(texto), "estado: %s",
+              g.programa_piezas[idx].valido ? "válida" : "sin destino");
+    fuente_dibujar(z.x + 10, z.y + 46, texto,
+                   g.programa_piezas[idx].valido ? 0x00207040u
+                                                : 0x00A02020u);
+    formatear(texto, sizeof(texto), "enlace: %d",
+              g.programa_piezas[idx].enlace);
+    fuente_dibujar(z.x + 10, z.y + 62, texto, SEPARADOR);
+
+    {
+        int c;
+        for (c = 0; c < 2; c++) {
+            Zona campo = programa_campo_zona(c);
+            const char *valor = c == 0 ? g.programa_piezas[idx].valor
+                                       : g.programa_piezas[idx].valor2;
+            dibujar_rect_z(campo, 0x00E8EEF4u);
+            dibujar_marco_z(campo, BARRA_BORDE);
+            fuente_dibujar(campo.x + 5, campo.y + 3,
+                           programa_def_campo_nombre(def, c), SEPARADOR);
+            texto_recortado(campo.x + 5, campo.y + 18,
+                            programa_valor_vista(valor), TEXTO_UI,
+                            campo.ancho - 10);
+        }
+    }
+
+    fuente_dibujar(z.x + 10, z.y + 194,
+                   "Clic en el valor para cambiarlo", SEPARADOR);
+    dibujar_rect_z(programa_scripts_zona(), BOTON_SELECCION);
+    dibujar_marco_z(programa_scripts_zona(), MODULOS_FUNCION_TEXTO);
+    fuente_dibujar(programa_scripts_zona().x + 8,
+                   programa_scripts_zona().y + 7,
+                   "Ir a bloques", 0x00FFFFFFu);
+}
+
+static void programa_dibujar_controles(void) {
+    int cual;
+    const char *etiquetas[5] = {
+        "PROGRAMA", "COMPAT.", "<", ">", "BLOQUES"
+    };
+    for (cual = 0; cual < 5; cual++) {
+        Zona z = programa_boton_zona(cual);
+        int activo = (cual == 0 && g.programa_modo) ||
+                     (cual == 1 && !g.programa_modo);
+        int hover = zona_contiene(z, g.raton_x, g.raton_y);
+        int disponible = cual != 2 || programa_historial_num() > 0;
+        int rehacer = cual != 3 || programa_futuro_num() > 0;
+        u32 fondo = activo ? BOTON_SELECCION
+                           : (hover ? 0x00EDF2F7u : BARRA);
+        if (!disponible || !rehacer) fondo = 0x00C8CDD2u;
+        dibujar_rect_z(z, fondo);
+        dibujar_marco_z(z, activo ? MODULOS_FUNCION_TEXTO : BARRA_BORDE);
+        fuente_dibujar(z.x + (z.ancho - fuente_texto_ancho(etiquetas[cual])) / 2,
+                       z.y + 6, etiquetas[cual],
+                       activo ? 0x00FFFFFFu : TEXTO_UI);
+    }
+}
+
+static void programa_dibujar_lienzo(void) {
+    Zona lienzo = modulos_lienzo_zona();
+    int i;
+
+    modulos_dibujar_rejilla(lienzo);
+
+    for (i = 0; i < g.num_programa_piezas; i++) {
+        const PiezaPrograma *p = &g.programa_piezas[i];
+        int destino = programa_indice_id(p->enlace);
+        if (destino < 0) continue;
+        {
+            Zona a = programa_tarjeta_zona(i);
+            Zona b = programa_tarjeta_zona(destino);
+            int x0 = zona_derecha(a);
+            int y0 = a.y + a.alto / 2;
+            int x1 = b.x;
+            int y1 = b.y + b.alto / 2;
+            dibujar_linea(x0, y0, x1, y1, 0x00D0A020u);
+            dibujar_linea(x0, y0 + 1, x1, y1 + 1, 0x00F0C040u);
+        }
+    }
+
+    for (i = 0; i < g.num_programa_piezas; i++) {
+        const PiezaPrograma *p = &g.programa_piezas[i];
+        Zona z = programa_tarjeta_zona(i);
+        int x0 = z.x, y0 = z.y, x1 = zona_derecha(z), y1 = zona_abajo(z);
+        int completo;
+        if (!modulos_recortar(lienzo, &x0, &y0, &x1, &y1)) continue;
+        dibujar_rect(x0, y0, x1, y1, programa_def_color(p->def));
+        completo = z.x >= lienzo.x && z.y >= lienzo.y &&
+                   zona_derecha(z) <= zona_derecha(lienzo) &&
+                   zona_abajo(z) <= zona_abajo(lienzo);
+        if (!completo) continue;
+        programa_pintar_tarjeta(z.x, z.y, z.ancho, z.alto, p->def, p->id,
+                                i == g.programa_sel, p->valido,
+                                p->valor, p->valor2);
+    }
+
+    if (g.programa_arrastrando == 3)
+        modulos_dibujar_guia(lienzo, g.programa_snap_x, g.programa_snap_y);
+
+    if (g.programa_arrastrando == 1 && g.programa_paleta_pulsada >= 0) {
+        int wx = g.raton_x - lienzo.x - g.pan_x - PROGRAMA_TARJETA_ANCHO / 2;
+        int wy = g.raton_y - lienzo.y - g.pan_y - PROGRAMA_TARJETA_ALTO / 2;
+        int lx = -1, ly = -1;
+        int x0, y0, x1, y1;
+        modulos_acoplar(&wx, &wy, PROGRAMA_TARJETA_ANCHO,
+                        PROGRAMA_TARJETA_ALTO, -1, &lx, &ly);
+        x0 = lienzo.x + g.pan_x + wx;
+        y0 = lienzo.y + g.pan_y + wy;
+        x1 = x0 + PROGRAMA_TARJETA_ANCHO;
+        y1 = y0 + PROGRAMA_TARJETA_ALTO;
+        if (modulos_recortar(lienzo, &x0, &y0, &x1, &y1)) {
+            dibujar_rect(x0, y0, x1, y1, 0x004A5A6Au);
+            dibujar_marco(x0, y0, x1, y1, BOTON_SELECCION);
+            if (g.programa_paleta_movido)
+                programa_pintar_tarjeta(x0, y0, x1 - x0, y1 - y0,
+                                        g.programa_paleta_pulsada, 0, 0, 1,
+                                        "", "");
+        }
+        modulos_dibujar_guia(lienzo, lx, ly);
+    }
+
+    if (g.programa_arrastrando == 4 && g.programa_enlace_desde >= 0) {
+        int idx = programa_indice_id(g.programa_enlace_desde);
+        if (idx >= 0) {
+            Zona z = programa_tarjeta_zona(idx);
+            dibujar_linea(zona_derecha(z), z.y + z.alto / 2,
+                          g.raton_x, g.raton_y, 0x00F0C040u);
+        }
+    }
+}
+
+static void ui_dibujar_paneles_programa(void) {
+    ui_dibujar_marcos_paneles();
+    programa_dibujar_paleta();
+    programa_dibujar_inspector();
+}
+
 /* Marcos del gestor de logica y del editor de menus: dos laterales (el
  * derecho mas ancho) y barra inferior. */
 static void ui_dibujar_marcos_paneles(void) {
@@ -4915,12 +5194,18 @@ void ui_dibujar(void) {
         return;
     }
 
-    /* Gestor de logica: paneles, lista, lienzo desplazable y boton. */
+    /* Gestor de logica: capa Programa (fase 47) o vista LOGIC2 clasica. */
     if (g.vista == VISTA_MODULOS) {
         dibujar_rect(0, 0, g.ancho, g.alto, FONDO);
-        ui_dibujar_paneles_modulos();
-        modulos_dibujar_lienzo();
-        ui_dibujar_selector_mapa();
+        if (g.programa_modo) {
+            ui_dibujar_paneles_programa();
+            programa_dibujar_lienzo();
+        } else {
+            ui_dibujar_paneles_modulos();
+            modulos_dibujar_lienzo();
+            ui_dibujar_selector_mapa();
+        }
+        programa_dibujar_controles();
         ui_dibujar_pestanas();
         ui_dibujar_barra_menus();
         ui_dibujar_menu_desplegable();

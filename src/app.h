@@ -206,6 +206,17 @@ typedef unsigned char  u8;
 #define MODULOS_PANEL_DER_EXTRA 120 /* cuanto mas ancho es el panel derecho
                                       * (deja ver columnas de codigo lobo) */
 
+/* Constructor de programa (fase 47): piezas grandes separadas de la vista
+ * LOGIC2. El estado se sincroniza con bloques sistema.pieza al guardar. */
+#define PROGRAMA_PIEZAS_MAX    64
+#define PROGRAMA_GRUPOS         7
+#define PROGRAMA_NOMBRE_MAX    32
+#define PROGRAMA_VALOR_MAX     48
+#define PROGRAMA_TARJETA_ANCHO 132
+#define PROGRAMA_TARJETA_ALTO  72
+#define PROGRAMA_FILA_ALTO     24
+#define PROGRAMA_HISTORIAL     16
+
 /* Aspecto del elemento de funcion en el lienzo (egine y futuras funciones):
  * banda superior con la clase de modulo y nombre centrado en azul. */
 #define MODULOS_FUNCION_FONDO  0x00D8E6F8u
@@ -760,6 +771,20 @@ typedef struct ModuloElemento {
     int funcion; /* -1 = item de mapa, 0 = inicio de programa, >= 1 = id */
 } ModuloElemento;
 
+/* Pieza del constructor de programa. Vive aparte de `g.modulos` para no
+ * mezclarla con la proyeccion LOGIC2; al guardar se vuelca a `sistema.pieza`. */
+typedef struct PiezaPrograma {
+    int id;
+    int def;                  /* indice en la tabla de definiciones */
+    int x, y;                 /* coordenadas del mundo */
+    int ancho, alto;
+    int enlace;               /* id de la pieza destino, 0 si no tiene */
+    int valido;               /* 0 si la validacion en vivo encontro un aviso */
+    char nombre[PROGRAMA_NOMBRE_MAX];
+    char valor[PROGRAMA_VALOR_MAX];
+    char valor2[PROGRAMA_VALOR_MAX];
+} PiezaPrograma;
+
 /* Un boton FUNCIONES con codigo lobo (fase 8): el texto viaja en el
  * .logic del proyecto (formato LOGIC2) y el motor lo compila y corre
  * cada fotograma. El editor valida con el mismo parser del motor
@@ -1006,6 +1031,25 @@ typedef struct App {
     /* Lista de elementos del gestor y desplazamiento de la vista unica. */
     int elementos_scroll; /* primer elemento visible de la lista */
     int modulo_siguiente_id; /* id del proximo elemento insertado */
+
+    /* Constructor de programa (fase 47). `programa_modo`=0 mantiene la vista
+     * LOGIC2 de siempre; =1 usa paleta, tarjetas e inspector propios. */
+    PiezaPrograma programa_piezas[PROGRAMA_PIEZAS_MAX];
+    int num_programa_piezas;
+    int programa_modo;
+    int programa_sel;
+    int programa_siguiente_id;
+    int programa_grupo[PROGRAMA_GRUPOS]; /* 1 = plegado */
+    int programa_paleta_sel;
+    int programa_paleta_pulsada;
+    int programa_paleta_x, programa_paleta_y;
+    int programa_paleta_movido;
+    int programa_scroll;
+    int programa_arrastrando; /* 0 nada, 1 paleta, 2 paneo, 3 mover, 4 enlace */
+    int programa_drag_i;
+    int programa_off_x, programa_off_y;
+    int programa_snap_x, programa_snap_y;
+    int programa_enlace_desde;
 
     /* Modo tiles */
     int modo_tiles;
@@ -1571,6 +1615,41 @@ void modulos_acoplar(int *x, int *y, int ancho, int alto, int ignorar,
                      int *linea_x, int *linea_y);
 void modulos_insertar(int x, int y);
 void modulos_insertar_funcion(int x, int y, int funcion);
+
+/* Constructor de programa (fase 47). */
+void programa_cargar_modelo(void);
+void programa_guardar_modelo(void *modelo);
+void programa_volcar(const char *ruta);
+int  programa_modo_actual(void);
+void programa_modo_poner(int modo);
+Zona programa_paleta_zona(void);
+Zona programa_inspector_zona(void);
+Zona programa_boton_zona(int cual);   /* 0 programa, 1 compat, 2 undo, 3 redo,
+                                       * 4 ir a scripts */
+Zona programa_fila_zona(int fila);
+Zona programa_campo_zona(int campo);
+Zona programa_scripts_zona(void);
+Zona programa_tarjeta_zona(int indice);
+int  programa_fila_total(void);
+int  programa_fila_info(int fila, int *grupo, int *def);
+int  programa_fila_en(int x, int y);
+int  programa_pieza_en(int x, int y);
+int  programa_puerto_en(int x, int y, int *pieza, int *lado);
+int  programa_defs_num(void);
+const char *programa_def_tipo(int def);
+const char *programa_def_nombre(int def);
+const char *programa_def_grupo_nombre(int grupo);
+unsigned int programa_def_color(int def);
+const char *programa_def_campo_nombre(int def, int campo);
+const char *programa_def_valor(int def, int campo);
+const char *programa_def_puerto(int def, int lado); /* 0 entrada, 1 salida */
+int  programa_pulsar(int x, int y, int boton);
+void programa_soltar(int x, int y);
+void programa_mover(int x, int y);
+void programa_rueda(int x, int y, int delta, int ctrl);
+int  programa_tecla(int vk, int ctrl, int shift);
+int  programa_historial_num(void);
+int  programa_futuro_num(void);
 int  elementos_ordenar_lista(int *orden, int *hijos);
 void logica_iniciar(void);
 int  sidebar_derecho_ancho(void);

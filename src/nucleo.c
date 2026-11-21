@@ -1719,6 +1719,12 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
             g.tiles_visible = 0;
         }
         if (strstr(cmd, "--gestor") != NULL) g.vista = VISTA_MODULOS;
+        /* Fase 47: entrada directa a la capa Programa del gestor. */
+        if (arg_presente(cmd, "--programa")) {
+            if (g.vista != VISTA_MODULOS) g.vista = VISTA_MODULOS;
+            if (!logic3_activo()) logic3_nuevo_editor();
+            programa_modo_poner(1);
+        }
         /* Item de prueba del gestor: nombre de un .mav de la carpeta maps. */
         {
             char *item_arg = arg_valor(cmd, "--item-mapa");
@@ -1909,6 +1915,29 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                     break;
                 }
                 while (*p == ';' || *p == ' ' || *p == ',') p++;
+            }
+        }
+        /* Fase 47: gestos de arrastre del constructor de programa. El formato
+         * es "boton:x0,y0;x1,y1|...", el mismo que los lienzos de bloques. */
+        {
+            char *pg_arg = arg_valor(cmd, "--arrastre-programa");
+            if (pg_arg && g.vista == VISTA_MODULOS) {
+                const char *p = pg_arg;
+                while (*p) {
+                    int boton = 0, x0 = 0, y0 = 0, x1 = 0, y1 = 0, n = 0;
+                    if (sscanf(p, "%d:%d,%d;%d,%d%n", &boton, &x0, &y0,
+                               &x1, &y1, &n) != 5) break;
+                    app_mover(x0, y0, 0);
+                    if (boton == 1) g.boton_der = 1;
+                    else g.boton_izq = 1;
+                    app_pulsar(x0, y0, boton);
+                    if (boton == 1) g.boton_der = 0;
+                    else g.boton_izq = 0;
+                    app_mover(x1, y1, 0);
+                    app_soltar(x1, y1, boton);
+                    p += n;
+                    while (*p == '|' || *p == ' ' || *p == ',') p++;
+                }
             }
         }
         /* Fase 35: entrar en las pestanas reservadas despues de --clics
@@ -2698,6 +2727,16 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                            n < MAX_PATH - 1) { borrar[n] = sb[n]; n++; }
                 borrar[n] = 0;
                 datos_saves_herramienta(carpeta, salida, borrar);
+            }
+        }
+        /* Fase 47: volcado propio del constructor, con flag nuevo para no
+         * alterar ninguna suite anterior. */
+        {
+            char *vpr = arg_valor(cmd, "--volcar-programa");
+            if (vpr) {
+                char ruta[MAX_PATH];
+                recortar_texto(ruta, vpr, sizeof(ruta));
+                programa_volcar(ruta);
             }
         }
         /* Vuelca el lobo generado (fase 33) como texto plano. */

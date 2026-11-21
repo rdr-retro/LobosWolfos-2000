@@ -1,13 +1,15 @@
-# programa.ps1 - suite del modelo de programa (fase 46).
+# programa.ps1 - suite del modelo y el constructor de programa (fases 46-47).
 #
 # Congela la separacion entre escenario y jugador. Un proyecto nuevo guarda
 # la pieza sistema.opciones con jugador_implicito=0; un LOGIC3 sin esa pieza
-# es legacy y mantiene el lobito clasico.
+# es legacy y mantiene el lobito clasico. La fase 47 anade la vista visible:
+# paleta, tarjetas, enlaces e inspector dentro del gestor.
 #
 # Casos:
 #   opciones_nuevo  el editor crea sistema.opciones en un proyecto nuevo
 #   mapa_solo       mapa sin opciones de jugador: lobo quieto y sin sprite
 #   legacy          sin sistema.opciones: lobo se mueve y el BMP cambia
+#   ui_programa     lienzo Programa con tres piezas, un enlace y sondas BMP
 #
 # Uso:
 #   pruebas\programa.ps1                 pasa la suite
@@ -27,6 +29,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "comun.ps1")
+Add-Type -AssemblyName System.Drawing
 
 $raiz = Split-Path -Parent $PSScriptRoot
 $carpeta = Join-Path $PSScriptRoot "programa"
@@ -107,6 +110,27 @@ function Get-PosicionLobo([string]$ruta) {
     $m = [regex]::Match($texto, "(?m)^lobo\s+(-?\d+)\s+(-?\d+)\s*$")
     if (-not $m.Success) { return "" }
     return ($m.Groups[1].Value + " " + $m.Groups[2].Value)
+}
+
+# Sondas fijas del lienzo Programa a 1200x700: paleta, tarjetas, lienzo,
+# puertos de entrada/salida, seleccion, enlace y conmutador de la barra.
+function Get-PixelesPrograma([string]$bmp) {
+    $imagen = [System.Drawing.Bitmap]::FromFile($bmp)
+    try {
+        $puntos = @("140,118", "140,214", "140,310", "600,240", "500,410",
+                    "540,300", "586,226", "483,244", "706,247", "496,260",
+                    "584,260", "716,260", "660,300", "180,682")
+        $salida = @()
+        foreach ($punto in $puntos) {
+            $xy = $punto.Split(",")
+            $color = $imagen.GetPixel([int]$xy[0], [int]$xy[1])
+            $salida += ("{0}={1:X2}{2:X2}{3:X2}" -f $punto, $color.R,
+                        $color.G, $color.B)
+        }
+        return ($salida -join " ")
+    } finally {
+        $imagen.Dispose()
+    }
 }
 
 $script:total = 0
@@ -203,6 +227,63 @@ Ejecutar-Caso "legacy" {
         $solo = (Get-TextoNormalizado $patronSolo).Trim().ToLowerInvariant()
         if ((Get-Sha256 $bmp) -eq $solo) {
             [void]$problemas.Add("el BMP legacy es identico al de mapa_solo")
+        }
+    }
+}
+
+Ejecutar-Caso "ui_programa" {
+    param($dir, $problemas)
+    $logic = Join-Path $dir "programa.logic3"
+    $bmp = Join-Path $dir "programa.bmp"
+    $dump = Join-Path $dir "programa.txt"
+    $vpr = Join-Path $dir "programa_ui.txt"
+    $gestos = "0:20,118;430,260|0:20,214;650,260|0:20,310;540,430|0:716,260;474,430"
+    $codigo = Ejecutar-Editor $dir @("--programa", "--sin-ventanas", `
+                                     "--arrastre-programa", $gestos, `
+                                     "--guardar-logic3", $logic, `
+                                     "--captura", $bmp, "--volcar", $dump, `
+                                     "--volcar-programa", $vpr)
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    if (-not (Test-Path -LiteralPath $logic)) {
+        [void]$problemas.Add("no se guardo el LOGIC3 del lienzo")
+        return
+    }
+    if (-not (Test-Path -LiteralPath $bmp)) {
+        [void]$problemas.Add("falta el BMP del lienzo")
+        return
+    }
+    if (-not (Test-Path -LiteralPath $vpr)) {
+        [void]$problemas.Add("falta el volcado del constructor")
+        return
+    }
+
+    $contenido = Get-TextoNormalizado $logic
+    $ui = Get-TextoNormalizado $vpr
+    Comprobar-Texto "ui_programa" ".logic3" $contenido $problemas
+    Comprobar-Texto "ui_programa" ".volcar-programa" $ui $problemas
+    Comprobar-Texto "ui_programa" ".volcar" `
+                    (Get-VolcarNormalizado $dump $dir) $problemas
+    Comprobar-Hash "ui_programa" (Get-Sha256 $bmp) $problemas
+    Comprobar-Texto "ui_programa" ".pixeles" `
+                    (Get-PixelesPrograma $bmp) $problemas
+
+    if ($ui -notlike "programa_modo=1 programa_piezas=3 programa_sel=1*") {
+        [void]$problemas.Add("el volcado del constructor no describe el lienzo")
+    }
+    foreach ($pieza in @("programa_pieza=1:sistema.escena:",
+                         "programa_pieza=2:sistema.actor:",
+                         "programa_pieza=3:sistema.teclado:")) {
+        if ($ui -notlike ("*" + $pieza + "*")) {
+            [void]$problemas.Add("falta " + $pieza)
+        }
+    }
+    foreach ($campo in @('tipo "sistema.pieza"',
+                         'campo "ui" "1"',
+                         'campo "pieza" "sistema.escena"',
+                         'campo "enlace" "3"',
+                         'campo "valor2" "teclado"')) {
+        if ($contenido -notlike ("*" + $campo + "*")) {
+            [void]$problemas.Add("falta " + $campo + " en el LOGIC3")
         }
     }
 }

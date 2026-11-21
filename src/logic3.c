@@ -2201,6 +2201,7 @@ int logic3_nuevo_editor(void) {
     if (g.ajustes.fondo) g3.fondo = g.ajustes.fondo;
     sistema_opciones_asegurar(&g3);
     g3_activo = 1;
+    programa_cargar_modelo();
     g3_error[0] = 0;
     return 1;
 }
@@ -2291,6 +2292,7 @@ int logic3_cargar_editor(const char *ruta) {
         if (g.funciones[i].id > max_id) max_id = g.funciones[i].id;
     g.funcion_siguiente_id = max_id + 1;
     app_menus_resolucion();
+    programa_cargar_modelo();
     return 1;
 }
 
@@ -2307,6 +2309,7 @@ static void sincronizar_actual(void) {
     g3.velocidad = g.ajustes.velocidad;
     g3.fondo = g.ajustes.fondo;
     g3.version = L3_VERSION;
+    programa_guardar_modelo(&g3);
 }
 
 int logic3_guardar_actual(const char *ruta) {

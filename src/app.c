@@ -2637,8 +2637,11 @@ void app_pulsar(int x, int y, int boton) {
         return;
     }
 
-    /* El gestor de logica tiene su propio boton, lienzo y lista. */
+    /* El gestor de logica tiene su propio boton, lienzo y lista. La capa
+     * Programa (fase 47) consume sus propios clics; si no, sigue la vista
+     * LOGIC2 de siempre. */
     if (g.vista == VISTA_MODULOS) {
+        if (programa_pulsar(x, y, boton)) return;
         modulos_pulsar(x, y, boton);
         return;
     }
@@ -2712,7 +2715,8 @@ void app_soltar(int x, int y, int boton) {
         return;
     }
     if (g.vista == VISTA_MODULOS) {
-        modulos_soltar(x, y);
+        if (g.programa_modo) programa_soltar(x, y);
+        else modulos_soltar(x, y);
         return;
     }
     if (g.vista == VISTA_MENUS) {
@@ -2812,7 +2816,8 @@ void app_mover(int x, int y, int botones) {
 
     /* En el gestor se actualiza el arrastre y el hover del boton. */
     if (g.vista == VISTA_MODULOS) {
-        modulos_mover(x, y);
+        if (g.programa_modo) programa_mover(x, y);
+        else modulos_mover(x, y);
         if (y < AREA_SUP_ALTO) app_invalidar();
         return;
     }
@@ -2986,7 +2991,8 @@ void app_rueda(int x, int y, int delta, int ctrl) {
         return;
     }
     if (g.vista == VISTA_MODULOS) {
-        modulos_rueda(x, y, delta, ctrl);
+        if (g.programa_modo) programa_rueda(x, y, delta, ctrl);
+        else modulos_rueda(x, y, delta, ctrl);
         return;
     }
     if (g.vista == VISTA_MENUS) return;
@@ -3086,6 +3092,10 @@ void app_tecla(int vk, int ctrl, int shift) {
         estudio_tecla(vk, ctrl, shift);
         return;
     }
+    /* Constructor de programa: deshacer, rehacer, borrar y cancelar. */
+    if (g.vista == VISTA_MODULOS && g.programa_modo &&
+        programa_tecla(vk, ctrl, shift))
+        return;
     /* Editor de codigo lobo abierto: las teclas de control son suyas. */
     if (g.vista == VISTA_MODULOS) {
         if (g.funcion_abierta >= 0) funciones_codigo_tecla(vk, ctrl);

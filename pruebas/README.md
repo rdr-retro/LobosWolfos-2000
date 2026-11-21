@@ -8,11 +8,13 @@ trajes, animacion, capas y camara (fase 30), la vista Estudio (fase 31), el
 lienzo de bloques (fase 32), el compilador bloques -> lobo (fase 33), el
 depurador y el replay (fase 34), la interfaz del editor (fase 23), datos,
 productividad, entrada, HUD, audio, guardado, escenas, perfil, plantillas y
-exportacion 2.0 (fases 35 a 45) y el modelo de programa (fase 46). Congelan
-el comportamiento antes de cambiar el runtime en las fases siguientes. La
-suite 23 anade cinco casos propios; no toca los patrones de las 22
-anteriores. La suite 24 anade tres casos: `opciones_nuevo`, `mapa_solo` y
-`legacy`.
+exportacion 2.0 (fases 35 a 45), el modelo de programa (fase 46) y su lienzo
+visible (fase 47). Congelan el comportamiento antes de cambiar el runtime en
+las fases siguientes. La suite 23 anade cinco casos propios; no toca los
+patrones de las 22 anteriores. La suite 24 anade cuatro casos:
+`opciones_nuevo`, `mapa_solo`, `legacy` y `ui_programa`. El ultimo actualiza los
+hashes de `regresion/gestor`, `regresion/ejemplo` y `plantillas/canonico` por
+los botones nuevos de la barra, sin tocar sus volcados.
 
 Todo es texto: los patrones de las capturas son hashes SHA-256 y
 volcados de estado, no imagenes. La suite de exportacion lee blobs `LGB1`
@@ -46,7 +48,7 @@ build.bat prueba escenas      solo escenas multiples y camara
 build.bat prueba perfil       solo perfilador y estres
 build.bat prueba plantillas   solo plantillas, ejemplos y tutorial
 build.bat prueba exportacion  solo paquetes, game.exe autonomo y BIOS/QEMU
-build.bat prueba programa     solo el modelo de programa y el jugador implicito
+build.bat prueba programa     solo el modelo y el lienzo de programa
 build.bat prueba regresion    solo la regresion del editor
 build.bat prueba actualizar   reescribe los patrones con el estado actual
 ```
@@ -82,9 +84,17 @@ a la suite de conformidad.
 `pruebas\programa` contiene dos LOGIC3 sin CRC: `mapa_solo.logic3` lleva
 `sistema.opciones` con `jugador_implicito=0`, y `legacy.logic3` no lleva la
 pieza. Ambos apuntan al mapa `pruebas/colisiones/fisica.mav` y no tienen
-objetos. La suite comprueba tres cosas: que un proyecto nuevo guarda la
+objetos. La suite comprueba cuatro cosas: que un proyecto nuevo guarda la
 pieza de opciones, que `mapa_solo` mantiene `lobo 16 16` con `--tecla
-derecha`, y que `legacy` mueve el lobo y dibuja un BMP distinto. Los
+derecha`, que `legacy` mueve el lobo y dibuja un BMP distinto, y que
+`ui_programa` construye un lienzo con Escenario, Actor y Teclado enlazados.
+
+El caso `ui_programa` entra con `--programa`, arrastra tres piezas y un
+enlace con `--arrastre-programa`, y guarda con `--guardar-logic3`. Sus patrones
+son `ui_programa.logic3`, `ui_programa.volcar`, `ui_programa.volcar-programa`,
+`ui_programa.bmp.sha256` y `ui_programa.pixeles`. Este ultimo fija 14 sondas
+`x,y=RRGGBB` de paleta, tarjetas, lienzo vacio, seleccion, insignia roja,
+puertos de entrada y salida, enlace y conmutador de la barra. Todos los
 patrones viven en `pruebas\programa\esperado`.
 
 ## Conformidad del lenguaje (`ejecutar.ps1`)

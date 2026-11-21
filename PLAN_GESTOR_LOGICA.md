@@ -288,8 +288,25 @@ vista previa usan el mismo modelo. Legacy mantiene el sprite clasico.
 **Criterio de salida:** se puede construir un programa vacio con un Escenario,
 un Actor y un Control sin escribir codigo ni usar menus nuevos.
 
-**Pruebas:** nueva suite `programa` con `--gestor --programa`, captura BMP,
-`--volcar` y sondas de pixel de puertos y seleccion.
+**Estado:** completada. El gestor conmuta entre `Programa` y `Compatibilidad`
+desde su barra inferior sin tocar `ARCHIVO=1`, `MODO=2` ni `AYUDA=9`. La
+paleta reune 31 piezas en siete grupos plegables; el lienzo dibuja tarjetas
+con color, icono, nombre, puertos, seleccion, guia de iman y lineas de enlace
+derivadas del campo `enlace`. El inspector permite cambiar campos enumerados,
+borrar piezas y saltar a `Bloques`; hay deshacer/rehacer con los botones `<` e
+`>` y con Ctrl+Z/Ctrl+Y. Las piezas viven en `g.programa_piezas`, aparte de la
+proyeccion LOGIC2, y se guardan como bloques `sistema.pieza` con `ui=1`. Una
+pieza con salida sin destino muestra una insignia roja y el estado `sin
+destino`. Las etiquetas visibles llevan acentos; los tipos y valores
+serializados siguen siendo ASCII. No se han anadido opcodes ni compilacion
+automatica: quedan para las fases 48 a 51.
+
+**Pruebas:** suite `programa`, caso `ui_programa`, con `--programa`,
+`--arrastre-programa`, `--guardar-logic3`, `--captura`, `--volcar`,
+`--volcar-programa` y sondas de pixel de paleta, tarjetas, puertos, seleccion,
+aviso rojo, enlace y conmutador. Los hashes de `regresion/gestor`,
+`regresion/ejemplo` y `plantillas/canonico` se actualizaron por los botones
+nuevos de la barra; sus volcados no cambiaron.
 
 ---
 

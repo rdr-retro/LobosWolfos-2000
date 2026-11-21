@@ -41,6 +41,16 @@ para cargar y guardar PNG.
   Acciones + Funciones) sobre bloques `sistema.*`, sin cambiar LOGIC3 ni su CRC.
   Los proyectos sin esa pieza son legacy y conservan el lobito clásico tanto en
   `game.exe` como en la vista previa.
+- Constructor de programa (fase 47): el gestor conmuta entre **Programa** y
+  **Compatibilidad** desde su barra inferior, sin menús nuevos ni cambios en
+  los índices de menú. La paleta ofrece 31 piezas en siete grupos plegables
+  (Escenario, Actores, Control, Eventos, Acciones, Funciones y Recursos); las
+  tarjetas se arrastran con imán, se enlazan entre sí y se editan en un
+  inspector con deshacer/rehacer. El estado se guarda en bloques
+  `sistema.pieza` con `ui=1`, sin tocar el formato ni el CRC de LOGIC3. Una
+  pieza con salida sin destino muestra una insignia roja. El botón **BLOQUES**
+  abre la pestaña correspondiente del Estudio. Los tipos y valores serializados
+  siguen siendo ASCII; las etiquetas visibles llevan acentos.
 - Vista Estudio (fase 31): entrada **MODO > Vista Estudio**, pestana «Estudio»
   y columnas de 200, 740 y 260 px a 1200 px de ancho. El panel izquierdo crea
   borra y selecciona escenas y objetos, el centro muestra el escenario con
@@ -103,7 +113,7 @@ para cargar y guardar PNG.
   hashes de BMP), proyecto LOGIC3, VM resumible, paridad BIOS con QEMU,
   entidades y escenas, eventos y planificador, vista Estudio, lienzo de
   bloques, compilador, depurador, exportacion y regresion visual del editor,
-  con `build.bat prueba` (23 suites).
+  con `build.bat prueba` (24 suites).
 - Manuales de la version 2.0: `MANUAL_BLOQUES.md` y
   `REFERENCIA_LENGUAJE.md`.
 ## Compilar
@@ -151,14 +161,17 @@ build.bat prueba escenas      solo escenas multiples, camara y efectos
 build.bat prueba perfil       solo perfilador, presupuestos y estres
 build.bat prueba plantillas   solo plantillas, ejemplos y tutorial
 build.bat prueba exportacion  solo paquetes, game.exe autonomo y BIOS/QEMU
-build.bat prueba programa     solo el modelo de programa y el jugador implicito
+build.bat prueba programa     solo el modelo y el lienzo de programa
 build.bat prueba regresion    solo la interfaz del editor
 build.bat prueba actualizar   reescribe los patrones (revisar el diff)
 ```
 
 `pruebas/README.md` describe los casos, el formato de las trazas y cómo añadir
 uno nuevo. Los patrones son texto (trazas, volcados y hashes SHA-256): no se
-guardan imágenes en el repositorio.
+guardan imágenes en el repositorio. El caso `ui_programa` usa tres flags de
+prueba propios: `--programa` entra en la capa nueva, `--arrastre-programa`
+simula los gestos de paleta y enlace, y `--volcar-programa` describe las
+piezas sin alterar los volcados antiguos.
 
 ## Motor egine (`motor/game.exe`)
 
