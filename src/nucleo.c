@@ -981,6 +981,9 @@ void app_alternar_gestor_modulos(void) {
     g.confirmar_borrado = 0;
     g.confirmar_tile = -1;
     app_cambiar_vista(VISTA_MODULOS);
+    /* Fase 48: la entrada al gestor muestra el constructor. La vista LOGIC2
+     * sigue disponible con el boton COMPAT. de la barra inferior. */
+    programa_modo_poner(1);
 }
 
 /* Editor de menus: mismos paneles que el gestor pero vacios, con el lienzo
@@ -1656,6 +1659,11 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 }
             }
         }
+        /* Fase 48: abrir LOGIC3 o LOGIC2 termina en el gestor, y el gestor
+         * siempre abre el constructor. Asi las dos cargas tienen la misma
+         * vista y no dependen de si el proyecto trae sistema.opciones. */
+        if (g.vista == VISTA_MODULOS)
+            programa_vista_preparar(arg_presente(cmd, "--compatibilidad") ? 0 : 1);
     }
     if (captura) {
         int ok;
@@ -1718,7 +1726,14 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
             g.info_visible = 0;
             g.tiles_visible = 0;
         }
-        if (strstr(cmd, "--gestor") != NULL) g.vista = VISTA_MODULOS;
+        /* Fase 48: cualquier entrada al gestor abre el constructor. La vista
+         * interactiva usa programa_modo_poner para mostrar el aviso; aqui se
+         * asigna directo para no ensuciar las capturas con un mensaje que
+         * caduca. --compatibilidad puede conmutar despues. */
+        if (strstr(cmd, "--gestor") != NULL) {
+            g.vista = VISTA_MODULOS;
+            g.programa_modo = 1;
+        }
         /* Fase 47: entrada directa a la capa Programa del gestor. */
         if (arg_presente(cmd, "--programa")) {
             if (g.vista != VISTA_MODULOS) g.vista = VISTA_MODULOS;
@@ -1780,6 +1795,10 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                     g.vista = VISTA_MODULOS;
             }
         }
+        /* Segunda normalizacion: con --captura las aperturas se repiten aqui
+         * y deben dejar la misma vista constructor que en la carga anterior. */
+        if (g.vista == VISTA_MODULOS)
+            programa_vista_preparar(arg_presente(cmd, "--compatibilidad") ? 0 : 1);
         /* Entrada directa al editor de menus para pruebas. Va despues de
          * cargar la logica para poder comprobar el lienzo a la resolucion
          * del proyecto recien abierto. */

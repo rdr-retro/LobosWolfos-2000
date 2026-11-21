@@ -1032,8 +1032,10 @@ typedef struct App {
     int elementos_scroll; /* primer elemento visible de la lista */
     int modulo_siguiente_id; /* id del proximo elemento insertado */
 
-    /* Constructor de programa (fase 47). `programa_modo`=0 mantiene la vista
-     * LOGIC2 de siempre; =1 usa paleta, tarjetas e inspector propios. */
+    /* Constructor de programa (fases 47-48). `programa_modo` es la vista del
+     * gestor, no una opcion del proyecto: al entrar siempre es 1 y el usuario
+     * puede pasar a 0 con el boton COMPAT. Sin piezas guardadas, el LOGIC3 no
+     * cambia. */
     PiezaPrograma programa_piezas[PROGRAMA_PIEZAS_MAX];
     int num_programa_piezas;
     int programa_modo;
@@ -1622,6 +1624,7 @@ void programa_guardar_modelo(void *modelo);
 void programa_volcar(const char *ruta);
 int  programa_modo_actual(void);
 void programa_modo_poner(int modo);
+void programa_vista_preparar(int modo);
 Zona programa_paleta_zona(void);
 Zona programa_inspector_zona(void);
 Zona programa_boton_zona(int cual);   /* 0 programa, 1 compat, 2 undo, 3 redo,

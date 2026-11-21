@@ -51,6 +51,13 @@ para cargar y guardar PNG.
   pieza con salida sin destino muestra una insignia roja. El botón **BLOQUES**
   abre la pestaña correspondiente del Estudio. Los tipos y valores serializados
   siguen siendo ASCII; las etiquetas visibles llevan acentos.
+- Entrada al constructor (fase 48): **MODO > Gestor de lógica**, `--gestor`,
+  `--abrir-logic3` y `--abrir-logica` abren directamente la capa **Programa**
+  con la paleta visible desde el primer momento. La vista LOGIC2 clásica sigue
+  disponible con **Compatibilidad** o `--compatibilidad`. Abrir el gestor no
+  convierte un proyecto legacy: `programa=1` solo se escribe al guardar piezas
+  en el lienzo. El plan de trabajo se amplía poco a poco en
+  `PLAN_GESTOR_LOGICA.md`, con entregas E0 a E12.
 - Vista Estudio (fase 31): entrada **MODO > Vista Estudio**, pestana «Estudio»
   y columnas de 200, 740 y 260 px a 1200 px de ancho. El panel izquierdo crea
   borra y selecciona escenas y objetos, el centro muestra el escenario con
@@ -701,7 +708,10 @@ El menú **MODO** incluye **Modo pintar**, que cierra el visor de patrón, sale 
 modo tiles o del editor de mapas y vuelve al lienzo normal, y **Gestor de
 lógica**, que abre un espacio de trabajo con los paneles izquierdo, derecho e
 inferior (el derecho un poco más ancho), manteniendo las pestañas y la
-barra de menús. Al elegir **Gestor de lógica** de nuevo se vuelve a Pintar.
+barra de menús. Al abrirlo se muestra directamente la capa **Programa** del
+constructor (fase 48): la paleta de piezas está a la izquierda y el lienzo a la
+derecha. El botón **COMPAT.** de la barra inferior recupera la vista LOGIC2
+clásica. Al elegir **Gestor de lógica** de nuevo se vuelve a Pintar.
 También incluye **Editor de menus**: abre esos mismos paneles pero vacíos, con
 un lienzo propio en el hueco central cuya resolución la dictan las propiedades
 del proyecto (**AJUSTES DEL PROYECTO**), sin cambiar el zoom guardado del modo

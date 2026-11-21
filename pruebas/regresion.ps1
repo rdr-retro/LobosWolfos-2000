@@ -44,7 +44,7 @@ $casos = @(
     @{ Nombre = "mapa";         Args = @("--vista", "mapa", "--sin-ventanas", "--mapa-ruta", "maps\mapa.mav") },
     @{ Nombre = "menu_archivo"; Args = @("--menu", "1", "--sin-ventanas") },
     @{ Nombre = "menu_ayuda";   Args = @("--menu", "9", "--sin-ventanas") },
-    @{ Nombre = "gestor";       Args = @("--gestor", "--modulos", "500,250;500,400", "--sin-ventanas") },
+    @{ Nombre = "gestor";       Args = @("--gestor", "--compatibilidad", "--modulos", "500,250;500,400", "--sin-ventanas") },
     @{ Nombre = "guia";         Args = @("--guia", "--sin-ventanas") }
 )
 

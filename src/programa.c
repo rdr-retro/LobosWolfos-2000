@@ -301,20 +301,12 @@ static void programa_validar(void) {
 
 void programa_cargar_modelo(void) {
     Proyecto3 *p = logic3_modelo_activo();
-    int i, modo = 0;
+    int i;
 
     programa_reiniciar();
     if (!p) {
-        g.programa_modo = 0;
+        g.programa_modo = 1;
         return;
-    }
-    for (i = 0; i < p->num_bloques; i++) {
-        const Bloque3 *b = &p->bloques[i];
-        int v = 0;
-        if (strcmp(b->tipo, SISTEMA_TIPO_OPCIONES) == 0) {
-            v = atoi(campo_valor(b, "programa"));
-            modo = v ? 1 : 0;
-        }
     }
     for (i = 0; i < p->num_bloques; i++) {
         const Bloque3 *b = &p->bloques[i];
@@ -354,21 +346,27 @@ void programa_cargar_modelo(void) {
             g.programa_siguiente_id = pieza->id + 1;
     }
     programa_validar();
-    g.programa_modo = modo;
+    /* El gestor abre siempre en Programa para que la paleta sea visible desde
+     * el primer momento. El campo guardado sistema.opciones.programa decide
+     * como ejecuta el runtime; no es el interruptor de la vista del editor. */
+    g.programa_modo = 1;
 }
 
 void programa_guardar_modelo(void *modelo) {
     Proyecto3 *p = (Proyecto3 *)modelo;
     Bloque3 *op;
     int i, j, orden = 0;
+    int usar_programa = g.num_programa_piezas > 0;
     char buf[64];
 
     if (!p) return;
-    if (g.programa_modo && !bloque_tipo(p, SISTEMA_TIPO_OPCIONES))
+    /* Entrar al gestor no convierte un proyecto legacy en proyecto programa:
+     * solo se marca como programa cuando el lienzo tiene piezas guardadas. */
+    if (usar_programa && !bloque_tipo(p, SISTEMA_TIPO_OPCIONES))
         sistema_opciones_asegurar(p);
     op = bloque_tipo(p, SISTEMA_TIPO_OPCIONES);
-    if (op)
-        poner_campo(op, "programa", g.programa_modo ? "1" : "0");
+    if (op && usar_programa)
+        poner_campo(op, "programa", "1");
 
     for (i = p->num_bloques - 1; i >= 0; i--) {
         if (strcmp(p->bloques[i].tipo, "sistema.pieza") != 0) continue;
@@ -438,25 +436,28 @@ static int def_indice(const char *tipo) {
     return -1;
 }
 
-void programa_modo_poner(int modo) {
-    Proyecto3 *p;
-    Bloque3 *op;
+/* Prepara la vista al entrar al gestor. Sin modelo cargado los contadores
+ * arrancan a cero, asi que hay que dejar la seleccion en -1 para que no
+ * aparezca resaltada la primera pieza de la paleta. */
+void programa_vista_preparar(int modo) {
+    g.programa_modo = modo ? 1 : 0;
+    if (g.num_programa_piezas <= 0) {
+        g.programa_sel = -1;
+        g.programa_paleta_sel = -1;
+        g.programa_paleta_pulsada = -1;
+    }
+}
 
+void programa_modo_poner(int modo) {
     modo = modo ? 1 : 0;
     if (modo == g.programa_modo) return;
-    if (modo) {
-        if (!logic3_activo()) logic3_nuevo_editor();
-        p = logic3_modelo_activo();
-        if (p && !bloque_tipo(p, SISTEMA_TIPO_OPCIONES))
-            sistema_opciones_asegurar(p);
-    }
-    g.programa_modo = modo;
-    p = logic3_modelo_activo();
-    if (p) {
-        op = bloque_tipo(p, SISTEMA_TIPO_OPCIONES);
-        if (op) poner_campo(op, "programa", modo ? "1" : "0");
-    }
+    /* Solo cambia la vista del gestor. El proyecto no se toca: el modo de
+     * ejecucion se escribe al guardar, segun las piezas que tenga el lienzo. */
+    programa_vista_preparar(modo);
     g.programa_arrastrando = 0;
+    g.programa_drag_i = -1;
+    g.programa_enlace_desde = -1;
+    g.programa_paleta_pulsada = -1;
     app_estado(modo ? "programa: arrastra una pieza de la paleta al lienzo"
                     : "compatibilidad: vista LOGIC2 del gestor");
     app_invalidar();

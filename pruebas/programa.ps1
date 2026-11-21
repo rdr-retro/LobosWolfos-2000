@@ -10,6 +10,8 @@
 #   mapa_solo       mapa sin opciones de jugador: lobo quieto y sin sprite
 #   legacy          sin sistema.opciones: lobo se mueve y el BMP cambia
 #   ui_programa     lienzo Programa con tres piezas, un enlace y sondas BMP
+#   entrada_gestor  --gestor abre el constructor sin piezas y con paleta visible
+#   arrastre_gestor --gestor permite arrastrar una pieza sin --programa
 #
 # Uso:
 #   pruebas\programa.ps1                 pasa la suite
@@ -282,6 +284,73 @@ Ejecutar-Caso "ui_programa" {
                          'campo "pieza" "sistema.escena"',
                          'campo "enlace" "3"',
                          'campo "valor2" "teclado"')) {
+        if ($contenido -notlike ("*" + $campo + "*")) {
+            [void]$problemas.Add("falta " + $campo + " en el LOGIC3")
+        }
+    }
+}
+
+Ejecutar-Caso "entrada_gestor" {
+    param($dir, $problemas)
+    $bmp = Join-Path $dir "entrada.bmp"
+    $dump = Join-Path $dir "entrada.txt"
+    $vpr = Join-Path $dir "entrada_ui.txt"
+    $codigo = Ejecutar-Editor $dir @("--gestor", "--sin-ventanas", `
+                                     "--captura", $bmp, "--volcar", $dump, `
+                                     "--volcar-programa", $vpr)
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    foreach ($archivo in @($bmp, $dump, $vpr)) {
+        if (-not (Test-Path -LiteralPath $archivo)) {
+            [void]$problemas.Add("falta " + (Split-Path -Leaf $archivo))
+        }
+    }
+    if ($problemas.Count -gt 0) { return }
+    $ui = Get-TextoNormalizado $vpr
+    Comprobar-Texto "entrada_gestor" ".volcar-programa" $ui $problemas
+    Comprobar-Texto "entrada_gestor" ".volcar" `
+                    (Get-VolcarNormalizado $dump $dir) $problemas
+    Comprobar-Hash "entrada_gestor" (Get-Sha256 $bmp) $problemas
+    Comprobar-Texto "entrada_gestor" ".pixeles" `
+                    (Get-PixelesPrograma $bmp) $problemas
+    if ($ui -notlike "programa_modo=1 programa_piezas=0*") {
+        [void]$problemas.Add("el gestor no abrio el constructor")
+    }
+}
+
+Ejecutar-Caso "arrastre_gestor" {
+    param($dir, $problemas)
+    $logic = Join-Path $dir "arrastre.logic3"
+    $bmp = Join-Path $dir "arrastre.bmp"
+    $vpr = Join-Path $dir "arrastre_ui.txt"
+    $gestos = "0:20,118;430,260"
+    $base = Join-Path $carpeta "legacy.logic3"
+    $codigo = Ejecutar-Editor $dir @("--abrir-logic3", $base, `
+                                     "--gestor", "--sin-ventanas", `
+                                     "--arrastre-programa", $gestos, `
+                                     "--guardar-logic3", $logic, `
+                                     "--captura", $bmp, `
+                                     "--volcar-programa", $vpr)
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    foreach ($archivo in @($logic, $bmp, $vpr)) {
+        if (-not (Test-Path -LiteralPath $archivo)) {
+            [void]$problemas.Add("falta " + (Split-Path -Leaf $archivo))
+        }
+    }
+    if ($problemas.Count -gt 0) { return }
+    $contenido = Get-TextoNormalizado $logic
+    $ui = Get-TextoNormalizado $vpr
+    Comprobar-Texto "arrastre_gestor" ".logic3" $contenido $problemas
+    Comprobar-Texto "arrastre_gestor" ".volcar-programa" $ui $problemas
+    Comprobar-Hash "arrastre_gestor" (Get-Sha256 $bmp) $problemas
+    Comprobar-Texto "arrastre_gestor" ".pixeles" `
+                    (Get-PixelesPrograma $bmp) $problemas
+    if ($ui -notlike "programa_modo=1 programa_piezas=1*") {
+        [void]$problemas.Add("el arrastre no anadio una pieza")
+    }
+    foreach ($campo in @('tipo "sistema.opciones"',
+                         'campo "programa" "1"',
+                         'tipo "sistema.pieza"',
+                         'campo "pieza" "sistema.escena"')) {
         if ($contenido -notlike ("*" + $campo + "*")) {
             [void]$problemas.Add("falta " + $campo + " en el LOGIC3")
         }
