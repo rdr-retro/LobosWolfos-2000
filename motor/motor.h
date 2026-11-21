@@ -1,6 +1,6 @@
 /* motor.h - interfaz comun del motor egine.
  *
- * egine tiene dos variantes del nucleo en ensamblador (ver PLAN.md):
+ * egine tiene dos variantes del nucleo en ensamblador:
  *
  *   nucleo32.s  x86 de 32 bits  -> game.exe en Windows 2000/XP (MinGW i686)
  *   nucleo64.s  x86_64          -> kernel loboswolfos (fase 6, pendiente)

@@ -1,6 +1,6 @@
 /* nucleo64.s - nucleo del motor egine en ensamblador x86_64.
  *
- * Esta es la variante x86_64 del nucleo (fase 6 del PLAN.md): el mismo
+ * Esta es la variante x86_64 del nucleo (fase 6 original): el mismo
  * motor que nucleo32.s (misma interfaz, ver motor/motor.h del editor y
  * motor.rs del kernel) corriendo sobre el kernel loboswolfos. El lado
  * del juego (juego.rs) solo ve las funciones de abajo, nunca el

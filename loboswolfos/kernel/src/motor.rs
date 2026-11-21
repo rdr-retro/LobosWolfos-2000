@@ -1,4 +1,4 @@
-//! motor.rs - lado Rust del nucleo del motor egine (fase 6 del PLAN.md).
+//! motor.rs - lado Rust del nucleo del motor egine (fase 6 original).
 //!
 //! `nucleo64.s` lleva las partes esenciales en ensamblador (blits, sello
 //! del tile y AABB); este modulo declara la misma interfaz que

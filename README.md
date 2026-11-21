@@ -100,11 +100,6 @@ para cargar y guardar PNG.
   con `build.bat prueba` (23 suites).
 - Manuales de la version 2.0: `MANUAL_BLOQUES.md` y
   `REFERENCIA_LENGUAJE.md`.
-- Plan de la siguiente versión en `PLAN_JUEGOS_COMPLEJOS.md`: juegos complejos
-  con un editor de bloques visual (estilo Scratch), formato `LOGIC3`, varias
-  escenas y objetos, eventos, variables, listas y una VM resumible. Define las
-  fases 23 a 45 para continuar el proyecto.
-
 ## Compilar
 
 Requiere MinGW-w64 para 32 bits (i686) con `gcc` y `windres`.
@@ -991,9 +986,6 @@ procesado en `src\nucleo.c`.
 - `build.bat` / `build.ps1` — scripts de compilación. El del editor compila
   primero el motor y el kernel, porque sus plantillas viajan incrustadas
   como recursos.
-- `PLAN.md` — historial de fases y decisiones ya entregadas.
-- `PLAN_JUEGOS_COMPLEJOS.md` — plan maestro de las fases 23 a 45 (juegos
-  complejos, LOGIC3, bloques y VM resumible).
 - `MANUAL_BLOQUES.md` — paleta, formas, atajos y los 27 bloques del lienzo.
 - `REFERENCIA_LENGUAJE.md` — gramatica lobo, tipos, built-ins y limites.
 - `pruebas/exportacion/esperado/` — patrones propios de la suite 23.

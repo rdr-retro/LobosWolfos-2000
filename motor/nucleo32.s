@@ -2,7 +2,7 @@
  *
  * Esta es la parte esencial del motor para game.exe (Windows 2000/XP,
  * MinGW i686). La misma interfaz (motor.h) tendra su variante x86_64 para
- * el kernel loboswolfos en nucleo64.s (fase 6 del PLAN.md).
+ * el kernel loboswolfos en nucleo64.s (fase 6 original).
  *
  * Convencion: cdecl con sintaxis AT&T (gnu as). Los argumentos llegan en
  * la pila a partir de 8(%ebp) y el llamador la limpia; eax/ecx/edx son
