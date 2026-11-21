@@ -80,9 +80,10 @@ para cargar y guardar PNG.
   ellos.
 - Apertura y exportación de PNG/BMP y mapas `.mav`, con un menú **EXPORTAR**
   propio para las dos exportaciones de imagen.
-- Guardado del proyecto entero en un paquete `.wolfo` (lógica, mapas y tiles)
-  y apertura del mismo paquete para restaurarlo, o solo de la lógica en un
-  `.logic`.
+- Guardado del proyecto entero en un paquete `.wolfo` (lógica, mapas, tiles,
+  trajes y, desde la fase 45, el LOGIC3 nativo) y apertura del mismo paquete
+  para restaurarlo, o solo de la lógica en un `.logic`. El `game.exe` y la
+  imagen BIOS siguen llevando el blob clásico para no alterar sus trazas.
 - **Ajustes del proyecto** (menú de la barra): nombre, resolución y relación de
   aspecto, límite de cuadros, velocidad del jugador y color de fondo; viajan
   con el `.logic` y los aplican la vista previa y `game.exe`.
@@ -93,9 +94,12 @@ para cargar y guardar PNG.
   pantallas para empezar sin experiencia previa.
 - Interfaz flotante de opciones, panel de capas y menús contextuales.
 - Suite de pruebas en `pruebas/`: conformidad del lenguaje lobo (trazas y
-  hashes de BMP), proyecto LOGIC3, VM resumible, entidades y escenas, eventos
-  y planificador, vista Estudio, lienzo de bloques, compilador, depurador y
-  regresión visual del editor, con `build.bat prueba`.
+  hashes de BMP), proyecto LOGIC3, VM resumible, paridad BIOS con QEMU,
+  entidades y escenas, eventos y planificador, vista Estudio, lienzo de
+  bloques, compilador, depurador, exportacion y regresion visual del editor,
+  con `build.bat prueba` (23 suites).
+- Manuales de la version 2.0: `MANUAL_BLOQUES.md` y
+  `REFERENCIA_LENGUAJE.md`.
 - Plan de la siguiente versión en `PLAN_JUEGOS_COMPLEJOS.md`: juegos complejos
   con un editor de bloques visual (estilo Scratch), formato `LOGIC3`, varias
   escenas y objetos, eventos, variables, listas y una VM resumible. Define las
@@ -120,13 +124,14 @@ También se puede compilar desde PowerShell:
 
 ## Pruebas
 
-`build.bat prueba` compila el editor y pasa las doce suites:
+`build.bat prueba` compila el editor y pasa las 23 suites:
 
 ```bat
-build.bat prueba              conformidad + logic3 + vm + entidades + eventos + colisiones + render + estudio + bloques + compilador + depurador + regresion
+build.bat prueba              todas las suites, en orden
 build.bat prueba conformidad  solo el lenguaje lobo
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
+build.bat prueba bios         solo la paridad BIOS con QEMU
 build.bat prueba entidades    solo entidades, escenas y ciclo de vida
 build.bat prueba eventos      solo eventos, planificador y mensajes
 build.bat prueba colisiones   solo colisiones, flags y fisica
@@ -135,6 +140,16 @@ build.bat prueba estudio      solo la vista Estudio
 build.bat prueba bloques      solo el lienzo de bloques
 build.bat prueba compilador   solo el compilador bloques -> lobo
 build.bat prueba depurador    solo el depurador y el replay
+build.bat prueba datos        solo variables, listas, trajes y sonidos
+build.bat prueba productividad solo atajos, paleta y productividad
+build.bat prueba entrada      solo entrada extendida
+build.bat prueba hud          solo HUD, texto, UI y dialogos
+build.bat prueba audio        solo sonido y musica simple
+build.bat prueba save         solo guardado, records y persistencia
+build.bat prueba escenas      solo escenas multiples, camara y efectos
+build.bat prueba perfil       solo perfilador, presupuestos y estres
+build.bat prueba plantillas   solo plantillas, ejemplos y tutorial
+build.bat prueba exportacion  solo paquetes, game.exe autonomo y BIOS/QEMU
 build.bat prueba regresion    solo la interfaz del editor
 build.bat prueba actualizar   reescribe los patrones (revisar el diff)
 ```
@@ -720,18 +735,29 @@ los valores por defecto (640x480, 60 FPS, velocidad 3 y fondo negro).
 
 La opción **Guardar proyecto .wolfo** del menú **ARCHIVO** empaqueta el
 proyecto entero en un solo archivo: la lógica con sus ajustes
-(`proyecto.logic`), los mapas que usan sus elementos y los tiles de esos
-mapas. Usa el mismo blob `LGB1` que viaja incrustado en el `game.exe`
-compilado y termina con el pie `LGB1` y su longitud, así que un lector puede
-localizar el blob desde el final y reconstruir el proyecto en otra carpeta.
-El nombre propuesto es el del proyecto.
+(`proyecto.logic`), los mapas que usan sus elementos, los tiles de esos
+mapas, los trajes `trajes\*.png`, los títulos y, desde la fase 45, el modelo
+nativo `proyecto.logic3` cuando el proyecto LOGIC3 está activo. Usa el mismo
+blob `LGB1` que viaja incrustado en el `game.exe` compilado y termina con el
+pie `LGB1` y su longitud, así que un lector puede localizar el blob desde el
+final y reconstruir el proyecto en otra carpeta. El nombre propuesto es el
+del proyecto.
 
 La opción **Abrir proyecto .wolfo**, justo encima, hace el recorrido inverso:
 lee el pie, recorre las entradas del paquete y restaura la lógica (con sus
-ajustes), escribe los mapas en la carpeta `maps`, los tiles en `tiles` y los
-títulos en `titles`, y abre el primer mapa que usa la lógica. Si el paquete no
-lleva el pie o una entrada está dañada muestra un aviso y no toca el proyecto
-activo.
+ajustes), escribe los mapas en la carpeta `maps`, los tiles en `tiles`, los
+trajes en `trajes` y los títulos en `titles`, y abre el primer mapa que usa
+la lógica. Si el paquete trae `proyecto.logic3` con cabecera `LOGIC3`, el
+editor carga ese modelo y la vista previa usa el intérprete VM; si no, cae a
+la lógica LOGIC1/LOGIC2 clásica de siempre. Si el paquete no lleva el pie o
+una entrada está dañada muestra un aviso y no toca el proyecto activo.
+
+Desde la línea de comandos, `--guardar-wolfo RUTA` mantiene el paquete clásico
+de la fase 15 por compatibilidad. Añade `--wolfo-logic3` para incluir la
+entrada nativa `proyecto.logic3`; el menú **ARCHIVO > Guardar proyecto**
+siempre exporta completa. `--abrir-wolfo RUTA` detecta la nueva entrada sin
+necesidad de otra flag. `--guardar-logic3 RUTA` guarda solo el modelo activo
+en formato LOGIC3, y `--abrir-logic3 RUTA` lo carga al arrancar.
 
 Dentro del gestor, el panel derecho contiene el botón del **item**. Un clic
 (sin arrastrar) abre el selector de items: la lista de mapas `.mav` de la
@@ -826,13 +852,21 @@ BIOS mantiene siempre su pantalla de 640x480.
 
 **Compilar para Windows** produce un `game.exe` autónomo de 32 bits: el
 proyecto viaja incrustado dentro del propio ejecutable, así el juego
-funciona en cualquier carpeta sin necesidad de `maps/` ni `tiles/`.
+funciona en cualquier carpeta sin necesidad de `maps/`, `tiles/`, `trajes/`
+ni del `.logic` original. Si el modelo LOGIC3 está activo, el blob incluye la
+entrada `proyecto.logic3` y el motor selecciona la VM para los bloques
+`codigo.lobo`; si no, conserva la ruta clásica sin cambios. Equivale a la
+flag `--compilar-windows RUTA`.
+
 **Compilar para BIOS** produce la imagen USB de 32 MiB de loboswolfos
 (`.img`): MBR + arranque + kernel + el proyecto en la zona de juego; escribida
 en un pendrive con `flashear.bat`, el juego arranca desde la BIOS del PC sin
 Windows. Las plantillas (el motor y el arranque del kernel) viajan dentro del
 propio editor, por lo que compilar no requiere tener MinGW ni Rust
-instalados.
+instalados. Equivale a `--compilar-bios RUTA`. `--bios-avisos RUTA` escribe
+un informe de los bloques no portables al subconjunto VM de la BIOS; un
+proyecto portable deja el archivo vacío. La BIOS mantiene su carga actual
+con `vm.lbin` para no alterar las trazas de la fase 42.
 
 ## Probar el juego sin compilar
 
@@ -960,6 +994,9 @@ procesado en `src\nucleo.c`.
 - `PLAN.md` — historial de fases y decisiones ya entregadas.
 - `PLAN_JUEGOS_COMPLEJOS.md` — plan maestro de las fases 23 a 45 (juegos
   complejos, LOGIC3, bloques y VM resumible).
+- `MANUAL_BLOQUES.md` — paleta, formas, atajos y los 27 bloques del lienzo.
+- `REFERENCIA_LENGUAJE.md` — gramatica lobo, tipos, built-ins y limites.
+- `pruebas/exportacion/esperado/` — patrones propios de la suite 23.
 
 ## Licencia
 

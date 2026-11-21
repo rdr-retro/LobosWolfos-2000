@@ -1508,6 +1508,15 @@ con un nivel, un jugador, monedas y meta.
 7. Limpiar artefactos de prueba y confirmar que `recursos/ascii.png` sigue
    sin seguimiento.
 
+**Estado (21-11-2026): completada.** El `.wolfo` lleva `proyecto.logic3`
+nativo ademas del `proyecto.logic` intacto; `game.exe`, la vista previa y la
+BIOS cargan el blob aditivo sin cambiar CRC ni trazas antiguas. Se anaden
+`MANUAL_BLOQUES.md`, `REFERENCIA_LENGUAJE.md` y la suite 23
+`pruebas/exportacion.ps1`, con cinco casos y patrones propios. `build.bat
+prueba` pasa las 23 suites, incluida la regression final de pintura, tiles,
+mapas y menus. Release `v2.0-beta` publicada con binarios, SHA-256 y nota
+CRLF; el ejemplo canonico da las mismas ocho posiciones en Windows y QEMU.
+
 **Criterio de salida:** release publicada, suite en verde y proyecto de
 ejemplo jugable desde Windows y desde BIOS.
 

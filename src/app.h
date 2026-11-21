@@ -1682,6 +1682,9 @@ int  logica_guardar_memoria(char **datos, int *largo);
  * proyeccion para el gestor y para el motor LOGIC2. */
 int  logic3_cargar_editor(const char *ruta);
 int  logic3_guardar_actual(const char *ruta);
+/* Fase 45: el mismo escritor canonico, pero dejando el texto en memoria
+ * para poder empaquetarlo dentro de un .wolfo sin archivos temporales. */
+int  logic3_serializar_activo(char **datos, int *largo);
 int  logic3_exportar_logic2(const char *ruta);
 int  logic3_convertir_logic2(const char *ruta);
 int  logic3_activo(void);
@@ -1845,7 +1848,10 @@ const char *compilar_ultimos_avisos(void);
 #define JUEGO_VENTANA_PAUSA    2
 
 int  compilar_blob_memoria(unsigned char **datos, int *largo);
-int  compilar_guardar_wolfo(const char *ruta);
+/* Fase 45: incluir_logic3 anade la entrada nativa "proyecto.logic3" y los
+ * PNG de trajes al paquete. El menu del editor siempre usa 1; la flag de
+ * linea de comandos --wolfo-logic3 permite pedirlo desde una suite. */
+int  compilar_guardar_wolfo(const char *ruta, int incluir_logic3);
 int  compilar_cargar_wolfo(const char *ruta);
 const char *compilar_ultimo_error(void);
 

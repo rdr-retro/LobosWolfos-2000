@@ -21,6 +21,12 @@
  * El mapa es opcional (fase 12): sin ningun elemento de mapa el blob
  * solo lleva la logica y el juego corre con la ventana en negro.
  *
+ * Fase 45: los paquetes .wolfo pueden llevar ademas "proyecto.logic3"
+ * (el texto LOGIC3 nativo, con el mismo CRC de siempre) y "trajes\*.png".
+ * Ni el game.exe ni la imagen BIOS incluyen esas entradas nuevas: siguen
+ * montando el blob clasico para no alterar sus trazas. El cargador de
+ * .wolfo prefiere el LOGIC3 cuando lo encuentra y cae al LOGIC2 si no.
+ *
  * Al arrancar, el motor lee el pie LGB1 (activo_blob_cargar de
  * motor/activo.c) y carga el proyecto del propio ejecutable, asi el
  * juego compilado funciona en cualquier carpeta, sin maps/ ni tiles/.
@@ -470,6 +476,44 @@ static int resolver_tile(const char *ruta_mav, const char *tiles_dir,
 /* Reunion del proyecto                                                 */
 /* ------------------------------------------------------------------ */
 
+/* Fase 45: incrusta los PNG de trajes que referencia el LOGIC3 activo.
+ * Usa el mismo nombre base con el que el motor los busca en trajes\. Un
+ * traje declarado vacio (caja de color) no impide exportar el paquete. */
+static void blob_trajes(Bloque *blob, char separador) {
+    Proyecto3 *p3 = logic3_modelo_activo();
+    char imagenes[COMPILAR_IMAGENES_MAX][64];
+    int num_imagenes = 0;
+    char exe[MAX_PATH], carpeta[MAX_PATH];
+    int i, j;
+
+    if (!p3) return;
+    obtener_ruta_exe(exe, sizeof(exe));
+    unir_ruta(carpeta, sizeof(carpeta), exe, CARPETA_TRAJES_TEXTO);
+    for (i = 0; i < p3->num_objetos; i++) {
+        for (j = 0; j < p3->objetos[i].num_trajes; j++) {
+            const char *img = p3->objetos[i].trajes[j].imagen;
+            char nombre[MAX_PATH], ruta[MAX_PATH], clave[MAX_PATH];
+            char *datos = NULL;
+            int largo = 0, repetida = 0, k;
+
+            if (!img || !img[0]) continue;
+            recortar_texto(nombre, nombre_base(img), sizeof(nombre));
+            if (!nombre[0]) continue;
+            for (k = 0; k < num_imagenes; k++)
+                if (_stricmp(imagenes[k], nombre) == 0) repetida = 1;
+            if (repetida) continue;
+            unir_ruta(ruta, sizeof(ruta), carpeta, nombre);
+            if (!leer_archivo(ruta, &datos, &largo) || !datos) continue;
+            formatear(clave, sizeof(clave), "%s%c%s", CARPETA_TRAJES_TEXTO,
+                      separador, nombre);
+            if (blob_entrada(blob, clave, datos, largo) &&
+                num_imagenes < COMPILAR_IMAGENES_MAX)
+                recortar_texto(imagenes[num_imagenes++], nombre, 64);
+            free(datos);
+        }
+    }
+}
+
 /* Reune el proyecto activo como entradas del blob (los pasos 1-3 de la
  * compilacion): "proyecto.logic", cada mapa que usan los elementos del
  * gestor y los PNG de sus tiles, resueltos con el mismo orden de busqueda
@@ -481,7 +525,7 @@ static int resolver_tile(const char *ruta_mav, const char *tiles_dir,
  * kernel cae al nombre base cuando no ve la ruta con la carpeta.
  * Devuelve 0 y explica el fallo en compilar_error_msj; el llamador
  * libera blob->datos en cualquier caso. */
-static int compilar_reunir(Bloque *blob, char separador) {
+static int compilar_reunir(Bloque *blob, char separador, int incluir_logic3) {
     char maps_nombres[MODULOS_MAX][MAPS_NOMBRE_MAX];
     char imagenes[COMPILAR_IMAGENES_MAX][64];
     int num_maps = 0, num_imagenes = 0;
@@ -520,7 +564,28 @@ static int compilar_reunir(Bloque *blob, char separador) {
         return 0;
     }
 
-    /* 2b. Solo la BIOS congela bytecode y recoge avisos (fase 43). */
+    /* 2b. Fase 45: el paquete .wolfo lleva ademas el LOGIC3 nativo. Las
+     * demas rutas (game.exe, BIOS y vista previa) siguen llevando solo la
+     * proyeccion LOGIC2, asi que ninguna traza anterior cambia. */
+    if (incluir_logic3 && logic3_activo()) {
+        char *logic3_datos = NULL;
+        int logic3_largo = 0;
+        if (!logic3_serializar_activo(&logic3_datos, &logic3_largo)) {
+            formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                      "No se pudo serializar el proyecto LOGIC3.");
+            return 0;
+        }
+        ok = blob_entrada(blob, "proyecto.logic3", logic3_datos, logic3_largo);
+        free(logic3_datos);
+        if (!ok) {
+            formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                      "No hay memoria para empaquetar el LOGIC3.");
+            return 0;
+        }
+        blob_trajes(blob, separador);
+    }
+
+    /* 2c. Solo la BIOS congela bytecode y recoge avisos (fase 43). */
     if (bios_vm_generar && !vm_serializar(blob)) return 0;
 
     /* 3. Cada mapa referenciado y sus tiles, como archivos virtuales. */
@@ -613,13 +678,14 @@ static int compilar_reunir(Bloque *blob, char separador) {
  * escribir ningun ejecutable. Devuelve 1 y deja *datos (malloc) y
  * *largo; el llamador los libera con free. Si falla, compilar_error_msj
  * explica el motivo. */
-int compilar_blob_memoria(unsigned char **datos, int *largo) {
+static int compilar_blob_flags(unsigned char **datos, int *largo,
+                               int incluir_logic3) {
     Bloque blob;
     if (!datos || !largo) return 0;
     *datos = NULL;
     *largo = 0;
     memset(&blob, 0, sizeof(blob));
-    if (!compilar_reunir(&blob, '\\')) {
+    if (!compilar_reunir(&blob, '\\', incluir_logic3)) {
         free(blob.datos);
         return 0;
     }
@@ -628,13 +694,20 @@ int compilar_blob_memoria(unsigned char **datos, int *largo) {
     return 1;
 }
 
-/* Guarda el proyecto activo como paquete .wolfo (fase 15): el mismo
- * blob LGB1 que viaja en el game.exe compilado (proyecto.logic, mapas y
- * tiles) seguido del pie "LGB1" con su largo. El pie permite reconocer
- * el archivo y localizar el blob desde el final, igual que hace el motor
- * con el proyecto incrustado en su ejecutable. Devuelve 1 si se
- * escribio; si no, compilar_error_msj explica el fallo. */
-int compilar_guardar_wolfo(const char *ruta) {
+int compilar_blob_memoria(unsigned char **datos, int *largo) {
+    /* Fase 45: la vista previa usa el LOGIC3 nativo cuando esta activo,
+     * para que los bloques de los juegos complejos corran tambien sin
+     * escribir un game.exe. Las suites no usan esta ruta. */
+    return compilar_blob_flags(datos, largo, logic3_activo());
+}
+
+/* Guarda el proyecto activo como paquete .wolfo (fase 15, ampliado en la
+ * 45): el blob LGB1 del game.exe (proyecto.logic, mapas y tiles) seguido
+ * del pie "LGB1" con su largo. Con incluir_logic3 se anaden la entrada
+ * nativa "proyecto.logic3" y los PNG de trajes, sin cambiar las demas
+ * rutas de compilacion. Devuelve 1 si se escribio; si no,
+ * compilar_error_msj explica el fallo. */
+int compilar_guardar_wolfo(const char *ruta, int incluir_logic3) {
     unsigned char *datos = NULL;
     int largo = 0;
     FILE *f;
@@ -642,7 +715,7 @@ int compilar_guardar_wolfo(const char *ruta) {
     int ok;
 
     if (!ruta || !ruta[0]) return 0;
-    if (!compilar_blob_memoria(&datos, &largo)) return 0;
+    if (!compilar_blob_flags(&datos, &largo, incluir_logic3)) return 0;
     f = fopen(ruta, "wb");
     if (!f) {
         formatear(compilar_error_msj, sizeof(compilar_error_msj),
@@ -732,13 +805,13 @@ static int blob_extraer(const char *carpeta, const char *nombre,
     return escribir_archivo(ruta, (const char *)datos, (int)largo);
 }
 
-/* Carga un proyecto completo desde un paquete .wolfo (fase 15): localiza
- * el pie "LGB1" + largo al final, recorre las entradas del blob y restaura
- * la logica, los mapas y los tiles. Los mapas y tiles se escriben en las
- * carpetas del proyecto (maps/ y tiles/) y la logica se carga con el mismo
- * lector de los .logic; al terminar se recargan los tiles y se abre el
- * primer mapa que usa la logica. Devuelve 1 si se cargo; si no,
- * compilar_error_msj explica el fallo. */
+/* Carga un proyecto completo desde un paquete .wolfo (fase 15, ampliado
+ * en la 45): localiza el pie "LGB1" + largo al final, recorre las entradas
+ * del blob y restaura la logica, los mapas, los tiles y los trajes. Si el
+ * paquete trae "proyecto.logic3" se prefiere ese modelo nativo (el lector
+ * de .logic detecta la cabecera LOGIC3); si no, cae al LOGIC1/LOGIC2 de
+ * siempre. Devuelve 1 si se cargo; si no, compilar_error_msj explica el
+ * fallo. */
 int compilar_cargar_wolfo(const char *ruta) {
     char *archivo = NULL;
     int tam = 0;
@@ -747,15 +820,18 @@ int compilar_cargar_wolfo(const char *ruta) {
     const unsigned char *cursor;
     const unsigned char *datos;
     const unsigned char *logic_datos = NULL;
+    const unsigned char *logic3_datos = NULL;
     u32 largo;
     u32 logic_largo = 0;
+    u32 logic3_largo = 0;
     u32 blob_largo;
     char nombre[512];
     char carpeta[MAX_PATH];
     char temp_dir[MAX_PATH];
     char temp_ruta[MAX_PATH];
     int leido;
-    int num_mapas = 0, num_tiles = 0, num_titulos = 0;
+    int num_mapas = 0, num_tiles = 0, num_titulos = 0, num_trajes = 0;
+    int usa_logic3 = 0;
     int ok = 0;
 
     compilar_error_msj[0] = '\0';
@@ -789,6 +865,9 @@ int compilar_cargar_wolfo(const char *ruta) {
         if (strcmp(nombre, "proyecto.logic") == 0) {
             logic_datos = datos;
             logic_largo = largo;
+        } else if (strcmp(nombre, "proyecto.logic3") == 0) {
+            logic3_datos = datos;
+            logic3_largo = largo;
         }
     }
     if (leido < 0) {
@@ -797,26 +876,31 @@ int compilar_cargar_wolfo(const char *ruta) {
         free(archivo);
         return 0;
     }
-    if (!logic_datos || logic_largo < 6 ||
-        (memcmp(logic_datos, "LOGIC2", 6) != 0 &&
-         memcmp(logic_datos, "LOGIC1", 6) != 0)) {
+    if (logic3_datos && logic3_largo >= 6 &&
+        memcmp(logic3_datos, "LOGIC3", 6) == 0) {
+        usa_logic3 = 1;
+    } else if (!logic_datos || logic_largo < 6 ||
+               (memcmp(logic_datos, "LOGIC2", 6) != 0 &&
+                memcmp(logic_datos, "LOGIC1", 6) != 0)) {
         formatear(compilar_error_msj, sizeof(compilar_error_msj),
                   "El proyecto %s no lleva una logica valida.", ruta);
         free(archivo);
         return 0;
     }
 
-    /* 2. Extraer los mapas, los tiles y los titulos a sus carpetas. El
-     * paquete puede venir con barra normal (imagen de BIOS) o invertida
-     * (game.exe). */
+    /* 2. Extraer los mapas, los tiles, los trajes y los titulos a sus
+     * carpetas. El paquete puede venir con barra normal (imagen de BIOS)
+     * o invertida (game.exe). */
     cursor = base;
     while ((leido = blob_leer_entrada(&cursor, fin, nombre, sizeof(nombre),
                                       &datos, &largo)) == 1) {
         const char *archivo_nombre;
         int es_mapa;
         int es_titulo;
+        int es_traje;
         int es_png;
-        if (strcmp(nombre, "proyecto.logic") == 0) continue;
+        if (strcmp(nombre, "proyecto.logic") == 0 ||
+            strcmp(nombre, "proyecto.logic3") == 0) continue;
         es_mapa = (_strnicmp(nombre, CARPETA_MAPS_TEXTO "\\",
                              (int)strlen(CARPETA_MAPS_TEXTO) + 1) == 0 ||
                    _strnicmp(nombre, CARPETA_MAPS_TEXTO "/",
@@ -825,6 +909,10 @@ int compilar_cargar_wolfo(const char *ruta) {
                                (int)strlen(CARPETA_TITLES_TEXTO) + 1) == 0 ||
                      _strnicmp(nombre, CARPETA_TITLES_TEXTO "/",
                                (int)strlen(CARPETA_TITLES_TEXTO) + 1) == 0);
+        es_traje = (_strnicmp(nombre, CARPETA_TRAJES_TEXTO "\\",
+                              (int)strlen(CARPETA_TRAJES_TEXTO) + 1) == 0 ||
+                    _strnicmp(nombre, CARPETA_TRAJES_TEXTO "/",
+                              (int)strlen(CARPETA_TRAJES_TEXTO) + 1) == 0);
         archivo_nombre = blob_nombre_archivo(nombre);
         es_png = (strlen(archivo_nombre) > 4 &&
                   _stricmp(archivo_nombre + strlen(archivo_nombre) - 4,
@@ -852,6 +940,18 @@ int compilar_cargar_wolfo(const char *ruta) {
                 return 0;
             }
             num_titulos++;
+        } else if (es_traje && es_png) {
+            obtener_ruta_exe(carpeta, sizeof(carpeta));
+            unir_ruta(carpeta, sizeof(carpeta), carpeta,
+                      CARPETA_TRAJES_TEXTO);
+            if (!blob_extraer(carpeta, archivo_nombre, datos, largo)) {
+                formatear(compilar_error_msj, sizeof(compilar_error_msj),
+                          "No se pudo escribir el traje %s.",
+                          archivo_nombre);
+                free(archivo);
+                return 0;
+            }
+            num_trajes++;
         } else if (es_png) {
             obtener_ruta_exe(carpeta, sizeof(carpeta));
             unir_ruta(carpeta, sizeof(carpeta), carpeta,
@@ -873,8 +973,13 @@ int compilar_cargar_wolfo(const char *ruta) {
         return 0;
     }
 
-    /* 3. Cargar la logica con el lector de los .logic, desde un archivo
-     * temporal en la carpeta de temporales de Windows. */
+    /* 3. Cargar la logica elegida con el lector de .logic, desde un
+     * temporal en la carpeta de temporales de Windows. Ese lector detecta
+     * la cabecera LOGIC3 y abre el modelo nativo cuando esta disponible. */
+    if (usa_logic3) {
+        logic_datos = logic3_datos;
+        logic_largo = logic3_largo;
+    }
     if (GetTempPathA(sizeof(temp_dir), temp_dir) == 0 ||
         GetTempFileNameA(temp_dir, "lwf", 0, temp_ruta) == 0) {
         formatear(compilar_error_msj, sizeof(compilar_error_msj),
@@ -921,6 +1026,7 @@ int compilar_cargar_wolfo(const char *ruta) {
     }
     (void)num_mapas;
     (void)num_titulos;
+    (void)num_trajes;
     return 1;
 }
 
@@ -949,8 +1055,10 @@ int compilar_windows(const char *ruta) {
     if (!ruta || !ruta[0]) return 0;
     memset(&blob, 0, sizeof(blob));
 
-    /* 1-3. El proyecto activo como entradas del blob. */
-    if (!compilar_reunir(&blob, '\\')) {
+    /* 1-3. El proyecto activo como entradas del blob. Con LOGIC3 activo
+     * se incrusta el texto nativo: el motor lo prefiere y ejecuta sus
+     * bloques con la VM en vez del interprete LOGIC2 (fase 45). */
+    if (!compilar_reunir(&blob, '\\', logic3_activo())) {
         free(blob.datos);
         return 0;
     }
@@ -1030,7 +1138,7 @@ int compilar_bios(const char *ruta) {
     /* 1-3. El proyecto activo como entradas del blob (barra normal,
      * que es como las busca el kernel). Solo aqui se anade vm.lbin. */
     bios_vm_generar = 1;
-    if (!compilar_reunir(&blob, '/')) {
+    if (!compilar_reunir(&blob, '/', 0)) {
         bios_vm_generar = 0;
         free(blob.datos);
         return 0;

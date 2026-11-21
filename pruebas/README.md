@@ -1,26 +1,31 @@
 # Pruebas de LobosWolfos 2000
 
-Doce suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
+Veintitres suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
 (fase 24), la VM resumible y lobo 3 (fase 25), entidades, escenas y ciclo de
 vida (fase 26), eventos, planificador y mensajes (fase 27), variables, listas
 y funciones (fase 28), colisiones, flags y fisica (fase 29), render de
 trajes, animacion, capas y camara (fase 30), la vista Estudio (fase 31), el
 lienzo de bloques (fase 32), el compilador bloques -> lobo (fase 33), el
-depurador y el replay (fase 34) y la interfaz del editor (fase 23). Congelan el
-comportamiento antes de cambiar el runtime en las fases siguientes. En total,
-103 casos: las once suites anteriores aportan 94 y la nueva aporta 9.
+depurador y el replay (fase 34), la interfaz del editor (fase 23), datos,
+productividad, entrada, HUD, audio, guardado, escenas, perfil, plantillas y
+exportacion 2.0 (fases 35 a 45). Congelan el comportamiento antes de cambiar
+el runtime en las fases siguientes. La suite 23 anade cinco casos propios;
+no toca los patrones de las 22 anteriores.
 
 Todo es texto: los patrones de las capturas son hashes SHA-256 y
-volcados de estado, no imagenes. `recursos/ascii.png` no se versiona y
+volcados de estado, no imagenes. La suite de exportacion lee blobs `LGB1`
+y compara entradas, hashes y posiciones; sus patrones viven en
+`pruebas\exportacion\esperado`. `recursos/ascii.png` no se versiona y
 las pruebas no lo necesitan.
 
 ## Comandos
 
 ```bat
-build.bat prueba              compila y pasa las doce suites
+build.bat prueba              compila y pasa las 23 suites
 build.bat prueba conformidad  solo la suite del lenguaje
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
+build.bat prueba bios         solo la paridad BIOS con QEMU
 build.bat prueba entidades    solo entidades, escenas y ciclo de vida
 build.bat prueba eventos      solo eventos, planificador y mensajes
 build.bat prueba colisiones   solo colisiones, flags y fisica
@@ -29,6 +34,16 @@ build.bat prueba estudio      solo la vista Estudio
 build.bat prueba bloques      solo el lienzo de bloques
 build.bat prueba compilador   solo el compilador bloques -> lobo
 build.bat prueba depurador    solo el depurador y el replay
+build.bat prueba datos        solo datos, trajes y sonidos
+build.bat prueba productividad solo atajos y productividad
+build.bat prueba entrada      solo entrada extendida
+build.bat prueba hud          solo HUD, texto, UI y dialogos
+build.bat prueba audio        solo sonido y musica simple
+build.bat prueba save         solo guardado y persistencia
+build.bat prueba escenas      solo escenas multiples y camara
+build.bat prueba perfil       solo perfilador y estres
+build.bat prueba plantillas   solo plantillas, ejemplos y tutorial
+build.bat prueba exportacion  solo paquetes, game.exe autonomo y BIOS/QEMU
 build.bat prueba regresion    solo la regresion del editor
 build.bat prueba actualizar   reescribe los patrones con el estado actual
 ```
@@ -49,6 +64,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\estudio.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\bloques.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\compilador.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\depurador.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\exportacion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\regresion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\linea_base.ps1
 ```
@@ -489,6 +505,38 @@ de las once suites anteriores no cambian. Para regenerar o revisar:
 build.bat prueba depurador
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\depurador.ps1 -Actualizar
 git diff pruebas\depurador\esperado
+```
+
+## Exportacion 2.0 (`exportacion.ps1`)
+
+Suite de la fase 45. Congela el paquete `.wolfo` del ejemplo canonico, su
+restauracion, el paquete legado sin `--wolfo-logic3`, el `game.exe`
+autonomo y la paridad Windows/QEMU de la imagen BIOS. Sus patrones viven en
+`pruebas\exportacion\esperado` y no se comparten con ninguna suite anterior.
+
+| Archivo | Que es |
+|---|---|
+| `paquete.entradas.esperado` | entradas `proyecto.logic` y `proyecto.logic3` con sus largos |
+| `legado.entradas.esperado` | entrada unica `proyecto.logic` del modo heredado |
+| `jugable.posiciones.esperado` | ocho posiciones `N 16 16` de Windows y BIOS |
+
+| Caso | Cubre |
+|---|---|
+| `paquete` | pie `LGB1`, LOGIC3 nativo con CRC valido y LOGIC2 intacto |
+| `restauracion` | abrir el paquete, guardar el LOGIC3 y comparar su hash con la entrada |
+| `legado` | sin `--wolfo-logic3` el paquete sigue siendo el de la fase 15 |
+| `game` | LOGIC3 incrustado, 4 scripts VM, sin carpetas externas y posiciones fijas |
+| `bios` | imagen de 32 MiB, entrada `vm.lbin`, avisos vacios y paridad con QEMU |
+
+El escritor canonicaliza `variable "monedas" 0 0` a
+`variable "monedas" entero 0`, asi que se compara la entrada exportada
+contra el archivo restaurado, no contra los bytes del ejemplo. Para
+regenerar o revisar:
+
+```bat
+build.bat prueba exportacion
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\exportacion.ps1 -Actualizar
+git diff pruebas\exportacion\esperado
 ```
 
 ## Regresion del editor (`regresion.ps1`)

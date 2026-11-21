@@ -2411,7 +2411,12 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                     n++;
                 }
                 wolfo_ruta[n] = 0;
-                if (wolfo_ruta[0]) compilar_guardar_wolfo(wolfo_ruta);
+                /* Fase 45: --wolfo-logic3 anade el LOGIC3 nativo y los
+                 * trajes. Sin esa flag el guardado sigue siendo el de la
+                 * fase 15, para no cambiar paquetes antiguos. */
+                if (wolfo_ruta[0])
+                    compilar_guardar_wolfo(wolfo_ruta,
+                        strstr(cmd, "--wolfo-logic3") != NULL);
             }
         }
         /* Compilacion directa para Windows (pruebas sin dialogo, fase

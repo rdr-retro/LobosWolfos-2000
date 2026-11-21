@@ -2266,14 +2266,11 @@ int logic3_cargar_editor(const char *ruta) {
     return 1;
 }
 
-int logic3_guardar_actual(const char *ruta) {
-    char error[L3_ERROR_MAX];
-    if (!g3_activo || !ruta) {
-        copiar_texto(g3_error, sizeof(g3_error), "no hay un proyecto LOGIC3 activo");
-        return 0;
-    }
-    /* La cabecera manda en el editor: si el usuario cambio AJUSTES DEL
-     * PROYECTO, el archivo guardado refleja esos valores. */
+/* La cabecera manda en el editor: si el usuario cambio AJUSTES DEL
+ * PROYECTO, el archivo guardado refleja esos valores. Se comparte entre
+ * logic3_guardar_actual y logic3_serializar_activo para que un .wolfo
+ * lleve exactamente el mismo texto que un ARCHIVO > GUARDAR LOGIC3. */
+static void sincronizar_actual(void) {
     copiar_texto(g3.nombre, sizeof(g3.nombre), g.ajustes.nombre);
     g3.ancho = g.ajustes.ancho;
     g3.alto = g.ajustes.alto;
@@ -2282,6 +2279,15 @@ int logic3_guardar_actual(const char *ruta) {
     g3.velocidad = g.ajustes.velocidad;
     g3.fondo = g.ajustes.fondo;
     g3.version = L3_VERSION;
+}
+
+int logic3_guardar_actual(const char *ruta) {
+    char error[L3_ERROR_MAX];
+    if (!g3_activo || !ruta) {
+        copiar_texto(g3_error, sizeof(g3_error), "no hay un proyecto LOGIC3 activo");
+        return 0;
+    }
+    sincronizar_actual();
     if (!logic3_guardar(&g3, ruta, error, sizeof(error))) {
         copiar_texto(g3_error, sizeof(g3_error), error);
         return 0;
@@ -2289,6 +2295,31 @@ int logic3_guardar_actual(const char *ruta) {
     g3_error[0] = 0;
     estudio_proyecto_guardar(ruta);
     estudio_guardar_estado();
+    return 1;
+}
+
+/* Fase 45: serializa el modelo activo con el escritor canonico y deja el
+ * texto en memoria. El formato, el CRC32 y la validacion son los mismos de
+ * logic3_guardar; solo cambia el destino (un buffer en vez de un archivo). */
+int logic3_serializar_activo(char **datos, int *largo) {
+    Buffer3 b;
+    if (!g3_activo || !datos || !largo) {
+        copiar_texto(g3_error, sizeof(g3_error), "no hay un proyecto LOGIC3 activo");
+        return 0;
+    }
+    *datos = NULL;
+    *largo = 0;
+    sincronizar_actual();
+    memset(&b, 0, sizeof(b));
+    if (!logic3_validar(&g3, g3_error, sizeof(g3_error))) return 0;
+    if (!buf_reservar(&b, 4096) || !serializar_logic3(&g3, &b)) {
+        free(b.datos);
+        copiar_texto(g3_error, sizeof(g3_error), "sin memoria para serializar el proyecto");
+        return 0;
+    }
+    *datos = b.datos;
+    *largo = b.largo;
+    g3_error[0] = 0;
     return 1;
 }
 

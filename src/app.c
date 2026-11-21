@@ -1364,7 +1364,9 @@ void dialogo_guardar_wolfo(void) {
     ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY |
                 OFN_OVERWRITEPROMPT;
     if (!GetSaveFileNameA(&ofn)) return;
-    if (compilar_guardar_wolfo(ruta))
+    /* El menu siempre exporta el proyecto completo: con LOGIC3 activo el
+     * paquete lleva ademas la entrada nativa y los trajes (fase 45). */
+    if (compilar_guardar_wolfo(ruta, 1))
         app_estado("Proyecto guardado: %s", ruta);
     else
         dialogo_error(compilar_ultimo_error());

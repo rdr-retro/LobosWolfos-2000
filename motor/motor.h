@@ -190,6 +190,10 @@ int activo_blob_registrar(const unsigned char *datos, int largo);
 /* Libera los archivos virtuales registrados hasta ahora. */
 void activo_virtuales_limpiar(void);
 
+/* Fase 45: consulta y lee un archivo del blob registrado, sin disco. */
+int activo_existe_virtual(const char *ruta);
+char *activo_leer_virtual(const char *ruta, int *largo);
+
 /* Guarda un framebuffer como BMP de 24 bits (para --captura). */
 int activo_guardar_bmp(const char *ruta, const u32 *pixeles,
                        int ancho, int alto);

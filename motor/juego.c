@@ -211,13 +211,19 @@ static int resolver_mapa_l3(const char *ruta_logic3, const char *mapa,
     char carpeta[MAX_PATH], prueba[MAX_PATH];
 
     if (!mapa || !mapa[0]) return 0;
+    /* Fase 45: el juego compilado lleva el mapa dentro del blob, no en
+     * una carpeta. activo_cargar_mapa lo busca por nombre base. */
+    if (activo_existe_virtual(mapa)) {
+        copiar_texto(dst, tam, mapa);
+        return 1;
+    }
     if (archivo_existe(mapa)) {
         copiar_texto(dst, tam, mapa);
         return 1;
     }
     _snprintf(prueba, sizeof(prueba), "maps\\%s", mapa);
     prueba[sizeof(prueba) - 1] = '\0';
-    if (archivo_existe(prueba)) {
+    if (activo_existe_virtual(prueba) || archivo_existe(prueba)) {
         copiar_texto(dst, tam, prueba);
         return 1;
     }
@@ -2629,8 +2635,14 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     /* Proyecto incrustado (fase 4): si este exe fue compilado por el
      * editor lleva el proyecto pegado al final. Sin rutas explicitas
      * en la linea de comandos, el proyecto sale del propio exe. */
-    if (!ruta_logica && !ruta_mapa && !ruta_logic3 && activo_blob_cargar() > 0)
-        ruta_logica = "proyecto.logic";
+    if (!ruta_logica && !ruta_mapa && !ruta_logic3 && activo_blob_cargar() > 0) {
+        /* Fase 45: si el blob trae el LOGIC3 nativo se ejecutan sus bloques
+         * con la VM; si no, se mantiene el proyecto LOGIC2 de siempre. */
+        if (activo_existe_virtual("proyecto.logic3"))
+            ruta_logic3 = "proyecto.logic3";
+        else
+            ruta_logica = "proyecto.logic";
+    }
 
     /* Fase 39: los nombres de sonar()/musica() sin --audio-sonido se buscan
      * como sonidos\ nombre.wav junto al proyecto. */

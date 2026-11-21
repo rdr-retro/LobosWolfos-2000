@@ -116,6 +116,7 @@ if /i "%~2"=="save" goto pruebas_save
 if /i "%~2"=="escenas" goto pruebas_escenas
 if /i "%~2"=="perfil" goto pruebas_perfil
 if /i "%~2"=="plantillas" goto pruebas_plantillas
+if /i "%~2"=="exportacion" goto pruebas_exportacion
 
 echo.
 echo === Suite de conformidad del lenguaje ===
@@ -200,6 +201,10 @@ if errorlevel 1 exit /b 1
 echo.
 echo === Plantillas, ejemplos y tutorial (fase 44) ===
 %PS% "%AQUI%pruebas\plantillas.ps1"
+if errorlevel 1 exit /b 1
+echo.
+echo === Exportacion, documentacion y release 2.0 (fase 45) ===
+%PS% "%AQUI%pruebas\exportacion.ps1"
 if errorlevel 1 exit /b 1
 echo.
 echo === Regresion visual del editor ===
@@ -290,6 +295,10 @@ exit /b %ERRORLEVEL%
 %PS% "%AQUI%pruebas\plantillas.ps1"
 exit /b %ERRORLEVEL%
 
+:pruebas_exportacion
+%PS% "%AQUI%pruebas\exportacion.ps1"
+exit /b %ERRORLEVEL%
+
 :pruebas_regresion
 %PS% "%AQUI%pruebas\regresion.ps1"
 exit /b %ERRORLEVEL%
@@ -336,6 +345,8 @@ if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\perfil.ps1" -Actualizar
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\plantillas.ps1" -Actualizar
+if errorlevel 1 exit /b 1
+%PS% "%AQUI%pruebas\exportacion.ps1" -Actualizar
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\regresion.ps1" -Actualizar
 exit /b %ERRORLEVEL%

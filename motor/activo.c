@@ -212,6 +212,28 @@ int activo_blob_registrar(const unsigned char *datos, int largo) {
     return blob_parsear(datos, largo);
 }
 
+/* Fase 45: comprueba si el blob registrado lleva un archivo virtual con
+ * ese nombre (o con ese nombre base). Lo usa el game.exe para decidir si
+ * el proyecto incrustado es LOGIC3 nativo. */
+int activo_existe_virtual(const char *ruta) {
+    return virtual_buscar(ruta) != NULL;
+}
+
+/* Fase 45: copia un archivo virtual a un buffer malloc. Es la via por la
+ * que el lector de LOGIC3 del motor lee "proyecto.logic3" sin tocar el
+ * disco. Devuelve NULL si no esta registrado. */
+char *activo_leer_virtual(const char *ruta, int *largo) {
+    EntradaVirtual *e = virtual_buscar(ruta);
+    char *datos;
+    if (!e) return NULL;
+    datos = (char *)malloc((size_t)e->largo + 1);
+    if (!datos) return NULL;
+    if (e->largo > 0) memcpy(datos, e->datos, (size_t)e->largo);
+    datos[e->largo] = '\0';
+    if (largo) *largo = e->largo;
+    return datos;
+}
+
 /* Lee el pie LGB1 del final del propio ejecutable y registra su blob
  * como archivos virtuales. Devuelve el numero de archivos; 0 si este
  * exe no lleva proyecto incrustado o el pie no es valido. */

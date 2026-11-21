@@ -838,6 +838,22 @@ el motor ya compila.
     el sprite clásico, sin entidades LOGIC3. `build.bat prueba` pasa las
     ocho suites (12/12, 11/11, 18/18, 4/4, 8/8, 4/4, 4/4 y 8/8).
 
+- **21-11-2026 (fase 45, exportacion, documentacion y release 2.0)** -
+    El paquete `.wolfo` puede llevar `proyecto.logic3` nativo junto al
+    `proyecto.logic` intacto; `compilar_cargar_wolfo` prefiere la cabecera
+    `LOGIC3` y cae a LOGIC1/LOGIC2 si no esta. La flag `--wolfo-logic3`
+    decide si `--guardar-wolfo` anade la entrada nueva; el menu **ARCHIVO >
+    Guardar proyecto** siempre exporta completa. `game.exe` y la vista
+    previa incrustan el LOGIC3 cuando el modelo esta activo, porque el
+    ejemplo canonico usa `mi.variable("monedas")`. La BIOS conserva su
+    ruta `vm.lbin` y `compilar_bios` sigue pasando `incluir_logic3=0`.
+    Se anaden `MANUAL_BLOQUES.md`, `REFERENCIA_LENGUAJE.md` y la suite 23
+    `pruebas/exportacion.ps1` (paquete, restauracion, legado, game y BIOS),
+    con patrones propios en `pruebas/exportacion/esperado`. `build.bat
+    prueba` pasa las 23 suites. Release publicada: `v2.0-beta`, con
+    `LobosWolfos2000.exe`, `game.exe`, SHA-256 y nota CRLF. El ejemplo
+    canonico da las mismas ocho posiciones en Windows y en QEMU.
+
 ## 5. Pendiente de decidir
 
 - Sistema de archivos de la imagen USB para el juego (Estrato de rocky,
@@ -849,8 +865,8 @@ el motor ya compila.
 - Cada fase se entrega como siempre: cambios en `src/` del editor,
   compilación con `build.bat` (MinGW i686), verificación por píxeles con
   las flags de prueba (`--gestor`, `--captura`, `--clics`, `--arrastre`...),
-  commit en `main`, push y release `v1.0-beta` actualizada (exe + SHA-256 +
-  nota).
+  commit en `main`, push y release `v2.0-beta` actualizada (exe + SHA-256 +
+  nota CRLF). `v1.0-beta` queda como historico.
 - Código y comentarios en español sin acentos; las cadenas de la interfaz
   sí llevan acentos. Compatible con Windows 2000/XP, 32 bits, Win32/GDI.
 - Las partes nuevas que no afecten al editor (motor, kernel) siguen las

@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "logic3_motor.h"
+#include "motor.h" /* fase 45: lectura del LOGIC3 incrustado en el blob */
 
 /* ------------------------------------------------------------------ */
 /* Errores                                                            */
@@ -240,7 +241,10 @@ static int cerrar_bloque(L3Lector *l, int linea) {
 /* ------------------------------------------------------------------ */
 
 static char *leer_todo(const char *ruta, int *largo) {
-    FILE *f = fopen(ruta, "rb");
+    char *virtual = activo_leer_virtual(ruta, largo);
+    FILE *f;
+    if (virtual) return virtual;
+    f = fopen(ruta, "rb");
     char *datos;
     long n;
     if (!f) return NULL;
