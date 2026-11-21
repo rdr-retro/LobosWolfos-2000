@@ -8,6 +8,7 @@
  * ========================================================================== */
 #include "app.h"
 #include "logic3.h"
+#include "sistema.h"
 
 typedef struct {
     char ruta[MAX_PATH];
@@ -110,10 +111,14 @@ static int max_evento_id(const Proyecto3 *p) {
 static int bloques_que_usan(const Proyecto3 *p, const Objeto3 *objetos,
                             int num_objetos) {
     int i, j, k;
-    for (i = 0; i < p->num_bloques; i++)
+    /* Las piezas `sistema.*` usan evento 1 como hueco del formato, pero no
+     * cuelgan de los eventos del lienzo y no impiden borrar objetos. */
+    for (i = 0; i < p->num_bloques; i++) {
+        if (sistema_es_bloque(&p->bloques[i])) continue;
         for (j = 0; j < num_objetos; j++)
             for (k = 0; k < objetos[j].num_eventos; k++)
                 if (p->bloques[i].evento == objetos[j].eventos[k].id) return 1;
+    }
     return 0;
 }
 

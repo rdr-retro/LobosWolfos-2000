@@ -17,6 +17,7 @@
 #include "../motor/motor.h"
 #include "../motor/colisiones.h"
 #include "../motor/entrada.h"
+#include "../motor/logic3_motor.h"
 
 #define JV_ANCHO      640
 #define JV_ALTO       480
@@ -45,6 +46,8 @@ static int jv_velocidad = JV_SPRITE_VEL;
 
 static MotorMapa g_mapa;
 static char g_mapa_usado[MAX_PATH];
+static MotorL3 g_l3;           /* fase 46: mismo modelo que usa game.exe */
+static int jv_sprite_clasico = 1;
 
 static u32 g_sprite[JV_SPRITE_LADO * JV_SPRITE_LADO];
 static int g_x, g_y;           /* posicion del sprite en el mundo */
@@ -217,6 +220,9 @@ static int jv_actualizar(void) {
         return 1;
     }
 
+    /* Sin jugador implicito el lobito clasico no existe. */
+    if (!jv_sprite_clasico) return 1;
+
     /* Movimiento por defecto (sin scripts en el proyecto). */
     {
         int vx = 0, vy = 0;
@@ -251,18 +257,25 @@ static void jv_renderizar(void) {
         return;
     }
 
-    /* camara centrada en el sprite */
-    cam_x = g_x + JV_SPRITE_LADO / 2 - jv_ancho / 2;
-    cam_y = g_y + JV_SPRITE_LADO / 2 - jv_alto / 2;
+    /* Camara centrada en el jugador implicito, o en el mundo si el
+     * proyecto no tiene lobito (fase 46). */
+    if (jv_sprite_clasico) {
+        cam_x = g_x + JV_SPRITE_LADO / 2 - jv_ancho / 2;
+        cam_y = g_y + JV_SPRITE_LADO / 2 - jv_alto / 2;
+    } else {
+        cam_x = jv_ancho / 2 - jv_ancho / 2;
+        cam_y = jv_alto / 2 - jv_alto / 2;
+    }
 
     motor_limpiar(g_fb, jv_ancho, jv_alto, 0x00101826u);
     motor_mapa_render(g_fb, jv_ancho, jv_alto, cam_x, cam_y, m->lado,
                       m->dibujo_celdas ? m->dibujo_celdas : m->celdas,
                       m->dibujo_celdas ? m->num_dibujo : m->num_celdas,
                       m->imagenes);
-    motor_blit_alpha(g_fb, jv_ancho, jv_alto,
-                     g_x - cam_x, g_y - cam_y,
-                     g_sprite, JV_SPRITE_LADO, JV_SPRITE_LADO);
+    if (jv_sprite_clasico)
+        motor_blit_alpha(g_fb, jv_ancho, jv_alto,
+                         g_x - cam_x, g_y - cam_y,
+                         g_sprite, JV_SPRITE_LADO, JV_SPRITE_LADO);
 }
 
 static void jv_blit(HWND hwnd) {
@@ -400,8 +413,39 @@ static int jv_cargar_proyecto(int avisar) {
     free(blob);
 
     memset(&g_mapa, 0, sizeof(g_mapa));
-    if (!activo_cargar_proyecto("proyecto.logic", &g_mapa,
-                                g_mapa_usado, sizeof(g_mapa_usado))) {
+    memset(&g_l3, 0, sizeof(g_l3));
+    jv_sprite_clasico = 1;
+    if (activo_existe_virtual("proyecto.logic3")) {
+        char error[MOTOR_L3_ERROR_MAX];
+        if (!motor_l3_cargar("proyecto.logic3", &g_l3, error, sizeof(error))) {
+            if (avisar) {
+                char msg[512];
+                _snprintf(msg, sizeof(msg),
+                          "No se pudo cargar el LOGIC3 de la vista previa:\n%s",
+                          error);
+                msg[sizeof(msg) - 1] = '\0';
+                MessageBoxA(g.hwnd, msg, "Vista previa", MB_ICONERROR);
+            }
+            activo_virtuales_limpiar();
+            return 0;
+        }
+        jv_sprite_clasico =
+            g_l3.sistema.opciones.jugador_implicito ? 1 : 0;
+        if (g_l3.mapa[0]) {
+            if (!activo_cargar_mapa(g_l3.mapa, &g_mapa)) {
+                if (avisar)
+                    MessageBoxA(g.hwnd,
+                                "No se pudo cargar el mapa del LOGIC3.\n"
+                                "Revisa la escena del proyecto.",
+                                "Vista previa", MB_ICONERROR);
+                motor_mapa_liberar(&g_mapa);
+                activo_virtuales_limpiar();
+                return 0;
+            }
+            recortar_texto(g_mapa_usado, g_l3.mapa, sizeof(g_mapa_usado));
+        }
+    } else if (!activo_cargar_proyecto("proyecto.logic", &g_mapa,
+                                       g_mapa_usado, sizeof(g_mapa_usado))) {
         if (avisar)
             MessageBoxA(g.hwnd,
                         "No se pudo cargar el mapa del proyecto.\n"

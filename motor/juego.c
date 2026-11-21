@@ -336,6 +336,9 @@ static FILE *g_traza; /* --traza: una linea por fotograma */
 static MotorL3 g_l3;
 static Eventos g_eventos;       /* planificador de eventos (fase 27) */
 static int g_modo_vm;
+/* Fase 46: los proyectos nuevos no tienen jugador implicito. El lobito
+ * clasico solo se mueve y se dibuja cuando el LOGIC3 lo autoriza. */
+static int g_sprite_clasico = 1;
 static LoboMemoria g_memoria; /* globales, listas y mensajes compartidos */
 
 /* --- eventos (fase 27) --- */
@@ -1314,6 +1317,13 @@ static void actualizar(void) {
         return;
     }
 
+    /* Sin jugador implicito no hay lobito que mover. Los actores reales
+     * se moveran desde sus propios controles en fases posteriores. */
+    if (!g_sprite_clasico) {
+        escenas_fotograma();
+        return;
+    }
+
     /* Movimiento por defecto (sin scripts en el proyecto). */
     {
         int vx = 0, vy = 0;
@@ -1505,9 +1515,13 @@ static void renderizar(void) {
     int dx, dy, paso, radio;
 
     if (zoom < 1) zoom = 1;
-    render_camara_calcular(&g_camara, juego.fb_ancho, juego.fb_alto,
-                           juego.x + SPRITE_LADO / 2,
-                           juego.y + SPRITE_LADO / 2, &cam_x, &cam_y);
+    if (g_sprite_clasico)
+        render_camara_calcular(&g_camara, juego.fb_ancho, juego.fb_alto,
+                               juego.x + SPRITE_LADO / 2,
+                               juego.y + SPRITE_LADO / 2, &cam_x, &cam_y);
+    else
+        render_camara_calcular(&g_camara, juego.fb_ancho, juego.fb_alto,
+                               g_ancho / 2, g_alto / 2, &cam_x, &cam_y);
     /* Suavizado entero de camara: ni un solo pixel de diferencia en las
      * capturas antiguas porque solo se activa con --escenas. */
     if (g_escenas_activo && g_escenas.suave > 1) {
@@ -1573,7 +1587,7 @@ static void renderizar(void) {
     /* El sprite clasico solo se pinta cuando hay mapa, igual que en las
      * capturas de las fases anteriores: las pruebas VM sin mapa esperan
      * unicamente el fondo y las entidades. */
-    if (juego.mapa_usado[0]) {
+    if (juego.mapa_usado[0] && g_sprite_clasico) {
         if (zoom == 1) {
             motor_blit_alpha(juego.fb, juego.fb_ancho, juego.fb_alto,
                              juego.x - cam_x, juego.y - cam_y,
@@ -2669,6 +2683,8 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
             return 1;
         }
         g_modo_vm = 1;
+        g_sprite_clasico =
+            g_l3.sistema.opciones.jugador_implicito ? 1 : 0;
         aplicar_ajustes_l3(&g_l3);
 
         if (g_l3.mapa[0]) {

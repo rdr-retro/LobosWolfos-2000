@@ -224,6 +224,12 @@ typedef struct {
 void logic3_iniciar(Proyecto3 *p);
 void logic3_liberar(Proyecto3 *p);
 
+/* Anade un bloque al final del proyecto y devuelve un puntero a el en
+ * `salida`. El id es el mayor existente mas uno; `evento`, `padre`, `orden`
+ * y `tipo` se copian tal cual. Lo usan las piezas del modelo de programa. */
+int logic3_bloque_nuevo(Proyecto3 *p, int evento, int padre, int orden,
+                        const char *tipo, Bloque3 **salida);
+
 /* Lectura y escritura del archivo LOGIC3. Si algo falla devuelve 0 y
  * deja en `error` un mensaje "linea N: motivo". */
 int logic3_cargar(Proyecto3 *p, const char *ruta, char *error, int tam_error);

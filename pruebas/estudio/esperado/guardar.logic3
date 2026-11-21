@@ -13,5 +13,9 @@ objeto 2 "Objeto 2" escena 2 x 40 y 36 w 32 h 32 visible 1 capa 0
 objeto 3 "Objeto 3" escena 2 x 52 y 46 w 32 h 32 visible 1 capa 0
   evento 5 inicio
   evento 6 fotograma
+bloque 1 evento 1 padre 0 orden 0 tipo "sistema.opciones"
+  campo "programa" "1"
+  campo "jugador_implicito" "0"
+  campo "auto_compilar" "1"
 FIN
-CRC32 A180E238
+CRC32 8B9475CD

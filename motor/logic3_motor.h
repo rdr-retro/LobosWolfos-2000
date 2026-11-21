@@ -103,6 +103,53 @@ typedef struct MotorL3Camara {
     int definida;       /* 1 si el LOGIC3 trae la linea */
 } MotorL3Camara;
 
+/* Fase 46: modelo de programa. El motor solo necesita las opciones y los
+ * perfiles de control para decidir si existe el jugador implicito. El resto
+ * de piezas se capturan para el volcado y para fases posteriores. */
+#define MOTOR_L3_CONTROLES_MAX 4
+#define MOTOR_L3_ACCIONES_MAX  8
+#define MOTOR_L3_REGLAS_MAX    16
+
+typedef struct MotorL3Opciones {
+    int presente;
+    int programa;
+    int jugador_implicito;
+    int auto_compilar;
+} MotorL3Opciones;
+
+typedef struct MotorL3Accion {
+    char entrada[32];
+    int flanco;
+    char funcion[MOTOR_L3_NOMBRE_MAX];
+} MotorL3Accion;
+
+typedef struct MotorL3Control {
+    int jugador;
+    int actor;
+    char dispositivo[24];
+    char esquema[24];
+    int activo;
+    MotorL3Accion acciones[MOTOR_L3_ACCIONES_MAX];
+    int num_acciones;
+} MotorL3Control;
+
+typedef struct MotorL3Regla {
+    int evento;
+    int actor;
+    int flanco;
+    int cada;
+    char funcion[MOTOR_L3_NOMBRE_MAX];
+    char etiqueta[MOTOR_L3_TEXTO_MAX];
+} MotorL3Regla;
+
+typedef struct MotorL3Sistema {
+    MotorL3Opciones opciones;
+    MotorL3Control controles[MOTOR_L3_CONTROLES_MAX];
+    int num_controles;
+    MotorL3Regla reglas[MOTOR_L3_REGLAS_MAX];
+    int num_reglas;
+} MotorL3Sistema;
+
 /* Un objeto LOGIC3: el tipo de las entidades que se instancian. */
 typedef struct MotorL3Objeto {
     int id;
@@ -141,6 +188,7 @@ typedef struct MotorL3 {
     int num_textos;
     MotorL3Script scripts[MOTOR_L3_SCRIPTS_MAX];
     int num_scripts;
+    MotorL3Sistema sistema; /* fase 46, piezas del constructor */
     int num_bloques; /* bloques vistos, informativo para --volcar */
 } MotorL3;
 

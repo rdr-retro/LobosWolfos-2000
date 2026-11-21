@@ -9,6 +9,7 @@
  * ========================================================================== */
 #include "app.h"
 #include "logic3.h"
+#include "sistema.h"
 #include <ctype.h>
 
 #define DATOS_FILA_ALTO      18
@@ -561,6 +562,9 @@ int datos_sustituir_referencias(const char *viejo, const char *nuevo) {
     antes = refs_sustituidas;
     for (i = 0; i < p->num_bloques; i++) {
         Bloque3 *b = &p->bloques[i];
+        /* Los campos de `sistema.*` son opciones del constructor, no
+         * referencias del lienzo que deban sustituirse en masa. */
+        if (sistema_es_bloque(b)) continue;
         for (j = 0; j < b->num_campos; j++) {
             if (strcmp(b->campos[j].valor, viejo) == 0) {
                 recortar_texto(b->campos[j].valor, nuevo,

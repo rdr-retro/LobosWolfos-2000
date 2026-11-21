@@ -278,9 +278,11 @@ Ejecutar-Caso "guardar" {
     } $problemas
 
     $contenido = Get-TextoNormalizado $logic
+    # Cinco bloques del lienzo mas la pieza sistema.opciones de los
+    # proyectos nuevos (fase 46). El volcado sigue contando solo el lienzo.
     $numBloques = @($contenido -split "`n" | Where-Object { $_ -like "bloque *" }).Count
-    if ($numBloques -ne 5) {
-        [void]$problemas.Add("el LOGIC3 guardado tiene $numBloques bloques (esperado 5)")
+    if ($numBloques -ne 6) {
+        [void]$problemas.Add("el LOGIC3 guardado tiene $numBloques bloques (esperado 6)")
     }
     $rutaLogic = Join-Path $esperadoDir "guardar.logic3"
     if ($Actualizar) {

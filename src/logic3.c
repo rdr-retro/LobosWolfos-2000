@@ -11,6 +11,7 @@
  * guardar se escribe el modelo LOGIC3 guardado, no esa vista.
  */
 #include "logic3.h"
+#include "sistema.h"
 
 #define L3_ARCHIVO_MAX (16 * 1024 * 1024)
 #define L3_TOKENS_MAX  288 /* 4 de cabecera + 256 elementos de lista */
@@ -188,6 +189,27 @@ static int bloques_reservar(Proyecto3 *p, int extra) {
     if (!nuevo) return 0;
     p->bloques = nuevo;
     p->cap_bloques = cap;
+    return 1;
+}
+
+int logic3_bloque_nuevo(Proyecto3 *p, int evento, int padre, int orden,
+                        const char *tipo, Bloque3 **salida) {
+    Bloque3 *b;
+    int id = 1, i;
+
+    if (salida) *salida = NULL;
+    if (!p || !tipo || !*tipo) return 0;
+    for (i = 0; i < p->num_bloques; i++)
+        if (p->bloques[i].id >= id) id = p->bloques[i].id + 1;
+    if (!bloques_reservar(p, 1)) return 0;
+    b = &p->bloques[p->num_bloques++];
+    memset(b, 0, sizeof(*b));
+    b->id = id;
+    b->evento = evento;
+    b->padre = padre;
+    b->orden = orden;
+    copiar_texto(b->tipo, sizeof(b->tipo), tipo);
+    if (salida) *salida = b;
     return 1;
 }
 
@@ -1581,7 +1603,10 @@ int logic3_validar(const Proyecto3 *p, char *error, int tam_error) {
         const Bloque3 *b = &p->bloques[i];
         if (b->id <= 0)
             FALLO_VALIDAR(b->linea, "id de bloque invalido");
-        if (b->evento <= 0 || !entero_en(ev_ids, total_eventos, b->evento))
+        /* Las piezas `sistema.*` son metadatos del programa: no cuelgan de
+         * un evento real y por eso no se validan contra `ev_ids`. */
+        if (!sistema_es_bloque(b) &&
+            (b->evento <= 0 || !entero_en(ev_ids, total_eventos, b->evento)))
             FALLO_VALIDAR(b->linea,
                           "bloque %d referencia un evento inexistente: %d",
                           b->id, b->evento);
@@ -2174,6 +2199,7 @@ int logic3_nuevo_editor(void) {
     if (g.ajustes.fps > 0) g3.fps = g.ajustes.fps;
     if (g.ajustes.velocidad > 0) g3.velocidad = g.ajustes.velocidad;
     if (g.ajustes.fondo) g3.fondo = g.ajustes.fondo;
+    sistema_opciones_asegurar(&g3);
     g3_activo = 1;
     g3_error[0] = 0;
     return 1;
@@ -2190,8 +2216,10 @@ void logic3_contar(int *escenas, int *objetos, int *eventos,
     if (g3_activo) {
         e = g3.num_escenas;
         o = g3.num_objetos;
-        b = g3.num_bloques;
         v = g3.num_variables;
+        /* Los bloques `sistema.*` son metadatos, no bloques del lienzo. */
+        for (i = 0; i < g3.num_bloques; i++)
+            if (!sistema_es_bloque(&g3.bloques[i])) b++;
         for (i = 0; i < g3.num_objetos; i++) {
             ev += g3.objetos[i].num_eventos;
             v += g3.objetos[i].num_variables;

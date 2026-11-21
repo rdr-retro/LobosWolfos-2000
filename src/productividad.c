@@ -9,6 +9,7 @@
  * ========================================================================== */
 #include "app.h"
 #include "logic3.h"
+#include "sistema.h"
 #include <ctype.h>
 
 #define PROD_HISTORIAL_MAX    12
@@ -338,7 +339,8 @@ static int objeto_pegar(const Objeto3 *fuente, const char *nombre,
         viejo = o->eventos[i].id;
         o->eventos[i].id = siguiente++;
         for (j = 0; j < p->num_bloques; j++)
-            if (p->bloques[j].evento == viejo &&
+            if (!sistema_es_bloque(&p->bloques[j]) &&
+                p->bloques[j].evento == viejo &&
                 p->bloques[j].evento != o->eventos[i].id)
                 p->bloques[j].evento = o->eventos[i].id;
     }
@@ -432,6 +434,7 @@ int productividad_buscar(const char *texto) {
             buscar_texto(aguja, p->funciones[i].eventos[j].nombre, 3,
                          10000 + i * 64 + j);
     for (i = 0; i < p->num_bloques; i++) {
+        if (sistema_es_bloque(&p->bloques[i])) continue;
         buscar_texto(aguja, p->bloques[i].tipo, 4, i);
         for (j = 0; j < p->bloques[i].num_campos; j++)
             buscar_texto(aguja, p->bloques[i].campos[j].valor, 4, i);
@@ -527,11 +530,25 @@ int productividad_modo(void) {
 /* ------------------------------------------------------------------ */
  /* Metricas y volcado                                                  */
  /* ------------------------------------------------------------------ */
+/* Capacidad que bloques_reservar habria reservado para `n` bloques del
+ * lienzo. Las piezas sistema.* no cuentan: asi la metrica de bytes sigue
+ * midiendo el mismo modelo que antes de la fase 46. */
+static int capacidad_bloques_lienzo(int n) {
+    int cap;
+    if (n <= 0) return 0;
+    cap = 64;
+    while (cap < n) {
+        if (cap > L3_BLOQUES_MAX / 2) { cap = L3_BLOQUES_MAX; break; }
+        cap *= 2;
+    }
+    return cap < n ? n : cap;
+}
+
 void productividad_metricas(int *escenas, int *objetos, int *eventos,
                             int *bloques, int *variables, int *listas,
                             int *elementos, int *bytes) {
     Proyecto3 *p = logic3_modelo_activo();
-    int i, ev = 0, var = 0, elem = 0;
+    int i, ev = 0, var = 0, elem = 0, nb = 0;
     if (escenas) *escenas = 0;
     if (objetos) *objetos = 0;
     if (eventos) *eventos = 0;
@@ -547,18 +564,24 @@ void productividad_metricas(int *escenas, int *objetos, int *eventos,
     }
     for (i = 0; i < p->num_funciones; i++) ev += p->funciones[i].num_eventos;
     for (i = 0; i < p->num_listas; i++) elem += p->listas[i].num_elementos;
-    for (i = 0; i < p->num_bloques; i++) var += p->bloques[i].num_campos;
+    for (i = 0; i < p->num_bloques; i++) {
+        if (sistema_es_bloque(&p->bloques[i])) continue;
+        var += p->bloques[i].num_campos;
+        nb++;
+    }
     if (escenas) *escenas = p->num_escenas;
     if (objetos) *objetos = p->num_objetos;
     if (eventos) *eventos = ev;
-    if (bloques) *bloques = p->num_bloques;
+    if (bloques) *bloques = nb;
     if (variables) *variables = p->num_variables + var;
     if (listas) *listas = p->num_listas;
     if (elementos) *elementos = elem;
     if (bytes) {
         size_t total = sizeof(Proyecto3);
         total += (size_t)p->cap_objetos * sizeof(Objeto3);
-        total += (size_t)p->cap_bloques * sizeof(Bloque3);
+        /* La capacidad real incluye las piezas sistema.*; se usa la del
+         * lienzo solo para no cambiar el significado de esta metrica. */
+        total += (size_t)capacidad_bloques_lienzo(nb) * sizeof(Bloque3);
         for (i = 0; i < p->num_listas; i++)
             total += (size_t)p->listas[i].num_elementos * L3_TEXTO_MAX;
         *bytes = (int)(total > 0x7fffffffu ? 0x7fffffff : total);

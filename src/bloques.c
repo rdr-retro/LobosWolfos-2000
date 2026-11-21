@@ -8,6 +8,7 @@
  * ========================================================================== */
 #include "app.h"
 #include "logic3.h"
+#include "sistema.h"
 
 /* Formas visuales del catalogo. */
 enum {
@@ -292,7 +293,8 @@ static int evento_para_bloques(const Proyecto3 *p) {
 void bloques_volcar_modelo(void) {
     Proyecto3 *p;
     Bloque3 *tmp;
-    int i, j, n, ev, cap;
+    Bloque3 *sistema = NULL;
+    int i, j, n, ev, cap, num_sistema = 0, total;
 
     asegurar();
     if (!logic3_activo() && !estudio_asegurar_modelo()) return;
@@ -307,20 +309,36 @@ void bloques_volcar_modelo(void) {
         if (!p) return;
     }
 
+    /* Las piezas `sistema.*` no pertenecen al lienzo de bloques: se copian
+     * aparte y se escriben delante para que el vuelco no las borre. */
+    for (i = 0; i < p->num_bloques; i++)
+        if (sistema_es_bloque(&p->bloques[i])) num_sistema++;
+    if (num_sistema > 0) {
+        sistema = (Bloque3 *)malloc(sizeof(Bloque3) * (size_t)num_sistema);
+        if (!sistema) return;
+        j = 0;
+        for (i = 0; i < p->num_bloques; i++)
+            if (sistema_es_bloque(&p->bloques[i]))
+                sistema[j++] = p->bloques[i];
+    }
+
     n = num_nodos;
-    if (n > L3_BLOQUES_MAX) n = L3_BLOQUES_MAX;
-    if (n > p->cap_bloques) {
+    if (n > L3_BLOQUES_MAX - num_sistema) n = L3_BLOQUES_MAX - num_sistema;
+    total = n + num_sistema;
+    if (total > p->cap_bloques) {
         cap = p->cap_bloques > 0 ? p->cap_bloques : 64;
-        while (cap < n) cap *= 2;
+        while (cap < total) cap *= 2;
         tmp = (Bloque3 *)realloc(p->bloques, sizeof(Bloque3) * (size_t)cap);
-        if (!tmp) return;
+        if (!tmp) { free(sistema); return; }
         p->bloques = tmp;
         p->cap_bloques = cap;
     }
 
     ev = evento_para_bloques(p);
+    for (i = 0; i < num_sistema; i++) p->bloques[i] = sistema[i];
+    free(sistema);
     for (i = 0; i < n; i++) {
-        Bloque3 *b = &p->bloques[i];
+        Bloque3 *b = &p->bloques[num_sistema + i];
         const DefBloque *d = &DEFS[nodos[i].def];
         memset(b, 0, sizeof(*b));
         b->id = nodos[i].id;
@@ -361,7 +379,7 @@ void bloques_volcar_modelo(void) {
         }
         b->linea = 0;
     }
-    p->num_bloques = n;
+    p->num_bloques = total;
 }
 
 void bloques_importar_modelo(void) {
@@ -380,7 +398,9 @@ void bloques_importar_modelo(void) {
     num_futuro = 0;
     for (i = 0; i < p->num_bloques && num_nodos < BLOQUES_MAX; i++) {
         const Bloque3 *b = &p->bloques[i];
-        NodoBloque *n = &nodos[num_nodos++];
+        NodoBloque *n;
+        if (sistema_es_bloque(b)) continue;
+        n = &nodos[num_nodos++];
         int def = def_por_tipo(b->tipo);
         memset(n, 0, sizeof(*n));
         if (def < 0) def = BLOQUES_DEFS - 1;

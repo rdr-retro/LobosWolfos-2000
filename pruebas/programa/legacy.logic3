@@ -1,0 +1,6 @@
+LOGIC3
+version 3
+proyecto "Proyecto legacy" 640 480 1 60 3 001E5A2E
+carpetas "tiles" "maps" "trajes" "sonidos"
+escena 1 "Escenario" "pruebas/colisiones/fisica.mav" 640 480 001E5A2E
+FIN

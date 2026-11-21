@@ -6,7 +6,11 @@ escena 1 "Escena 1" "" 640 480 001E5A2E
 objeto 1 "Objeto 1" escena 1 x 28 y 26 w 32 h 32 visible 1 capa 0
   evento 1 inicio
   evento 2 fotograma
+bloque 1 evento 1 padre 0 orden 0 tipo "sistema.opciones"
+  campo "programa" "1"
+  campo "jugador_implicito" "0"
+  campo "auto_compilar" "1"
 bloque 1000 evento 1 padre 0 orden 0 tipo "codigo.lobo"
   campo "codigo" "x = x + 2\n"
 FIN
-CRC32 2906B47E
+CRC32 24FB0B88

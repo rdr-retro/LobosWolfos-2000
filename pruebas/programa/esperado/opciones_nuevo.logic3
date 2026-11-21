@@ -1,0 +1,11 @@
+LOGIC3
+version 3
+proyecto "Mi proyecto" 640 480 1 60 3 00000000
+carpetas "tiles" "maps" "trajes" "sonidos"
+escena 1 "Escena 1" "" 640 480 001E5A2E
+bloque 1 evento 1 padre 0 orden 0 tipo "sistema.opciones"
+  campo "programa" "1"
+  campo "jugador_implicito" "0"
+  campo "auto_compilar" "1"
+FIN
+CRC32 2ADED89B

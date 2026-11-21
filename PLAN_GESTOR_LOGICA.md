@@ -261,6 +261,10 @@ un jugador.
 **Criterio de salida:** insertar un mapa en un proyecto nuevo, guardar y
 ejecutar no muestra ningun personaje; los proyectos legacy siguen igual.
 
+**Estado:** completada. `src/sistema.c` valida las piezas `sistema.*`, los
+proyectos nuevos nacen con `jugador_implicito=0` y tanto `game.exe` como la
+vista previa usan el mismo modelo. Legacy mantiene el sprite clasico.
+
 **Pruebas:** `logic3`, `regresion` caso `gestor`, `exportacion`, nueva suite
 `programa`.
 

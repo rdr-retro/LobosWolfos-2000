@@ -1,6 +1,6 @@
 # Pruebas de LobosWolfos 2000
 
-Veintitres suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
+Veinticuatro suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
 (fase 24), la VM resumible y lobo 3 (fase 25), entidades, escenas y ciclo de
 vida (fase 26), eventos, planificador y mensajes (fase 27), variables, listas
 y funciones (fase 28), colisiones, flags y fisica (fase 29), render de
@@ -8,9 +8,11 @@ trajes, animacion, capas y camara (fase 30), la vista Estudio (fase 31), el
 lienzo de bloques (fase 32), el compilador bloques -> lobo (fase 33), el
 depurador y el replay (fase 34), la interfaz del editor (fase 23), datos,
 productividad, entrada, HUD, audio, guardado, escenas, perfil, plantillas y
-exportacion 2.0 (fases 35 a 45). Congelan el comportamiento antes de cambiar
-el runtime en las fases siguientes. La suite 23 anade cinco casos propios;
-no toca los patrones de las 22 anteriores.
+exportacion 2.0 (fases 35 a 45) y el modelo de programa (fase 46). Congelan
+el comportamiento antes de cambiar el runtime en las fases siguientes. La
+suite 23 anade cinco casos propios; no toca los patrones de las 22
+anteriores. La suite 24 anade tres casos: `opciones_nuevo`, `mapa_solo` y
+`legacy`.
 
 Todo es texto: los patrones de las capturas son hashes SHA-256 y
 volcados de estado, no imagenes. La suite de exportacion lee blobs `LGB1`
@@ -21,7 +23,7 @@ las pruebas no lo necesitan.
 ## Comandos
 
 ```bat
-build.bat prueba              compila y pasa las 23 suites
+build.bat prueba              compila y pasa las 24 suites
 build.bat prueba conformidad  solo la suite del lenguaje
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
@@ -44,6 +46,7 @@ build.bat prueba escenas      solo escenas multiples y camara
 build.bat prueba perfil       solo perfilador y estres
 build.bat prueba plantillas   solo plantillas, ejemplos y tutorial
 build.bat prueba exportacion  solo paquetes, game.exe autonomo y BIOS/QEMU
+build.bat prueba programa     solo el modelo de programa y el jugador implicito
 build.bat prueba regresion    solo la regresion del editor
 build.bat prueba actualizar   reescribe los patrones con el estado actual
 ```
@@ -65,6 +68,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\bloques.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\compilador.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\depurador.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\exportacion.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\programa.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\regresion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\linea_base.ps1
 ```
@@ -72,6 +76,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\linea_base.ps1
 `-Filtro` acepta un patron como `bucle*` o `menu*`. `-Motor ruta.exe`
 permite pasar otro binario (por ejemplo un futuro ejecutable del kernel)
 a la suite de conformidad.
+
+## Modelo de programa (`programa.ps1`)
+
+`pruebas\programa` contiene dos LOGIC3 sin CRC: `mapa_solo.logic3` lleva
+`sistema.opciones` con `jugador_implicito=0`, y `legacy.logic3` no lleva la
+pieza. Ambos apuntan al mapa `pruebas/colisiones/fisica.mav` y no tienen
+objetos. La suite comprueba tres cosas: que un proyecto nuevo guarda la
+pieza de opciones, que `mapa_solo` mantiene `lobo 16 16` con `--tecla
+derecha`, y que `legacy` mueve el lobo y dibuja un BMP distinto. Los
+patrones viven en `pruebas\programa\esperado`.
 
 ## Conformidad del lenguaje (`ejecutar.ps1`)
 

@@ -164,11 +164,20 @@ typedef struct {
     /* bloque en curso (las lineas campo van despues de su bloque) */
     int bloque_id;
     int bloque_evento;
+    int bloque_padre;
     int bloque_orden;
     int bloque_activo;
     char bloque_tipo[MOTOR_L3_NOMBRE_MAX];
     char bloque_codigo[MOTOR_L3_CODIGO_MAX + 1];
     int bloque_tiene_codigo;
+
+    /* Fase 46: piezas `sistema.*` del bloque en curso. */
+    int control_actual;        /* jugador del control en curso, 0 si no aplica */
+    int accion_actual;         /* indice de la accion en curso, -1 si no hay */
+    int regla_actual;          /* indice de la regla en curso, -1 si no hay */
+    int bloque_control[MOTOR_L3_CONTROLES_MAX];
+    int indice_control[MOTOR_L3_CONTROLES_MAX];
+    int num_bloques_control;
 
     /* objeto en curso: sus trajes, variables y eventos cuelgan de el */
     int objeto;
@@ -191,6 +200,141 @@ static int tipo_evento(const char *nombre) {
     return 0;
 }
 
+/* ------------------------------------------------------------------ */
+/* Piezas del modelo de programa (fase 46)                             */
+/* ------------------------------------------------------------------ */
+
+static void motor_copiar(char *dst, int tam, const char *src) {
+    int i;
+    if (!dst || tam <= 0) return;
+    for (i = 0; src && src[i] && i < tam - 1; i++) dst[i] = src[i];
+    for (; i < tam; i++) dst[i] = 0;
+}
+
+static int motor_entero(const char *valor) {
+    return valor && *valor ? (int)strtol(valor, NULL, 10) : 0;
+}
+
+static MotorL3Control *control_de_jugador(MotorL3Sistema *s, int jugador) {
+    int i;
+    for (i = 0; i < s->num_controles; i++)
+        if (s->controles[i].jugador == jugador) return &s->controles[i];
+    return NULL;
+}
+
+static int indice_control_de_bloque(L3Lector *l, int bloque) {
+    int i;
+    for (i = 0; i < l->num_bloques_control; i++)
+        if (l->bloque_control[i] == bloque) return l->indice_control[i];
+    return -1;
+}
+
+static void sistema_preparar_bloque(L3Lector *l) {
+    MotorL3Sistema *s = &l->proy->sistema;
+
+    l->control_actual = 0;
+    l->accion_actual = -1;
+    l->regla_actual = -1;
+
+    if (strcmp(l->bloque_tipo, "sistema.opciones") == 0) {
+        s->opciones.presente = 1;
+        /* Un bloque de opciones incompleto se trata como legacy. */
+        s->opciones.jugador_implicito = 1;
+    } else if (strcmp(l->bloque_tipo, "sistema.accion") == 0) {
+        int control = indice_control_de_bloque(l, l->bloque_padre);
+        if (control >= 0 && s->controles[control].num_acciones <
+                            MOTOR_L3_ACCIONES_MAX) {
+            l->accion_actual = s->controles[control].num_acciones++;
+            memset(&s->controles[control].acciones[l->accion_actual], 0,
+                   sizeof(MotorL3Accion));
+        }
+    } else if (strcmp(l->bloque_tipo, "sistema.regla") == 0) {
+        if (s->num_reglas < MOTOR_L3_REGLAS_MAX) {
+            l->regla_actual = s->num_reglas++;
+            memset(&s->reglas[l->regla_actual], 0, sizeof(MotorL3Regla));
+        }
+    }
+}
+
+static void sistema_campo(L3Lector *l, const char *clave, const char *valor) {
+    MotorL3Sistema *s = &l->proy->sistema;
+
+    if (strcmp(l->bloque_tipo, "sistema.opciones") == 0) {
+        s->opciones.presente = 1;
+        if (strcmp(clave, "programa") == 0)
+            s->opciones.programa = motor_entero(valor);
+        else if (strcmp(clave, "jugador_implicito") == 0)
+            s->opciones.jugador_implicito = motor_entero(valor);
+        else if (strcmp(clave, "auto_compilar") == 0)
+            s->opciones.auto_compilar = motor_entero(valor);
+        return;
+    }
+
+    if (strcmp(l->bloque_tipo, "sistema.control") == 0) {
+        MotorL3Control *c;
+        if (strcmp(clave, "jugador") == 0) {
+            int jugador = motor_entero(valor);
+            if (jugador >= 1 && jugador <= MOTOR_L3_CONTROLES_MAX) {
+                l->control_actual = jugador;
+                c = control_de_jugador(s, jugador);
+                if (!c && s->num_controles < MOTOR_L3_CONTROLES_MAX) {
+                    c = &s->controles[s->num_controles++];
+                    memset(c, 0, sizeof(*c));
+                    c->jugador = jugador;
+                }
+            }
+        }
+        c = control_de_jugador(s, l->control_actual);
+        if (!c) return;
+        if (strcmp(clave, "actor") == 0) c->actor = motor_entero(valor);
+        else if (strcmp(clave, "dispositivo") == 0)
+            motor_copiar(c->dispositivo, sizeof(c->dispositivo), valor);
+        else if (strcmp(clave, "esquema") == 0)
+            motor_copiar(c->esquema, sizeof(c->esquema), valor);
+        else if (strcmp(clave, "activo") == 0) c->activo = motor_entero(valor);
+        return;
+    }
+
+    if (strcmp(l->bloque_tipo, "sistema.accion") == 0) {
+        int control = indice_control_de_bloque(l, l->bloque_padre);
+        MotorL3Accion *a;
+        if (control < 0 || l->accion_actual < 0) return;
+        a = &s->controles[control].acciones[l->accion_actual];
+        if (strcmp(clave, "entrada") == 0)
+            motor_copiar(a->entrada, sizeof(a->entrada), valor);
+        else if (strcmp(clave, "flanco") == 0) a->flanco = motor_entero(valor);
+        else if (strcmp(clave, "funcion") == 0)
+            motor_copiar(a->funcion, sizeof(a->funcion), valor);
+        return;
+    }
+
+    if (strcmp(l->bloque_tipo, "sistema.regla") == 0) {
+        MotorL3Regla *r;
+        if (l->regla_actual < 0) return;
+        r = &s->reglas[l->regla_actual];
+        if (strcmp(clave, "evento") == 0) r->evento = motor_entero(valor);
+        else if (strcmp(clave, "actor") == 0) r->actor = motor_entero(valor);
+        else if (strcmp(clave, "flanco") == 0) r->flanco = motor_entero(valor);
+        else if (strcmp(clave, "cada") == 0) r->cada = motor_entero(valor);
+        else if (strcmp(clave, "funcion") == 0)
+            motor_copiar(r->funcion, sizeof(r->funcion), valor);
+        else if (strcmp(clave, "tag") == 0)
+            motor_copiar(r->etiqueta, sizeof(r->etiqueta), valor);
+    }
+}
+
+static void sistema_cerrar_bloque(L3Lector *l) {
+    if (strcmp(l->bloque_tipo, "sistema.control") != 0) return;
+    MotorL3Control *c;
+    if (l->control_actual < 1 || l->bloque_id <= 0 ||
+        l->num_bloques_control >= MOTOR_L3_CONTROLES_MAX) return;
+    c = control_de_jugador(&l->proy->sistema, l->control_actual);
+    if (!c) return;
+    l->bloque_control[l->num_bloques_control] = l->bloque_id;
+    l->indice_control[l->num_bloques_control] = c - l->proy->sistema.controles;
+    l->num_bloques_control++;
+}
+
 /* Cierra el bloque en curso: si es codigo.lobo de un evento, se guarda
  * como script del proyecto con los parametros del evento. */
 static int cerrar_bloque(L3Lector *l, int linea) {
@@ -198,6 +342,7 @@ static int cerrar_bloque(L3Lector *l, int linea) {
     int i, ev = -1;
 
     if (!l->bloque_activo) return 1;
+    sistema_cerrar_bloque(l);
     l->bloque_activo = 0;
     if (strcmp(l->bloque_tipo, "codigo.lobo") != 0) return 1;
     if (!l->bloque_tiene_codigo || !l->bloque_codigo[0]) return 1;
@@ -548,6 +693,8 @@ int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
     if (!ruta || !p) return fallo_en(error, tam_error, 0, "ruta vacia");
 
     memset(p, 0, sizeof(*p));
+    /* Sin la pieza `sistema.opciones` el proyecto es legacy. */
+    p->sistema.opciones.jugador_implicito = 1;
     p->ancho = 320;
     p->alto = 240;
     p->fps = 60;
@@ -703,6 +850,7 @@ int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
             p->num_bloques++;
             l.bloque_id = entero(salida, tokens, 1);
             l.bloque_evento = 0;
+            l.bloque_padre = 0;
             l.bloque_orden = 0;
             l.bloque_tipo[0] = '\0';
             l.bloque_codigo[0] = '\0';
@@ -710,6 +858,8 @@ int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
             for (i = 2; i + 1 < nt; i++) {
                 if (es(salida, tokens, i, "evento"))
                     l.bloque_evento = entero(salida, tokens, i + 1);
+                else if (es(salida, tokens, i, "padre"))
+                    l.bloque_padre = entero(salida, tokens, i + 1);
                 else if (es(salida, tokens, i, "orden"))
                     l.bloque_orden = entero(salida, tokens, i + 1);
                 else if (es(salida, tokens, i, "tipo")) {
@@ -718,10 +868,13 @@ int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
                     l.bloque_tipo[sizeof(l.bloque_tipo) - 1] = '\0';
                 }
             }
+            sistema_preparar_bloque(&l);
             l.bloque_activo = 1;
             goto siguiente;
         }
         if (es(salida, tokens, 0, "campo") && nt >= 3 && l.bloque_activo) {
+            sistema_campo(&l, texto(salida, tokens, 1),
+                          texto(salida, tokens, 2));
             if (es(salida, tokens, 1, "codigo")) {
                 const char *cod = texto(salida, tokens, 2);
                 size_t m = strlen(cod);

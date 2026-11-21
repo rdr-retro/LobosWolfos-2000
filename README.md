@@ -35,6 +35,12 @@ para cargar y guardar PNG.
   la cabecera al abrir un `.logic`, convierte un LOGIC2 existente y exporta de
   emergencia a LOGIC2. El motor ejecuta los scripts `codigo.lobo` de los
   eventos de fotograma con una VM resumible (fase 25).
+- Modelo de programa (fase 46): los proyectos nuevos guardan `sistema.opciones`
+  con `programa=1`, `jugador_implicito=0` y `auto_compilar=1`. Insertar un mapa
+  crea solo el escenario; el jugador es una pieza explícita (Actor + Control +
+  Acciones + Funciones) sobre bloques `sistema.*`, sin cambiar LOGIC3 ni su CRC.
+  Los proyectos sin esa pieza son legacy y conservan el lobito clásico tanto en
+  `game.exe` como en la vista previa.
 - Vista Estudio (fase 31): entrada **MODO > Vista Estudio**, pestana «Estudio»
   y columnas de 200, 740 y 260 px a 1200 px de ancho. El panel izquierdo crea
   borra y selecciona escenas y objetos, el centro muestra el escenario con
@@ -119,7 +125,7 @@ También se puede compilar desde PowerShell:
 
 ## Pruebas
 
-`build.bat prueba` compila el editor y pasa las 23 suites:
+`build.bat prueba` compila el editor y pasa las 24 suites:
 
 ```bat
 build.bat prueba              todas las suites, en orden
@@ -145,6 +151,7 @@ build.bat prueba escenas      solo escenas multiples, camara y efectos
 build.bat prueba perfil       solo perfilador, presupuestos y estres
 build.bat prueba plantillas   solo plantillas, ejemplos y tutorial
 build.bat prueba exportacion  solo paquetes, game.exe autonomo y BIOS/QEMU
+build.bat prueba programa     solo el modelo de programa y el jugador implicito
 build.bat prueba regresion    solo la interfaz del editor
 build.bat prueba actualizar   reescribe los patrones (revisar el diff)
 ```
