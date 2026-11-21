@@ -551,8 +551,8 @@ el motor ya compila.
   a cualquier ventana con marco que no sea popup) y después se activan
   `WS_SYSMENU`, `WS_MINIMIZEBOX` y `WS_MAXIMIZEBOX`; el área cliente se corrige
   a 1200x700 tras crear la ventana. En la franja de 34 px (`TAB_BARRA_ALTO`) se
-  dibuja el caption clásico (degradado azul o gris sin foco), con el icono y el
-  título junto a él, a la izquierda; a continuación vienen las pestañas y su
+  dibuja el caption con degradado rosa-violeta-azul (o gris sin foco), con el
+  icono y el título junto a él, a la izquierda; a continuación vienen las pestañas y su
   botón `+`, y los controles minimizar/maximizar/cerrar quedan pegados al borde
   derecho, como en Windows 2000. El título se dibuja a partir de
   `TITULO_TEXTO_X` (28 px), se recorta con puntos suspensivos si no cabe y
@@ -564,7 +564,8 @@ el motor ya compila.
   arrastrar, doble clic para maximizar/restaurar y el menú del sistema siguen
   funcionando, y los botones actúan al soltar (se descartan en
   `WM_CAPTURECHANGED`). Verificado por píxeles y capturas: en 1200x700 el
-  degradado va de (11,38,108) a (55,106,161), el icono ocupa 6..21 x 9..24, el
+  degradado va de (254,95,168) en rosa a (72,140,227) en azul, con violeta
+  (178,79,209) en el centro y gris sin foco; el icono ocupa 6..21 x 9..24, el
   título 31..203, la pestaña activa empieza en 220, el `+` en 323..341 y los
   controles en 1119..1192 (glifos 1126..1134, 1151..1161 y 1178..1186); con
   `--maximizar` el buffer es 1920x1080, el título sigue a la izquierda y los
@@ -853,6 +854,21 @@ el motor ya compila.
     prueba` pasa las 23 suites. Release publicada: `v2.0-beta`, con
     `LobosWolfos2000.exe`, `game.exe`, SHA-256 y nota CRLF. El ejemplo
     canonico da las mismas ocho posiciones en Windows y en QEMU.
+
+- **21-11-2026 (ajuste final de ventana y barra)** - La ventana principal del
+  editor deja `WS_THICKFRAME` y usa solo `WS_POPUP | WS_CLIPCHILDREN`, sin
+  bordes de Windows. `WM_NCHITTEST` reserva una banda de 6 px en los bordes
+  para redimensionar y mantiene `HTCAPTION` en los huecos de la franja, de modo
+  que arrastrar y el doble clic siguen funcionando. `WM_GETMINMAXINFO` toma
+  `rcWork` del monitor (con respaldo en `SPI_GETWORKAREA`) para que maximizar
+  llene el area de trabajo sin tapar la barra de tareas; el minimo de arrastre
+  queda en 640x400. La franja de pestanas cambia el degradado azul vertical
+  por un degradado horizontal rosa-violeta-azul inspirado en GTA Vice City,
+  con brillo arriba, sombra abajo y gris cuando la ventana no tiene el foco.
+  En 1200x700 se verifica rosa (254,95,168), violeta (178,79,209) y azul
+  (72,140,227); los hashes BMP de las suites con captura del editor se
+  actualizan. `build.bat prueba` pasa las 23 suites. Release `v2.0-beta`
+  actualizada con los binarios, sus SHA-256 y la nota CRLF.
 
 ## 5. Pendiente de decidir
 

@@ -68,17 +68,18 @@ typedef unsigned char  u8;
 #define TAB_FAVICON_A        0x00647C94u
 #define TAB_FAVICON_B        0x00DCE6F0u
 
-/* Barra de titulo propia (estilo clasico de Windows 2000): degradado azul,
+/* Barra de titulo propia: degradado rosa, violeta y azul estilo Vice City,
  * texto blanco y botones grises con bisel. Las pestanas del navegador viven
  * en esta misma franja, a la derecha de los controles de ventana. */
-#define TITULO_FONDO_A       0x000A246Au
-#define TITULO_FONDO_B       0x003A6EA5u
+#define TITULO_FONDO_A       0x00FF5FA8u
+#define TITULO_FONDO_M       0x00B24FD1u
+#define TITULO_FONDO_B       0x002E9BE8u
 #define TITULO_FONDO_OFF_A   0x007F7F7Fu
 #define TITULO_FONDO_OFF_B   0x00B4B4B4u
 #define TITULO_TEXTO         0x00FFFFFFu
 #define TITULO_TEXTO_OFF     0x00E8E8E8u
-#define TITULO_LUZ           0x005A8EC0u
-#define TITULO_BORDE         0x00203050u
+#define TITULO_BRILLO        0.35f
+#define TITULO_SOMBRA        0.50f
 #define TITULO_LUZ_OFF       0x00D0D0D0u
 #define TITULO_BORDE_OFF     0x00606060u
 #define TITULO_BOTON         0x00D4D0C8u

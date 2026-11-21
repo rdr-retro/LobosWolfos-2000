@@ -6,6 +6,9 @@
 
 App g;
 
+/* Banda del area cliente que se usa para redimensionar sin marco nativo. */
+#define BORDE_VENTANA 6
+
 /* ------------------------------------------------------------------ */
 /* Utilidades                                                          */
 /* ------------------------------------------------------------------ */
@@ -1232,6 +1235,33 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             app_redimensionar(LOWORD(lp), HIWORD(lp));
             app_invalidar();
             return 0;
+        case WM_GETMINMAXINFO: {
+            /* Un WS_POPUP maximizado ocupa pantalla completa y tapa la barra
+             * de tareas. El area de trabajo del monitor es la ventana llena;
+             * asi el doble clic da ventana maximizada, no pantalla completa. */
+            MINMAXINFO *info = (MINMAXINFO *)lp;
+            HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi;
+            memset(&mi, 0, sizeof(mi));
+            mi.cbSize = sizeof(mi);
+            if (monitor && GetMonitorInfoA(monitor, &mi)) {
+                info->ptMaxPosition.x = mi.rcWork.left;
+                info->ptMaxPosition.y = mi.rcWork.top;
+                info->ptMaxSize.x = mi.rcWork.right - mi.rcWork.left;
+                info->ptMaxSize.y = mi.rcWork.bottom - mi.rcWork.top;
+            } else {
+                RECT area;
+                if (SystemParametersInfoA(SPI_GETWORKAREA, 0, &area, 0)) {
+                    info->ptMaxPosition.x = area.left;
+                    info->ptMaxPosition.y = area.top;
+                    info->ptMaxSize.x = area.right - area.left;
+                    info->ptMaxSize.y = area.bottom - area.top;
+                }
+            }
+            info->ptMinTrackSize.x = 640;
+            info->ptMinTrackSize.y = 400;
+            return 0;
+        }
         case WM_ACTIVATE:
             g.ventana_activa = (LOWORD(wp) != WA_INACTIVE);
             if (!g.ventana_activa) g.titulo_boton_pulsado = -1;
@@ -1246,14 +1276,32 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_ERASEBKGND:
             return 1;
         case WM_NCHITTEST: {
-            /* La barra de titulo se dibuja en el area cliente. Solo los
-             * controles y las pestanas reciben clics; el resto se comporta
-             * como el caption nativo (arrastrar, doble clic, menu sistema). */
-            LRESULT ht = DefWindowProcA(hwnd, msg, wp, lp);
+            /* No hay marco de Windows: la barra, las pestanas y los controles
+             * son propios. Los bordes del cliente se comportan como tiradores
+             * de redimensionado y el resto de la franja superior se arrastra
+             * como si fuera el caption. */
+            LRESULT ht;
             POINT p;
+            int ancho = g.ancho ? g.ancho : ANCHO_INICIAL;
+            int alto = g.alto ? g.alto : ALTO_INICIAL;
             p.x = GET_X_LPARAM(lp);
             p.y = GET_Y_LPARAM(lp);
             ScreenToClient(hwnd, &p);
+            if (!IsZoomed(hwnd)) {
+                if (p.x < BORDE_VENTANA) {
+                    if (p.y < BORDE_VENTANA) return HTTOPLEFT;
+                    if (p.y >= alto - BORDE_VENTANA) return HTBOTTOMLEFT;
+                    return HTLEFT;
+                }
+                if (p.x >= ancho - BORDE_VENTANA) {
+                    if (p.y < BORDE_VENTANA) return HTTOPRIGHT;
+                    if (p.y >= alto - BORDE_VENTANA) return HTBOTTOMRIGHT;
+                    return HTRIGHT;
+                }
+                if (p.y < BORDE_VENTANA) return HTTOP;
+                if (p.y >= alto - BORDE_VENTANA) return HTBOTTOM;
+            }
+            ht = DefWindowProcA(hwnd, msg, wp, lp);
             if (ht == HTCLIENT && p.y >= 0 && p.y < TAB_BARRA_ALTO &&
                 !titulo_zona_interactiva(p.x, p.y))
                 return HTCAPTION;
@@ -1520,16 +1568,16 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
         return 1;
     }
 
-    /* Sin caption nativo: la barra de titulo y las pestanas comparten una
-     * sola franja dibujada en el cliente. Se crea como ventana emergente
-     * (WS_POPUP) porque Windows anade WS_CAPTION a cualquier ventana con
-     * marco que no sea popup; despues se activan los estilos de sistema. */
+    /* Sin caption ni marco de Windows: la barra de titulo, las pestanas y
+     * los controles son propios y viven en el area cliente. Se crea como
+     * WS_POPUP para que Windows no dibuje ningun borde; el redimensionado
+     * se gestiona en WM_NCHITTEST con una banda sensible en los bordes. */
     {
         RECT marco;
         int px, py;
         marco.left = 0; marco.top = 0;
         marco.right = ANCHO_INICIAL; marco.bottom = ALTO_INICIAL;
-        estilo = WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN;
+        estilo = WS_POPUP | WS_CLIPCHILDREN;
         AdjustWindowRectEx(&marco, estilo, FALSE, 0);
         px = (GetSystemMetrics(SM_CXSCREEN) - (marco.right - marco.left)) / 2;
         py = (GetSystemMetrics(SM_CYSCREEN) - (marco.bottom - marco.top)) / 3;
@@ -1548,9 +1596,9 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
     SetWindowLongA(hwnd, GWL_STYLE,
                    GetWindowLongA(hwnd, GWL_STYLE) |
                    WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
-    /* El area cliente debe medir lo mismo que el buffer inicial: se corrige
-     * el marco despues de crear la ventana porque AdjustWindowRectEx no
-     * siempre acierta con el marco del gestor de ventanas. */
+    /* El area cliente debe medir lo mismo que el buffer inicial. Al no haber
+     * marco el ajuste suele ser cero, pero se conserva la correccion por si
+     * el gestor de ventanas anade algun area no cliente al activar WS_SYSMENU. */
     {
         RECT cr, wr;
         GetClientRect(hwnd, &cr);

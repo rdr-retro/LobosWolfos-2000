@@ -1187,21 +1187,52 @@ static void dibujar_cruz(int x, int y, int lado, u32 color) {
     dibujar_linea(x + lado - m - 1, y + m, x + m, y + lado - m - 1, color);
 }
 
-/* Fondo de la barra de titulo: degradado clasico azul (o gris si la ventana
- * no tiene el foco), linea de luz arriba y separador con la barra de menus. */
-static void dibujar_fondo_titulo(void) {
-    u32 arriba = g.ventana_activa ? TITULO_FONDO_A : TITULO_FONDO_OFF_A;
-    u32 abajo = g.ventana_activa ? TITULO_FONDO_B : TITULO_FONDO_OFF_B;
-    int y;
-    for (y = 0; y < TAB_BARRA_ALTO; y++) {
-        float t = (float)y / (float)(TAB_BARRA_ALTO - 1);
-        u32 c = mezclar_color_redondeado(arriba, abajo, t);
-        dibujar_rect(0, y, g.ancho, y + 1, 0xFF000000u | c);
+/* Color del degradado activo: rosa a la izquierda, violeta en el centro y
+ * azul a la derecha, como la franja superior de GTA Vice City. */
+static u32 color_degradado_titulo(float t) {
+    if (t <= 0.5f)
+        return mezclar_color_redondeado(TITULO_FONDO_A, TITULO_FONDO_M,
+                                        t * 2.0f);
+    return mezclar_color_redondeado(TITULO_FONDO_M, TITULO_FONDO_B,
+                                    (t - 0.5f) * 2.0f);
+}
+
+/* Una columna por x: el degradado va en horizontal y las franjas de brillo
+ * y sombra comparten la misma paleta. */
+static void dibujar_franja_titulo(int y0, int y1, float brillo, float sombra) {
+    int x;
+    for (x = 0; x < g.ancho; x++) {
+        float t = g.ancho > 1 ? (float)x / (float)(g.ancho - 1) : 0.0f;
+        u32 c = color_degradado_titulo(t);
+        if (brillo > 0.0f)
+            c = mezclar_color_redondeado(c, 0x00FFFFFFu, brillo);
+        if (sombra > 0.0f)
+            c = mezclar_color_redondeado(c, 0x00000000u, sombra);
+        dibujar_rect(x, y0, x + 1, y1, 0xFF000000u | c);
     }
-    dibujar_rect(0, 0, g.ancho, 1,
-                 g.ventana_activa ? TITULO_LUZ : TITULO_LUZ_OFF);
-    dibujar_rect(0, TAB_BARRA_ALTO - 2, g.ancho, TAB_BARRA_ALTO,
-                 g.ventana_activa ? TITULO_BORDE : TITULO_BORDE_OFF);
+}
+
+/* Fondo de la barra de titulo: degradado rosa-azul cuando la ventana tiene el
+ * foco (gris si no lo tiene), linea de luz arriba y separador con la barra de
+ * menus. */
+static void dibujar_fondo_titulo(void) {
+    if (!g.ventana_activa) {
+        int y;
+        for (y = 0; y < TAB_BARRA_ALTO; y++) {
+            float t = (float)y / (float)(TAB_BARRA_ALTO - 1);
+            u32 c = mezclar_color_redondeado(TITULO_FONDO_OFF_A,
+                                             TITULO_FONDO_OFF_B, t);
+            dibujar_rect(0, y, g.ancho, y + 1, 0xFF000000u | c);
+        }
+        dibujar_rect(0, 0, g.ancho, 1, TITULO_LUZ_OFF);
+        dibujar_rect(0, TAB_BARRA_ALTO - 2, g.ancho, TAB_BARRA_ALTO,
+                     TITULO_BORDE_OFF);
+        return;
+    }
+    dibujar_franja_titulo(0, TAB_BARRA_ALTO, 0.0f, 0.0f);
+    dibujar_franja_titulo(0, 1, TITULO_BRILLO, 0.0f);
+    dibujar_franja_titulo(TAB_BARRA_ALTO - 2, TAB_BARRA_ALTO,
+                          0.0f, TITULO_SOMBRA);
 }
 
 /* Icono de la aplicacion, como en el caption nativo. Se carga una sola vez. */
