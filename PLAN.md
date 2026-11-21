@@ -865,10 +865,11 @@ el motor ya compila.
   queda en 640x400. La franja de pestanas cambia el degradado azul vertical
   por un degradado horizontal rosa-violeta-azul inspirado en GTA Vice City,
   con brillo arriba, sombra abajo y gris cuando la ventana no tiene el foco.
-  En 1200x700 se verifica rosa (254,95,168), violeta (178,79,209) y azul
-  (72,140,227); los hashes BMP de las suites con captura del editor se
-  actualizan. `build.bat prueba` pasa las 23 suites. Release `v2.0-beta`
-  actualizada con los binarios, sus SHA-256 y la nota CRLF.
+  Los paneles desplegables de la barra de menus pierden la sombra gris y
+  conservan solo su borde. En 1200x700 se verifica rosa (254,95,168), violeta
+  (178,79,209) y azul (72,140,227); los hashes BMP de las suites con captura
+  del editor se actualizan. `build.bat prueba` pasa las 23 suites. Release
+  `v2.0-beta` actualizada con los binarios, sus SHA-256 y la nota CRLF.
 
 ## 5. Pendiente de decidir
 

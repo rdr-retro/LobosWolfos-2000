@@ -1525,7 +1525,6 @@ void ui_dibujar_menu_desplegable(void) {
     n = menu_num_filas(menu);
     mapa = (g.vista == VISTA_MAPA);
 
-    dibujar_rect(panel.x + 2, panel.y + 2, zona_derecha(panel) + 2, zona_abajo(panel) + 2, 0x00A0A0A0u);
     dibujar_rect_z(panel, MENU_FONDO);
     dibujar_marco_z(panel, MENU_BORDE);
 
