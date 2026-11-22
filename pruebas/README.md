@@ -122,9 +122,10 @@ Los casos viven en `pruebas\conformidad`:
 | `<nombre>.bmp.sha256` | no | hash del BMP final, cuando el dibujo importa |
 
 Sin `.lobo` el caso solo usa sus `.args` (asi se prueba `render_mapa`,
-que corre un `.mav` sin scripts). Cada caso se ejecuta en el raiz del
-repositorio porque el motor busca `maps\` y `tiles\` desde el directorio
-de trabajo.
+que corre un `.mav` sin scripts, y `ejemplo_minijuego`, que abre
+`ejemplos\minijuego.logic` y comprueba ocho fotogramas bajando). Cada caso se
+ejecuta en el raiz del repositorio porque el motor busca `maps\` y `tiles\`
+desde el directorio de trabajo.
 
 Anadir un caso:
 

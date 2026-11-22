@@ -12,7 +12,26 @@ al cargar.
 - Tres monedas y una meta, todas con bloques `codigo.lobo`.
 - Movimiento con las flechas y comprobacion de colisiones en cada fotograma.
 
-El mismo proyecto se puede generar desde el editor con:
+## Minijuego LOGIC2
+
+`minijuego.logic` es un proyecto clásico jugable con el motor actual: usa
+`maps\mapa.mav`, un item de mapa y un botón `FUNCIONES` con código lobo. No
+necesita LOGIC3, bloques ni archivos nuevos. Las flechas mueven al lobo, el
+mapa detiene los muros, `Espacio` vuelve al inicio y llegar al extremo derecho
+del pasillo cierra la partida.
+
+Desde la raíz del repositorio:
+
+```
+LobosWolfos2000.exe --abrir-logica ejemplos\minijuego.logic
+motor\game.exe --logica ejemplos\minijuego.logic
+```
+
+El caso `pruebas\conformidad\ejemplo_minijuego.args` congela la carga del
+ejemplo y ocho fotogramas bajando; el hash del BMP comprueba que el mapa y el
+sprite se dibujan.
+
+El mismo proyecto LOGIC3 se puede generar desde el editor con:
 
 - `Ctrl+Mayus+N` abre el selector `Juego nuevo` y pulsar `Plataformas`.
 - `F2` abre el tutorial del estudio.

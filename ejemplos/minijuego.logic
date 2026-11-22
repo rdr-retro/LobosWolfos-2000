@@ -1,0 +1,47 @@
+LOGIC2
+0 0
+2
+0 0 96 64 1 0 "mapa.mav" -1
+0 0 96 64 2 0 "" 1
+1
+1 "Laberinto simple" 581
+# Laberinto simple: baja al pasillo y corre a la derecha hasta la salida.
+# Las flechas mueven y salto vuelve al inicio. El mapa impide cruzar muros.
+si inicio == 0
+  x = -124
+  y = -92
+  inicio = 1
+fin
+si tecla_salto
+  x = -124
+  y = -92
+fin
+si tecla_izquierda
+  si choca(x - 4, y) == 0
+    x = x - 4
+  fin
+fin
+si tecla_derecha
+  si choca(x + 4, y) == 0
+    x = x + 4
+  fin
+fin
+si tecla_arriba
+  si choca(x, y - 4) == 0
+    y = y - 4
+  fin
+fin
+si tecla_abajo
+  si choca(x, y + 4) == 0
+    y = y + 4
+  fin
+fin
+si x > 380
+  si y > 96
+    si y < 128
+      cerrar()
+    fin
+  fin
+fin
+
+PROYECTO "Minijuego del laberinto" 640 480 1 60 3 00101820

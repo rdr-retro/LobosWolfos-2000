@@ -760,6 +760,12 @@ del jugador y color de fondo. Los lectores antiguos la ignoran y los nuevos
 la aplican a la vista previa y al `game.exe`; un `.logic` sin esa línea usa
 los valores por defecto (640x480, 60 FPS, velocidad 3 y fondo negro).
 
+El ejemplo `ejemplos\minijuego.logic` muestra ese formato clásico con un
+minijuego jugable: baja por el pasillo del mapa y corre hasta la salida, con
+colisiones y reinicio con `Espacio`. Se abre con **ARCHIVO > Abrir lógica
+.logic** o con `--abrir-logica ejemplos\minijuego.logic`, y el motor lo corre
+con `motor\game.exe --logica ejemplos\minijuego.logic`.
+
 La opción **Guardar proyecto .wolfo** del menú **ARCHIVO** empaqueta el
 proyecto entero en un solo archivo: la lógica con sus ajustes
 (`proyecto.logic`), los mapas que usan sus elementos, los tiles de esos
