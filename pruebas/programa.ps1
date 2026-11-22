@@ -108,15 +108,15 @@ function Get-VolcarNormalizado([string]$ruta, [string]$dir) {
     return $texto
 }
 
-# Sondas del constructor cuando muestra los elementos LOGIC2: titulo
-# INSPECTOR, lista del panel derecho y las dos tarjetas del lienzo central
-# (cabecera, cuerpo y leyenda "solo lectura").
+# Sondas del constructor cuando el .logic clasico se proyecta a piezas:
+# titulo INSPECTOR, panel derecho, las dos piezas reales del lienzo (borde,
+# color, aviso de enlace y tipo) y el hueco libre junto a ellas.
 function Get-PixelesElementosLogic2([string]$bmp) {
     $imagen = [System.Drawing.Bitmap]::FromFile($bmp)
     try {
-        $puntos = @("921,68", "930,94", "932,114", "931,132", "931,154",
-                    "190,64", "190,86", "350,110", "190,164", "350,190",
-                    "220,210")
+        $puntos = @("921,68", "930,94", "190,92", "200,110", "310,115",
+                    "250,150", "340,92", "350,110", "460,115", "400,150",
+                    "500,110")
         $salida = @()
         foreach ($punto in $puntos) {
             $xy = $punto.Split(",")
@@ -368,8 +368,14 @@ Ejecutar-Caso "elementos_logic2" {
     Comprobar-Hash "elementos_logic2" (Get-Sha256 $bmp) $problemas
     Comprobar-Texto "elementos_logic2" ".pixeles" `
                     (Get-PixelesElementosLogic2 $bmp) $problemas
-    if ($ui -notlike "programa_modo=1 programa_piezas=0*") {
-        [void]$problemas.Add("el gestor no abrio el constructor")
+    if ($ui -notlike "programa_modo=1 programa_piezas=2*") {
+        [void]$problemas.Add("el .logic no se proyecto a dos piezas reales")
+    }
+    if ($ui -notlike "*programa_pieza=1:sistema.recurso.mapa:24,40:0:mapa.mav:0*") {
+        [void]$problemas.Add("falta la pieza real del mapa")
+    }
+    if ($ui -notlike "*programa_pieza=2:sistema.funcion:174,40:0:Laberinto_simple:0*") {
+        [void]$problemas.Add("falta la pieza real de la funcion")
     }
     if ($logica -notlike "*modulos=2*") {
         [void]$problemas.Add("el .logic no trae dos elementos")
@@ -377,8 +383,8 @@ Ejecutar-Caso "elementos_logic2" {
 }
 
 # Recarga por la misma funcion que ARCHIVO > Abrir logica .logic. Primero
-# abre un LOGIC3 con tres piezas y despues el minijuego: sin limpiar el
-# constructor, el inspector seguiria mostrando las piezas viejas.
+# abre un LOGIC3 con tres piezas y despues el minijuego: sin reproyectar el
+# constructor, el lienzo seguiria mostrando las piezas viejas.
 Ejecutar-Caso "menu_tras_piezas" {
     param($dir, $problemas)
     $origen = Join-Path $raiz "ejemplos\minijuego.logic"
@@ -407,8 +413,11 @@ Ejecutar-Caso "menu_tras_piezas" {
     Comprobar-Hash "menu_tras_piezas" (Get-Sha256 $bmp) $problemas
     Comprobar-Texto "menu_tras_piezas" ".pixeles" `
                     (Get-PixelesElementosLogic2 $bmp) $problemas
-    if ($ui -notlike "programa_modo=1 programa_piezas=0*") {
-        [void]$problemas.Add("quedaron piezas del LOGIC3 anterior")
+    if ($ui -notlike "programa_modo=1 programa_piezas=2*") {
+        [void]$problemas.Add("el menu no proyecto las piezas del LOGIC2")
+    }
+    if ($ui -notlike "*programa_pieza=1:sistema.recurso.mapa:24,40:0:mapa.mav:0*") {
+        [void]$problemas.Add("quedo la pieza del LOGIC3 anterior")
     }
     if ($logica -notlike "*modulos=2*logic3=0*") {
         [void]$problemas.Add("no se cargo el LOGIC2 del minijuego")

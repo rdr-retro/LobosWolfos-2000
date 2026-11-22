@@ -209,7 +209,8 @@ Ejecutar-Caso "exportar" {
     $bmp = Join-Path $dir "export.bmp"
     $dump = Join-Path $dir "export.txt"
     $cod = Ejecutar-Editor $dir @("--abrir-logic3", $entrada, "--exportar-logic2", $salida,
-                                  "--captura", $bmp, "--volcar", $dump)
+                                  "--captura", $bmp, "--volcar", $dump,
+                                  "--compatibilidad")
     if ($cod -ne 0) { [void]$problemas.Add("el editor devolvio el codigo $cod") }
     Comprobar-Campos $dump $problemas @{ logic3 = "1"; escenas = "1"; bloques = "1" }
     if (-not (Test-Path -LiteralPath $salida)) {
@@ -228,10 +229,13 @@ Ejecutar-Caso "exportar" {
         }
     }
 
-    # La vista del LOGIC3 y la del LOGIC2 exportado deben ser la misma.
+    # La vista clasica del LOGIC3 y la del LOGIC2 exportado deben ser la misma.
+    # El LOGIC2 ya se proyecta a piezas reales en la capa Programa, asi que se
+    # compara en Compatibilidad para aislar el contenido del proyecto.
     $bmp2 = Join-Path $dir "export2.bmp"
     $cod = Ejecutar-Editor $dir @("--abrir-logica", $salida,
-                                  "--captura", $bmp2, "--volcar", (Join-Path $dir "export2.txt"))
+                                  "--captura", $bmp2, "--volcar", (Join-Path $dir "export2.txt"),
+                                  "--compatibilidad")
     if ($cod -ne 0) { [void]$problemas.Add("la recarga clasica devolvio el codigo $cod") }
     if ((Get-Sha256 $bmp2) -ne (Get-Sha256 $bmp)) {
         [void]$problemas.Add("la vista del LOGIC3 y la del LOGIC2 exportado difieren")

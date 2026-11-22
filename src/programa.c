@@ -438,6 +438,67 @@ static int def_indice(const char *tipo) {
     return -1;
 }
 
+/* Proyecta un LOGIC1/LOGIC2 cargado sobre el lienzo del constructor. Los
+ * elementos del .logic se convierten en piezas reales: se pueden seleccionar,
+ * arrastrar y enlazar como cualquier otra pieza de la paleta. Solo vive en
+ * memoria, no se escribe sistema.pieza, no se crea actor, jugador ni
+ * movimiento y el formato y el CRC del archivo quedan intactos. */
+void programa_cargar_logic2(void) {
+    int i;
+
+    programa_reiniciar();
+    for (i = 0; i < g.num_modulos; i++) {
+        const ModuloElemento *e = &g.modulos[i];
+        PiezaPrograma *p;
+        const char *nombre_funcion = NULL;
+        int def = -1;
+        int columna, fila;
+
+        if (e->funcion < 0) {
+            if (!e->mapa[0]) continue;
+            def = def_indice("sistema.recurso.mapa");
+        } else if (e->funcion == 0) {
+            def = def_indice("sistema.evento.inicio");
+        } else {
+            def = def_indice("sistema.funcion");
+            nombre_funcion = modulos_funcion_nombre_id(e->funcion);
+        }
+        if (def < 0) continue;
+        if (g.num_programa_piezas >= PROGRAMA_PIEZAS_MAX) break;
+
+        columna = g.num_programa_piezas % 3;
+        fila = g.num_programa_piezas / 3;
+        p = &g.programa_piezas[g.num_programa_piezas++];
+        memset(p, 0, sizeof(*p));
+        p->id = e->id > 0 ? e->id : g.programa_siguiente_id;
+        p->def = def;
+        p->x = 24 + columna * 150;
+        p->y = 40 + fila * 92;
+        p->ancho = PROGRAMA_TARJETA_ANCHO;
+        p->alto = PROGRAMA_TARJETA_ALTO;
+        copiar_local(p->nombre, sizeof(p->nombre), DEFS[def].nombre);
+        copiar_local(p->valor, sizeof(p->valor), DEFS[def].valor[0]);
+        copiar_local(p->valor2, sizeof(p->valor2), DEFS[def].valor[1]);
+        if (e->funcion < 0) {
+            copiar_local(p->nombre, sizeof(p->nombre), e->mapa);
+            copiar_local(p->valor, sizeof(p->valor), e->mapa);
+        } else if (e->funcion > 0) {
+            if (nombre_funcion && nombre_funcion[0])
+                copiar_local(p->nombre, sizeof(p->nombre), nombre_funcion);
+            else
+                formatear(p->nombre, sizeof(p->nombre), "Funcion %d",
+                          e->funcion);
+            copiar_local(p->valor, sizeof(p->valor), p->nombre);
+        }
+        if (p->id >= g.programa_siguiente_id)
+            g.programa_siguiente_id = p->id + 1;
+    }
+    programa_validar();
+    /* El .logic clasico se abre en la capa Programa para que las piezas
+     * proyectadas se vean desde el primer momento. */
+    g.programa_modo = 1;
+}
+
 /* Prepara la vista al entrar al gestor. Sin modelo cargado los contadores
  * arrancan a cero, asi que hay que dejar la seleccion en -1 para que no
  * aparezca resaltada la primera pieza de la paleta. */

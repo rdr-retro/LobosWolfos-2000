@@ -765,11 +765,12 @@ minijuego jugable: baja por el pasillo del mapa y corre hasta la salida, con
 colisiones y reinicio con `Espacio`. Se abre con **ARCHIVO > Abrir lógica
 .logic** o con `--abrir-logica ejemplos\minijuego.logic`, y el motor lo corre
 con `motor\game.exe --logica ejemplos\minijuego.logic`. Al cargarlo en el
-gestor, el inspector del constructor enumera sus dos elementos (el mapa y la
-función `Laberinto simple`) y el lienzo central dibuja una tarjeta por cada
-uno, aunque no haya piezas arrastrables. Abrir otra lógica desde **ARCHIVO**
-estando ya en el gestor limpia las piezas del proyecto anterior y vuelve a
-mostrar esas tarjetas sin salir del constructor.
+gestor, el lienzo del constructor convierte sus dos elementos en piezas reales:
+`Mapa` con `mapa.mav` y `Función` con `Laberinto simple`. Se pueden seleccionar,
+arrastrar y enlazar como cualquier otra pieza de la paleta; no crean actor,
+jugador ni movimiento automático y no se escriben en el `.logic`. Abrir otra
+lógica desde **ARCHIVO** estando ya en el gestor sustituye esas piezas por las
+del proyecto nuevo sin salir del constructor.
 
 La opción **Guardar proyecto .wolfo** del menú **ARCHIVO** empaqueta el
 proyecto entero en un solo archivo: la lógica con sus ajustes

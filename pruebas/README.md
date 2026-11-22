@@ -89,10 +89,10 @@ pieza de opciones, que `mapa_solo` mantiene `lobo 16 16` con `--tecla
 derecha`, que `legacy` mueve el lobo y dibuja un BMP distinto, que
 `ui_programa` construye un lienzo con Escenario, Actor y Teclado enlazados,
 que `entrada_gestor` abre el constructor con `--gestor` sin `--programa`, que
-`elementos_logic2` lista los dos elementos del minijuego en el inspector
-cuando no hay piezas, que `menu_tras_piezas` recarga ese LOGIC2 por la ruta
-del menú después de un LOGIC3 con piezas, y que `arrastre_gestor` crea una
-pieza desde esa entrada normal.
+`elementos_logic2` proyecta los dos elementos del minijuego en piezas reales
+del lienzo, que `menu_tras_piezas` recarga ese LOGIC2 por la ruta del menú
+después de un LOGIC3 con piezas, y que `arrastre_gestor` crea una pieza desde
+esa entrada normal.
 
 El caso `entrada_gestor` fija el volcado `programa_modo=1 programa_piezas=0`,
 el hash del BMP y 15 sondas de pixel; la paleta aparece sin resaltar la primera
@@ -106,19 +106,20 @@ arrastra una pieza desde la paleta, guarda y comprueba que aparecen `sistema.opc
 `arrastre_gestor.bmp.sha256` y `arrastre_gestor.pixeles`.
 
 El caso `elementos_logic2` abre `ejemplos\minijuego.logic` desde el gestor y
-comprueba que el inspector del constructor lista el mapa `mapa.mav` y la
-funcion `Laberinto simple` aunque no haya piezas. Sus patrones son
+comprueba que el lienzo tiene dos piezas reales: `sistema.recurso.mapa` con
+`mapa.mav` y `sistema.funcion` con `Laberinto simple`. Sus patrones son
 `elementos_logic2.volcar`, `elementos_logic2.volcar-programa`,
 `elementos_logic2.bmp.sha256` y `elementos_logic2.pixeles`; este ultimo fija
-once sondas: cinco del panel derecho, incluida la cabecera `ELEMENTOS LOGIC2`,
-y seis del lienzo central para comprobar las dos tarjetas de los elementos.
+once sondas: dos del panel derecho, dos bordes, dos colores de pieza, dos
+avisos de enlace, dos tipos y el lienzo vacío junto a las piezas.
 
 El caso `menu_tras_piezas` usa `--abrir-logic3` con `ui_programa.logic3` y
 después `--abrir-logica-menu minijuego.logic`, la misma función que
 **ARCHIVO > Abrir lógica .logic** sin el cuadro de archivo. Comprueba que
-las tres piezas previas desaparecen, que el LOGIC2 queda activo y que el
-inspector vuelve a mostrar sus dos elementos. Sus patrones son
-`menu_tras_piezas.*` y reutilizan las once sondas del caso anterior.
+las tres piezas previas se sustituyen por las dos piezas proyectadas, que el
+LOGIC2 queda activo y que el mapa del LOGIC3 anterior no queda en el lienzo.
+Sus patrones son `menu_tras_piezas.*` y reutilizan las once sondas del caso
+anterior.
 
 El caso `ui_programa` entra con `--programa`, arrastra tres piezas y un
 enlace con `--arrastre-programa`, y guarda con `--guardar-logic3`. Sus patrones

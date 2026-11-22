@@ -1300,6 +1300,10 @@ int logica_cargar_archivo(const char *ruta) {
     }
     fclose(f);
     g.modulo_siguiente_id = max_id + 1;
+    /* Los elementos del .logic clasico pasan a ser piezas del constructor.
+     * Esta proyeccion es solo de memoria: no altera el archivo ni crea
+     * actor, jugador ni movimiento automatico. */
+    programa_cargar_logic2();
     app_menus_resolucion();
     return 1;
 }

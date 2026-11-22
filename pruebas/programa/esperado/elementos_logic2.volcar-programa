@@ -1,1 +1,3 @@
-programa_modo=1 programa_piezas=0 programa_sel=-1 programa_paleta=-1 programa_grupos=0000000 programa_undo=0 programa_redo=0
+programa_modo=1 programa_piezas=2 programa_sel=-1 programa_paleta=-1 programa_grupos=0000000 programa_undo=0 programa_redo=0
+programa_pieza=1:sistema.recurso.mapa:24,40:0:mapa.mav:0
+programa_pieza=2:sistema.funcion:174,40:0:Laberinto_simple:0

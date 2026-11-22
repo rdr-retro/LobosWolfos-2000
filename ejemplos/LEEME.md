@@ -27,13 +27,13 @@ LobosWolfos2000.exe --abrir-logica ejemplos\minijuego.logic
 motor\game.exe --logica ejemplos\minijuego.logic
 ```
 
-Al abrirlo en el gestor, el inspector del constructor enumera los dos
-elementos del proyecto (`mapa.mav` y la funcion `Laberinto simple`) y el lienzo
-central dibuja una tarjeta de solo lectura para cada uno, aunque la capa
-Programa no tenga piezas que arrastrar. El boton **COMPAT.** muestra los
-mismos elementos en el lienzo clásico. Si ya estabas en el gestor con otro
-proyecto, **ARCHIVO > Abrir lógica .logic** descarta esas piezas y actualiza
-las tarjetas sin llevarte a Pintar.
+Al abrirlo en el gestor, el lienzo del constructor convierte sus dos elementos
+en piezas reales: `Mapa` con `mapa.mav` y `Funcion` con `Laberinto simple`. Se
+pueden seleccionar, arrastrar y enlazar como cualquier otra pieza de la paleta;
+no crean actor, jugador ni movimiento automatico y no se escriben en el
+`.logic`. El boton **COMPAT.** muestra los mismos elementos en el lienzo
+clásico. Si ya estabas en el gestor con otro proyecto, **ARCHIVO > Abrir lógica
+.logic** sustituye las piezas anteriores por estas sin llevarte a Pintar.
 
 El caso `pruebas\conformidad\ejemplo_minijuego.args` congela la carga del
 ejemplo y ocho fotogramas bajando; el hash del BMP comprueba que el mapa y el

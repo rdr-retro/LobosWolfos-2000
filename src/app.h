@@ -1621,6 +1621,7 @@ void modulos_insertar_funcion(int x, int y, int funcion);
 /* Constructor de programa (fase 47). */
 void programa_reiniciar(void);
 void programa_cargar_modelo(void);
+void programa_cargar_logic2(void);
 void programa_guardar_modelo(void *modelo);
 void programa_volcar(const char *ruta);
 int  programa_modo_actual(void);
