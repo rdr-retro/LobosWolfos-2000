@@ -110,14 +110,15 @@ comprueba que el inspector del constructor lista el mapa `mapa.mav` y la
 funcion `Laberinto simple` aunque no haya piezas. Sus patrones son
 `elementos_logic2.volcar`, `elementos_logic2.volcar-programa`,
 `elementos_logic2.bmp.sha256` y `elementos_logic2.pixeles`; este ultimo fija
-cinco sondas del panel derecho, incluida la cabecera `ELEMENTOS LOGIC2`.
+once sondas: cinco del panel derecho, incluida la cabecera `ELEMENTOS LOGIC2`,
+y seis del lienzo central para comprobar las dos tarjetas de los elementos.
 
 El caso `menu_tras_piezas` usa `--abrir-logic3` con `ui_programa.logic3` y
 después `--abrir-logica-menu minijuego.logic`, la misma función que
 **ARCHIVO > Abrir lógica .logic** sin el cuadro de archivo. Comprueba que
 las tres piezas previas desaparecen, que el LOGIC2 queda activo y que el
 inspector vuelve a mostrar sus dos elementos. Sus patrones son
-`menu_tras_piezas.*` y reutilizan las cinco sondas del caso anterior.
+`menu_tras_piezas.*` y reutilizan las once sondas del caso anterior.
 
 El caso `ui_programa` entra con `--programa`, arrastra tres piezas y un
 enlace con `--arrastre-programa`, y guarda con `--guardar-logic3`. Sus patrones

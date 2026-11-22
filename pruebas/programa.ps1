@@ -108,13 +108,15 @@ function Get-VolcarNormalizado([string]$ruta, [string]$dir) {
     return $texto
 }
 
-# Sondas del inspector cuando el constructor muestra los elementos LOGIC2:
-# titulo INSPECTOR, cabecera de la lista, las dos filas del minijuego y
-# el contador final. Todas las filas nuevas viven en el panel derecho.
+# Sondas del constructor cuando muestra los elementos LOGIC2: titulo
+# INSPECTOR, lista del panel derecho y las dos tarjetas del lienzo central
+# (cabecera, cuerpo y leyenda "solo lectura").
 function Get-PixelesElementosLogic2([string]$bmp) {
     $imagen = [System.Drawing.Bitmap]::FromFile($bmp)
     try {
-        $puntos = @("921,68", "930,94", "932,114", "931,132", "931,154")
+        $puntos = @("921,68", "930,94", "932,114", "931,132", "931,154",
+                    "190,64", "190,86", "350,110", "190,164", "350,190",
+                    "220,210")
         $salida = @()
         foreach ($punto in $puntos) {
             $xy = $punto.Split(",")

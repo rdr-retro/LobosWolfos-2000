@@ -4916,6 +4916,24 @@ static void programa_dibujar_paleta(void) {
     }
 }
 
+/* Tipos y nombres compartidos por la lista del inspector y por las tarjetas
+ * dibujadas en el lienzo. Los ids de funcion se resuelven en el modelo. */
+static void elementos_logic2_tipo_nombre(const ModuloElemento *e,
+                                         const char **tipo,
+                                         const char **nombre) {
+    if (e->funcion == -1) {
+        *tipo = "MAPA";
+        *nombre = e->mapa;
+    } else if (e->funcion == 0) {
+        *tipo = "INICIO";
+        *nombre = "programa";
+    } else {
+        *tipo = "FUNCION";
+        *nombre = modulos_funcion_nombre_id(e->funcion);
+    }
+    if (!nombre || !*nombre || !**nombre) *nombre = "sin nombre";
+}
+
 /* Muestra en el inspector los elementos del LOGIC2 cargado cuando el lienzo
  * del constructor no tiene piezas. Asi un .logic clasico dice que mapas y
  * funciones usa sin pedirle a nadie que cambie a Compatibilidad. */
@@ -4934,17 +4952,7 @@ static void programa_dibujar_elementos_logic2(Zona z) {
         const ModuloElemento *e = &g.modulos[i];
         const char *tipo = "ELEMENTO";
         const char *nombre = "";
-        if (e->funcion == -1) {
-            tipo = "MAPA";
-            nombre = e->mapa;
-        } else if (e->funcion == 0) {
-            tipo = "INICIO";
-            nombre = "programa";
-        } else {
-            tipo = "FUNCION";
-            nombre = modulos_funcion_nombre_id(e->funcion);
-        }
-        if (!nombre[0]) nombre = "sin nombre";
+        elementos_logic2_tipo_nombre(e, &tipo, &nombre);
         formatear(texto, sizeof(texto), "%d  %-7s  %s", i + 1, tipo, nombre);
         texto_recortado(z.x + 10, y, texto, TEXTO_UI, z.ancho - 20);
         y += 18;
@@ -5050,11 +5058,62 @@ static void programa_dibujar_controles(void) {
     }
 }
 
+/* Tarjetas de solo lectura en el lienzo: no se guardan en sistema.pieza
+ * y no crean jugador ni movimiento. */
+static void programa_dibujar_elementos_logic2_lienzo(Zona lienzo) {
+    char texto[96];
+    int ancho = 300;
+    int alto = 64;
+    int x = lienzo.x + 24;
+    int y = lienzo.y + 34;
+    int filas = (lienzo.alto - 54) / (alto + 14);
+    int i;
+
+    fuente_dibujar(x, lienzo.y + 12,
+                   "ELEMENTOS DEL PROYECTO (LOGIC2)",
+                   MODULOS_FUNCION_TEXTO);
+    if (filas < 0) filas = 0;
+    if (filas > g.num_modulos) filas = g.num_modulos;
+    for (i = 0; i < filas; i++) {
+        const ModuloElemento *e = &g.modulos[i];
+        const char *tipo = "ELEMENTO";
+        const char *nombre = "";
+        int x0 = x, y0 = y, x1 = x + ancho, y1 = y + alto;
+        u32 color;
+
+        elementos_logic2_tipo_nombre(e, &tipo, &nombre);
+        if (!modulos_recortar(lienzo, &x0, &y0, &x1, &y1)) {
+            y += alto + 14;
+            continue;
+        }
+        color = e->funcion == -1 ? 0x00508040u : 0x00183868u;
+        dibujar_rect(x0, y0, x1, y1, color);
+        dibujar_rect(x0, y0, x1, y0 + 16, 0x00202020u);
+        dibujar_rect(x0, y0 + 16, x1, y0 + 17, 0x00FFFFFFu);
+        dibujar_marco(x0, y0, x1, y1, 0x00202020u);
+        dibujar_rect(x0 + 8, y0 + 24, x0 + 20, y0 + 36, 0x00FFFFFFu);
+        formatear(texto, sizeof(texto), "#%d", i + 1);
+        fuente_dibujar(x1 - fuente_texto_ancho(texto) - 6, y0 + 3,
+                       texto, 0x00FFFFFFu);
+        texto_recortado(x0 + 28, y0 + 3, tipo, 0x00FFFFFFu, ancho - 70);
+        texto_recortado(x0 + 28, y0 + 24, nombre, 0x00FFFFFFu, ancho - 36);
+        fuente_dibujar(x0 + 28, y0 + 44, "solo lectura", 0x00C0D8ECu);
+        y += alto + 14;
+    }
+    if (g.num_modulos > filas) {
+        formatear(texto, sizeof(texto), "+ %d elemento(s) mas",
+                  g.num_modulos - filas);
+        fuente_dibujar(x, y + 4, texto, SEPARADOR);
+    }
+}
+
 static void programa_dibujar_lienzo(void) {
     Zona lienzo = modulos_lienzo_zona();
     int i;
 
     modulos_dibujar_rejilla(lienzo);
+    if (g.num_programa_piezas == 0 && g.num_modulos > 0)
+        programa_dibujar_elementos_logic2_lienzo(lienzo);
 
     for (i = 0; i < g.num_programa_piezas; i++) {
         const PiezaPrograma *p = &g.programa_piezas[i];
