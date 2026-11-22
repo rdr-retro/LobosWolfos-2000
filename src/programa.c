@@ -478,7 +478,10 @@ Zona programa_paleta_zona(void) {
 Zona programa_inspector_zona(void) {
     int panel = sidebar_derecho_ancho() + MODULOS_PANEL_DER_EXTRA;
     int x0 = g.ancho - panel;
-    int y0 = AREA_SUP_ALTO + 8;
+    /* El titulo INSPECTOR se dibuja 14 px por encima de la zona. Con 8 px de
+     * margen caia dentro de la barra de menus, que se pinta despues y lo
+     * ocultaba. El mismo margen que la paleta deja el titulo visible. */
+    int y0 = AREA_SUP_ALTO + 30;
     int alto = g.alto - y0 - BARRA_ABAJO_ALTO - 8;
     if (alto < 40) alto = 40;
     return zona_hacer(x0 + SIDEBAR_MARGEN, y0,

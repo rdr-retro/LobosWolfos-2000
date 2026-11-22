@@ -115,13 +115,14 @@ function Get-PosicionLobo([string]$ruta) {
 }
 
 # Sondas fijas del lienzo Programa a 1200x700: paleta, tarjetas, lienzo,
-# puertos de entrada/salida, seleccion, enlace y conmutador de la barra.
+# puertos de entrada/salida, seleccion, enlace, conmutador de la barra y
+# titulo visible del inspector en el panel derecho.
 function Get-PixelesPrograma([string]$bmp) {
     $imagen = [System.Drawing.Bitmap]::FromFile($bmp)
     try {
         $puntos = @("140,118", "140,214", "140,310", "600,240", "500,410",
                     "540,300", "586,226", "483,244", "706,247", "496,260",
-                    "584,260", "716,260", "660,300", "180,682")
+                    "584,260", "716,260", "660,300", "180,682", "921,68")
         $salida = @()
         foreach ($punto in $puntos) {
             $xy = $punto.Split(",")

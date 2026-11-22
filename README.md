@@ -56,8 +56,10 @@ para cargar y guardar PNG.
   con la paleta visible desde el primer momento. La vista LOGIC2 clásica sigue
   disponible con **Compatibilidad** o `--compatibilidad`. Abrir el gestor no
   convierte un proyecto legacy: `programa=1` solo se escribe al guardar piezas
-  en el lienzo. El plan de trabajo se amplía poco a poco en
-  `PLAN_GESTOR_LOGICA.md`, con entregas E0 a E12.
+  en el lienzo. El título **INSPECTOR** del panel derecho se dibuja dentro del
+  panel, debajo de la barra de menús, y queda visible desde el primer momento.
+  El plan de trabajo se amplía poco a poco en `PLAN_GESTOR_LOGICA.md`, con
+  entregas E0 a E12.
 - Vista Estudio (fase 31): entrada **MODO > Vista Estudio**, pestana «Estudio»
   y columnas de 200, 740 y 260 px a 1200 px de ancho. El panel izquierdo crea
   borra y selecciona escenas y objetos, el centro muestra el escenario con

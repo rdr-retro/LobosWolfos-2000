@@ -92,9 +92,10 @@ que `entrada_gestor` abre el constructor con `--gestor` sin `--programa`, y
 que `arrastre_gestor` crea una pieza desde esa entrada normal.
 
 El caso `entrada_gestor` fija el volcado `programa_modo=1 programa_piezas=0`,
-el hash del BMP y 14 sondas de pixel; la paleta aparece sin resaltar la primera
-pieza. El caso `arrastre_gestor` abre `legacy.logic3`, arrastra una pieza desde
-la paleta, guarda y comprueba que aparecen `sistema.opciones` con
+el hash del BMP y 15 sondas de pixel; la paleta aparece sin resaltar la primera
+pieza y la sonda `921,68=303030` comprueba que el título `INSPECTOR` no queda
+tapado por la barra de menús. El caso `arrastre_gestor` abre `legacy.logic3`,
+arrastra una pieza desde la paleta, guarda y comprueba que aparecen `sistema.opciones` con
 `programa=1` y `sistema.pieza` con `sistema.escena`. Sus patrones son
 `entrada_gestor.volcar`, `entrada_gestor.volcar-programa`,
 `entrada_gestor.bmp.sha256`, `entrada_gestor.pixeles`,

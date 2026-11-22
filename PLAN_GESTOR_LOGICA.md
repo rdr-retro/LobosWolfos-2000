@@ -44,15 +44,19 @@ Ya cerrado y verificado:
   tarjetas arrastrables con iman, enlaces por campo `enlace`, inspector,
   deshacer/rehacer y barra conmutadora. Estado propio en `g.programa_piezas`,
   guardado como bloques `sistema.pieza` con `ui=1`. Sin opcodes nuevos.
-- **Fase 48** (esta entrega): el gestor abre directamente en `Programa`. La
-  vista del gestor deja de depender de `sistema.opciones.programa`; abrir un
-  proyecto legacy y entrar al gestor ya muestra la paleta, pero el LOGIC3 no se
-  convierte en programa hasta que se guarda una pieza. Anadidos `entrada_gestor`
-  y `arrastre_gestor`, y flag de prueba `--compatibilidad`.
+- **Fase 48**: el gestor abre directamente en `Programa`. La vista del gestor
+  deja de depender de `sistema.opciones.programa`; abrir un proyecto legacy y
+  entrar al gestor ya muestra la paleta, pero el LOGIC3 no se convierte en
+  programa hasta que se guarda una pieza. Anadidos `entrada_gestor` y
+  `arrastre_gestor`, y flag de prueba `--compatibilidad`.
+- **Fase 49** (esta entrega): correccion del panel derecho. El titulo
+  `INSPECTOR` se dibujaba a 46 px y la barra de menus, que se pinta despues, lo
+  tapaba. El inspector baja al mismo margen que la paleta y una sonda de pixel
+  fija que el titulo queda visible.
 
-Patrones que cambiaron por la barra nueva o por la entrada visible:
-`regresion/gestor`, `regresion/ejemplo` y `plantillas/canonico`. Sus volcados
-siguien iguales.
+Patrones que cambiaron por la barra nueva, la entrada visible o el titulo del
+inspector: `regresion/gestor`, `regresion/ejemplo`, `plantillas/canonico` y los
+`.pixeles` de `programa`. Sus volcados siguen iguales.
 
 ---
 
@@ -108,6 +112,17 @@ Cada entrega siguiente sigue siempre este esqueleto:
 - **Criterio:** `--gestor` sin `--programa` produce
   `programa_modo=1 programa_piezas=0` y una tarjeta nueva al arrastrar.
 - **Fuera de alcance:** ejecucion de las piezas.
+
+### Correccion E0a - Titulo del inspector visible (hecha)
+
+- **Anade:** margen superior de 30 px en `programa_inspector_zona()` y sonda
+  `921,68=303030` en `Get-PixelesPrograma`.
+- **Se ve:** `INSPECTOR` aparece completo en la parte alta del panel derecho,
+  debajo de la barra de menus, como `PALETA DE PIEZAS` a la izquierda.
+- **Prueba:** `pruebas/programa.ps1 -Filtro entrada_gestor`.
+- **Criterio:** la sonda nueva vale `303030`; antes valia `E4E4E4` porque la
+  barra de menus tapaba el texto.
+- **Fuera de alcance:** contenido, campos ni botones nuevos del inspector.
 
 ### Entrega E1 - Buscador de la paleta
 
