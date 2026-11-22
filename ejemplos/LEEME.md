@@ -30,7 +30,9 @@ motor\game.exe --logica ejemplos\minijuego.logic
 Al abrirlo en el gestor, el inspector del constructor enumera los dos
 elementos del proyecto (`mapa.mav` y la funcion `Laberinto simple`) aunque la
 capa Programa no tenga piezas que arrastrar. El boton **COMPAT.** muestra los
-mismos elementos en el lienzo clásico.
+mismos elementos en el lienzo clásico. Si ya estabas en el gestor con otro
+proyecto, **ARCHIVO > Abrir lógica .logic** descarta esas piezas y actualiza
+la lista sin llevarte a Pintar.
 
 El caso `pruebas\conformidad\ejemplo_minijuego.args` congela la carga del
 ejemplo y ocho fotogramas bajando; el hash del BMP comprueba que el mapa y el

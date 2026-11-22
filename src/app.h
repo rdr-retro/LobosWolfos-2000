@@ -1619,6 +1619,7 @@ void modulos_insertar(int x, int y);
 void modulos_insertar_funcion(int x, int y, int funcion);
 
 /* Constructor de programa (fase 47). */
+void programa_reiniciar(void);
 void programa_cargar_modelo(void);
 void programa_guardar_modelo(void *modelo);
 void programa_volcar(const char *ruta);
@@ -1758,6 +1759,7 @@ void dialogo_guardar_wolfo(void);
 void dialogo_abrir_wolfo(void);
 int  logica_guardar_archivo(const char *ruta);
 int  logica_cargar_archivo(const char *ruta);
+int  logica_abrir_desde_menu(const char *ruta);
 int  logica_guardar_memoria(char **datos, int *largo);
 
 /* Proyecto LOGIC3 (logic3.c, fase 24). El editor guarda el modelo

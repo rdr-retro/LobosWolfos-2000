@@ -1659,6 +1659,17 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 }
             }
         }
+        /* Misma ruta que ARCHIVO > Abrir logica .logic sin cuadro de
+         * archivo. Detras de --abrir-logic3 reproduce abrir un LOGIC2
+         * clasico despues de un proyecto con piezas. */
+        {
+            char *menu_arg = arg_valor(cmd, "--abrir-logica-menu");
+            if (menu_arg) {
+                char logic_ruta[MAX_PATH];
+                recortar_texto(logic_ruta, menu_arg, sizeof(logic_ruta));
+                if (logic_ruta[0]) logica_abrir_desde_menu(logic_ruta);
+            }
+        }
         /* Fase 48: abrir LOGIC3 o LOGIC2 termina en el gestor, y el gestor
          * siempre abre el constructor. Asi las dos cargas tienen la misma
          * vista y no dependen de si el proyecto trae sistema.opciones. */
@@ -1793,6 +1804,16 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 recortar_texto(l3_ruta, l3_arg, sizeof(l3_ruta));
                 if (l3_ruta[0] && logic3_cargar_editor(l3_ruta))
                     g.vista = VISTA_MODULOS;
+            }
+        }
+        /* Misma ruta del menu en modo captura, detras del LOGIC3 para
+         * reproducir la recarga con piezas previas. */
+        {
+            char *menu_arg = arg_valor(cmd, "--abrir-logica-menu");
+            if (menu_arg) {
+                char logic_ruta[MAX_PATH];
+                recortar_texto(logic_ruta, menu_arg, sizeof(logic_ruta));
+                if (logic_ruta[0]) logica_abrir_desde_menu(logic_ruta);
             }
         }
         /* Segunda normalizacion: con --captura las aperturas se repiten aqui

@@ -12,6 +12,7 @@
 #   ui_programa     lienzo Programa con tres piezas, un enlace y sondas BMP
 #   entrada_gestor  --gestor abre el constructor sin piezas y con paleta visible
 #   elementos_logic2 al abrir un .logic clasico, el inspector lista sus elementos
+#   menu_tras_piezas recargar un LOGIC2 por la ruta del menu tras un LOGIC3 con piezas
 #   arrastre_gestor --gestor permite arrastrar una pieza sin --programa
 #
 # Uso:
@@ -370,6 +371,45 @@ Ejecutar-Caso "elementos_logic2" {
     }
     if ($logica -notlike "*modulos=2*") {
         [void]$problemas.Add("el .logic no trae dos elementos")
+    }
+}
+
+# Recarga por la misma funcion que ARCHIVO > Abrir logica .logic. Primero
+# abre un LOGIC3 con tres piezas y despues el minijuego: sin limpiar el
+# constructor, el inspector seguiria mostrando las piezas viejas.
+Ejecutar-Caso "menu_tras_piezas" {
+    param($dir, $problemas)
+    $origen = Join-Path $raiz "ejemplos\minijuego.logic"
+    $piezas = Join-Path $esperadoDir "ui_programa.logic3"
+    Copy-Item -LiteralPath $origen -Destination (Join-Path $dir "minijuego.logic")
+    $bmp = Join-Path $dir "recarga.bmp"
+    $dump = Join-Path $dir "recarga.txt"
+    $vpr = Join-Path $dir "recarga_ui.txt"
+    $codigo = Ejecutar-Editor $dir @("--abrir-logic3", $piezas, `
+                                      "--abrir-logica-menu", "minijuego.logic", `
+                                      "--sin-ventanas", "--captura", $bmp, `
+                                      "--volcar", $dump, `
+                                      "--volcar-programa", $vpr)
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    foreach ($archivo in @($bmp, $dump, $vpr)) {
+        if (-not (Test-Path -LiteralPath $archivo)) {
+            [void]$problemas.Add("falta " + (Split-Path -Leaf $archivo))
+        }
+    }
+    if ($problemas.Count -gt 0) { return }
+    $ui = Get-TextoNormalizado $vpr
+    $logica = Get-TextoNormalizado $dump
+    Comprobar-Texto "menu_tras_piezas" ".volcar-programa" $ui $problemas
+    Comprobar-Texto "menu_tras_piezas" ".volcar" `
+                    (Get-VolcarNormalizado $dump $dir) $problemas
+    Comprobar-Hash "menu_tras_piezas" (Get-Sha256 $bmp) $problemas
+    Comprobar-Texto "menu_tras_piezas" ".pixeles" `
+                    (Get-PixelesElementosLogic2 $bmp) $problemas
+    if ($ui -notlike "programa_modo=1 programa_piezas=0*") {
+        [void]$problemas.Add("quedaron piezas del LOGIC3 anterior")
+    }
+    if ($logica -notlike "*modulos=2*logic3=0*") {
+        [void]$problemas.Add("no se cargo el LOGIC2 del minijuego")
     }
 }
 

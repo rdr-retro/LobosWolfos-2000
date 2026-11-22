@@ -84,14 +84,15 @@ a la suite de conformidad.
 `pruebas\programa` contiene dos LOGIC3 sin CRC: `mapa_solo.logic3` lleva
 `sistema.opciones` con `jugador_implicito=0`, y `legacy.logic3` no lleva la
 pieza. Ambos apuntan al mapa `pruebas/colisiones/fisica.mav` y no tienen
-objetos. La suite comprueba siete cosas: que un proyecto nuevo guarda la
+objetos. La suite comprueba ocho cosas: que un proyecto nuevo guarda la
 pieza de opciones, que `mapa_solo` mantiene `lobo 16 16` con `--tecla
 derecha`, que `legacy` mueve el lobo y dibuja un BMP distinto, que
 `ui_programa` construye un lienzo con Escenario, Actor y Teclado enlazados,
 que `entrada_gestor` abre el constructor con `--gestor` sin `--programa`, que
 `elementos_logic2` lista los dos elementos del minijuego en el inspector
-cuando no hay piezas, y que `arrastre_gestor` crea una pieza desde esa
-entrada normal.
+cuando no hay piezas, que `menu_tras_piezas` recarga ese LOGIC2 por la ruta
+del menú después de un LOGIC3 con piezas, y que `arrastre_gestor` crea una
+pieza desde esa entrada normal.
 
 El caso `entrada_gestor` fija el volcado `programa_modo=1 programa_piezas=0`,
 el hash del BMP y 15 sondas de pixel; la paleta aparece sin resaltar la primera
@@ -110,6 +111,13 @@ funcion `Laberinto simple` aunque no haya piezas. Sus patrones son
 `elementos_logic2.volcar`, `elementos_logic2.volcar-programa`,
 `elementos_logic2.bmp.sha256` y `elementos_logic2.pixeles`; este ultimo fija
 cinco sondas del panel derecho, incluida la cabecera `ELEMENTOS LOGIC2`.
+
+El caso `menu_tras_piezas` usa `--abrir-logic3` con `ui_programa.logic3` y
+después `--abrir-logica-menu minijuego.logic`, la misma función que
+**ARCHIVO > Abrir lógica .logic** sin el cuadro de archivo. Comprueba que
+las tres piezas previas desaparecen, que el LOGIC2 queda activo y que el
+inspector vuelve a mostrar sus dos elementos. Sus patrones son
+`menu_tras_piezas.*` y reutilizan las cinco sondas del caso anterior.
 
 El caso `ui_programa` entra con `--programa`, arrastra tres piezas y un
 enlace con `--arrastre-programa`, y guarda con `--guardar-logic3`. Sus patrones

@@ -266,7 +266,9 @@ static void programa_rehacer(void) {
     app_estado("programa: rehecho");
 }
 
-static void programa_reiniciar(void) {
+/* Reinicia el lienzo del constructor. La carga de un LOGIC1/LOGIC2 tambien
+ * lo llama para no arrastrar piezas de un LOGIC3 anterior. */
+void programa_reiniciar(void) {
     memset(g.programa_piezas, 0, sizeof(g.programa_piezas));
     g.num_programa_piezas = 0;
     g.programa_sel = -1;

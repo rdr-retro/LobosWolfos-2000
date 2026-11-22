@@ -1013,6 +1013,9 @@ void logica_iniciar(void) {
     /* Un proyecto nuevo o clasico deja de tener un LOGIC3 activo; el
      * lector de LOGIC3 lo reactiva despues de esta llamada. */
     logic3_olvidar();
+    /* Un .logic clasico no trae piezas. Limpiarlas aqui evita que el
+     * inspector siga mostrando las de un LOGIC3 abierto antes. */
+    programa_reiniciar();
     g.elementos_scroll = 0;
     g.num_modulos = 0;
     g.modulo_siguiente_id = 1;
@@ -1373,6 +1376,21 @@ void dialogo_guardar_wolfo(void) {
     app_invalidar();
 }
 
+/* Ruta comun de ARCHIVO > Abrir logica .logic. Si ya estamos en el gestor
+ * hay que preparar la vista aqui: app_alternar_gestor_modulos() conmutaria
+ * y saldria del gestor. La opcion --abrir-logica-menu usa esta misma ruta
+ * para probar la carga del menu sin el cuadro de archivo. */
+int logica_abrir_desde_menu(const char *ruta) {
+    if (!logica_cargar_archivo(ruta)) return 0;
+    if (g.vista == VISTA_MODULOS)
+        programa_vista_preparar(1);
+    else
+        app_alternar_gestor_modulos();
+    app_estado("Logica cargada: %s", ruta);
+    app_invalidar();
+    return 1;
+}
+
 /* Dialogo para abrir una logica .logic: sustituye la logica activa y
  * entra al gestor para verla cargada. */
 void dialogo_abrir_logica(void) {
@@ -1394,12 +1412,8 @@ void dialogo_abrir_logica(void) {
     ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST |
                 OFN_HIDEREADONLY;
     if (!GetOpenFileNameA(&ofn)) return;
-    if (logica_cargar_archivo(ruta)) {
-        if (g.vista != VISTA_MODULOS) app_alternar_gestor_modulos();
-        app_estado("Logica cargada: %s", ruta);
-    } else {
+    if (!logica_abrir_desde_menu(ruta))
         dialogo_error("No se pudo abrir la logica.");
-    }
     app_invalidar();
 }
 
