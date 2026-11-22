@@ -84,12 +84,14 @@ a la suite de conformidad.
 `pruebas\programa` contiene dos LOGIC3 sin CRC: `mapa_solo.logic3` lleva
 `sistema.opciones` con `jugador_implicito=0`, y `legacy.logic3` no lleva la
 pieza. Ambos apuntan al mapa `pruebas/colisiones/fisica.mav` y no tienen
-objetos. La suite comprueba seis cosas: que un proyecto nuevo guarda la
+objetos. La suite comprueba siete cosas: que un proyecto nuevo guarda la
 pieza de opciones, que `mapa_solo` mantiene `lobo 16 16` con `--tecla
 derecha`, que `legacy` mueve el lobo y dibuja un BMP distinto, que
 `ui_programa` construye un lienzo con Escenario, Actor y Teclado enlazados,
-que `entrada_gestor` abre el constructor con `--gestor` sin `--programa`, y
-que `arrastre_gestor` crea una pieza desde esa entrada normal.
+que `entrada_gestor` abre el constructor con `--gestor` sin `--programa`, que
+`elementos_logic2` lista los dos elementos del minijuego en el inspector
+cuando no hay piezas, y que `arrastre_gestor` crea una pieza desde esa
+entrada normal.
 
 El caso `entrada_gestor` fija el volcado `programa_modo=1 programa_piezas=0`,
 el hash del BMP y 15 sondas de pixel; la paleta aparece sin resaltar la primera
@@ -101,6 +103,13 @@ arrastra una pieza desde la paleta, guarda y comprueba que aparecen `sistema.opc
 `entrada_gestor.bmp.sha256`, `entrada_gestor.pixeles`,
 `arrastre_gestor.logic3`, `arrastre_gestor.volcar-programa`,
 `arrastre_gestor.bmp.sha256` y `arrastre_gestor.pixeles`.
+
+El caso `elementos_logic2` abre `ejemplos\minijuego.logic` desde el gestor y
+comprueba que el inspector del constructor lista el mapa `mapa.mav` y la
+funcion `Laberinto simple` aunque no haya piezas. Sus patrones son
+`elementos_logic2.volcar`, `elementos_logic2.volcar-programa`,
+`elementos_logic2.bmp.sha256` y `elementos_logic2.pixeles`; este ultimo fija
+cinco sondas del panel derecho, incluida la cabecera `ELEMENTOS LOGIC2`.
 
 El caso `ui_programa` entra con `--programa`, arrastra tres piezas y un
 enlace con `--arrastre-programa`, y guarda con `--guardar-logic3`. Sus patrones

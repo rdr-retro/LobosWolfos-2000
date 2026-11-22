@@ -27,6 +27,11 @@ LobosWolfos2000.exe --abrir-logica ejemplos\minijuego.logic
 motor\game.exe --logica ejemplos\minijuego.logic
 ```
 
+Al abrirlo en el gestor, el inspector del constructor enumera los dos
+elementos del proyecto (`mapa.mav` y la funcion `Laberinto simple`) aunque la
+capa Programa no tenga piezas que arrastrar. El boton **COMPAT.** muestra los
+mismos elementos en el lienzo clásico.
+
 El caso `pruebas\conformidad\ejemplo_minijuego.args` congela la carga del
 ejemplo y ocho fotogramas bajando; el hash del BMP comprueba que el mapa y el
 sprite se dibujan.

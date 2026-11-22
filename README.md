@@ -764,7 +764,9 @@ El ejemplo `ejemplos\minijuego.logic` muestra ese formato clásico con un
 minijuego jugable: baja por el pasillo del mapa y corre hasta la salida, con
 colisiones y reinicio con `Espacio`. Se abre con **ARCHIVO > Abrir lógica
 .logic** o con `--abrir-logica ejemplos\minijuego.logic`, y el motor lo corre
-con `motor\game.exe --logica ejemplos\minijuego.logic`.
+con `motor\game.exe --logica ejemplos\minijuego.logic`. Al cargarlo en el
+gestor, el inspector del constructor enumera sus dos elementos (el mapa y la
+función `Laberinto simple`) aunque el lienzo Programa no tenga piezas.
 
 La opción **Guardar proyecto .wolfo** del menú **ARCHIVO** empaqueta el
 proyecto entero en un solo archivo: la lógica con sus ajustes

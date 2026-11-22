@@ -11,6 +11,7 @@
 #   legacy          sin sistema.opciones: lobo se mueve y el BMP cambia
 #   ui_programa     lienzo Programa con tres piezas, un enlace y sondas BMP
 #   entrada_gestor  --gestor abre el constructor sin piezas y con paleta visible
+#   elementos_logic2 al abrir un .logic clasico, el inspector lista sus elementos
 #   arrastre_gestor --gestor permite arrastrar una pieza sin --programa
 #
 # Uso:
@@ -104,6 +105,26 @@ function Get-VolcarNormalizado([string]$ruta, [string]$dir) {
     $texto = Get-TextoNormalizado $ruta
     if ($dir) { $texto = $texto.Replace($dir, "<CASO>") }
     return $texto
+}
+
+# Sondas del inspector cuando el constructor muestra los elementos LOGIC2:
+# titulo INSPECTOR, cabecera de la lista, las dos filas del minijuego y
+# el contador final. Todas las filas nuevas viven en el panel derecho.
+function Get-PixelesElementosLogic2([string]$bmp) {
+    $imagen = [System.Drawing.Bitmap]::FromFile($bmp)
+    try {
+        $puntos = @("921,68", "930,94", "932,114", "931,132", "931,154")
+        $salida = @()
+        foreach ($punto in $puntos) {
+            $xy = $punto.Split(",")
+            $color = $imagen.GetPixel([int]$xy[0], [int]$xy[1])
+            $salida += ("{0}={1:X2}{2:X2}{3:X2}" -f $punto, $color.R,
+                        $color.G, $color.B)
+        }
+        return ($salida -join " ")
+    } finally {
+        $imagen.Dispose()
+    }
 }
 
 function Get-PosicionLobo([string]$ruta) {
@@ -315,6 +336,40 @@ Ejecutar-Caso "entrada_gestor" {
                     (Get-PixelesPrograma $bmp) $problemas
     if ($ui -notlike "programa_modo=1 programa_piezas=0*") {
         [void]$problemas.Add("el gestor no abrio el constructor")
+    }
+}
+
+Ejecutar-Caso "elementos_logic2" {
+    param($dir, $problemas)
+    $origen = Join-Path $raiz "ejemplos\minijuego.logic"
+    Copy-Item -LiteralPath $origen -Destination (Join-Path $dir "minijuego.logic")
+    $bmp = Join-Path $dir "elementos.bmp"
+    $dump = Join-Path $dir "elementos.txt"
+    $vpr = Join-Path $dir "elementos_ui.txt"
+    $codigo = Ejecutar-Editor $dir @("--abrir-logica", "minijuego.logic", `
+                                      "--sin-ventanas", "--captura", $bmp, `
+                                      "--volcar", $dump, `
+                                      "--volcar-programa", $vpr)
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    foreach ($archivo in @($bmp, $dump, $vpr)) {
+        if (-not (Test-Path -LiteralPath $archivo)) {
+            [void]$problemas.Add("falta " + (Split-Path -Leaf $archivo))
+        }
+    }
+    if ($problemas.Count -gt 0) { return }
+    $ui = Get-TextoNormalizado $vpr
+    $logica = Get-TextoNormalizado $dump
+    Comprobar-Texto "elementos_logic2" ".volcar-programa" $ui $problemas
+    Comprobar-Texto "elementos_logic2" ".volcar" `
+                    (Get-VolcarNormalizado $dump $dir) $problemas
+    Comprobar-Hash "elementos_logic2" (Get-Sha256 $bmp) $problemas
+    Comprobar-Texto "elementos_logic2" ".pixeles" `
+                    (Get-PixelesElementosLogic2 $bmp) $problemas
+    if ($ui -notlike "programa_modo=1 programa_piezas=0*") {
+        [void]$problemas.Add("el gestor no abrio el constructor")
+    }
+    if ($logica -notlike "*modulos=2*") {
+        [void]$problemas.Add("el .logic no trae dos elementos")
     }
 }
 

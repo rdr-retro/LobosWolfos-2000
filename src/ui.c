@@ -4916,6 +4916,48 @@ static void programa_dibujar_paleta(void) {
     }
 }
 
+/* Muestra en el inspector los elementos del LOGIC2 cargado cuando el lienzo
+ * del constructor no tiene piezas. Asi un .logic clasico dice que mapas y
+ * funciones usa sin pedirle a nadie que cambie a Compatibilidad. */
+static void programa_dibujar_elementos_logic2(Zona z) {
+    char texto[128];
+    Zona boton = programa_scripts_zona();
+    int y = z.y + 12;
+    int filas = (boton.y - y - 24) / 18;
+    int i;
+
+    fuente_dibujar(z.x + 10, y, "ELEMENTOS LOGIC2", MODULOS_FUNCION_TEXTO);
+    y += 20;
+    if (filas < 0) filas = 0;
+    if (filas > g.num_modulos) filas = g.num_modulos;
+    for (i = 0; i < filas; i++) {
+        const ModuloElemento *e = &g.modulos[i];
+        const char *tipo = "ELEMENTO";
+        const char *nombre = "";
+        if (e->funcion == -1) {
+            tipo = "MAPA";
+            nombre = e->mapa;
+        } else if (e->funcion == 0) {
+            tipo = "INICIO";
+            nombre = "programa";
+        } else {
+            tipo = "FUNCION";
+            nombre = modulos_funcion_nombre_id(e->funcion);
+        }
+        if (!nombre[0]) nombre = "sin nombre";
+        formatear(texto, sizeof(texto), "%d  %-7s  %s", i + 1, tipo, nombre);
+        texto_recortado(z.x + 10, y, texto, TEXTO_UI, z.ancho - 20);
+        y += 18;
+    }
+    if (g.num_modulos > filas) {
+        formatear(texto, sizeof(texto), "+ %d mas", g.num_modulos - filas);
+        fuente_dibujar(z.x + 10, y, texto, SEPARADOR);
+        y += 18;
+    }
+    formatear(texto, sizeof(texto), "%d elemento(s)", g.num_modulos);
+    fuente_dibujar(z.x + 10, y + 4, texto, SEPARADOR);
+}
+
 static void programa_dibujar_inspector(void) {
     Zona z = programa_inspector_zona();
     char texto[96];
@@ -4926,11 +4968,15 @@ static void programa_dibujar_inspector(void) {
     dibujar_rect_z(z, BARRA);
     dibujar_marco_z(z, BARRA_BORDE);
     if (idx < 0 || idx >= g.num_programa_piezas) {
-        fuente_dibujar(z.x + 10, z.y + 12,
-                       "Selecciona una pieza del lienzo", TEXTO_UI);
-        fuente_dibujar(z.x + 10, z.y + 30,
-                       "Arrastra desde la paleta o pulsa una pieza",
-                       SEPARADOR);
+        if (g.num_programa_piezas == 0 && g.num_modulos > 0)
+            programa_dibujar_elementos_logic2(z);
+        else {
+            fuente_dibujar(z.x + 10, z.y + 12,
+                           "Selecciona una pieza del lienzo", TEXTO_UI);
+            fuente_dibujar(z.x + 10, z.y + 30,
+                           "Arrastra desde la paleta o pulsa una pieza",
+                           SEPARADOR);
+        }
         dibujar_rect_z(programa_scripts_zona(), BARRA);
         dibujar_marco_z(programa_scripts_zona(), BARRA_BORDE);
         fuente_dibujar(programa_scripts_zona().x + 8,
