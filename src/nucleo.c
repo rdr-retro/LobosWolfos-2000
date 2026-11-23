@@ -2163,6 +2163,15 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                         if (p[1] == 'n') { app_tecla(VK_RETURN, 0, 0); p += 2; continue; }
                         if (p[1] == 'e') { app_tecla(VK_ESCAPE, 0, 0); p += 2; continue; }
                         if (p[1] == '\\') { app_caracter('\\'); p += 2; continue; }
+                        /* Atajos de Inicio para las pruebas automaticas:
+                         * \z deshacer, \Z rehacer con Shift, \y rehacer,
+                         * \d borrar, \i crear nodo, \I crear escena. */
+                        if (p[1] == 'z') { app_tecla('Z', 1, 0); p += 2; continue; }
+                        if (p[1] == 'Z') { app_tecla('Z', 1, 1); p += 2; continue; }
+                        if (p[1] == 'y') { app_tecla('Y', 1, 0); p += 2; continue; }
+                        if (p[1] == 'd') { app_tecla(VK_DELETE, 0, 0); p += 2; continue; }
+                        if (p[1] == 'i') { app_tecla(VK_INSERT, 0, 0); p += 2; continue; }
+                        if (p[1] == 'I') { app_tecla(VK_INSERT, 0, 1); p += 2; continue; }
                         p++;
                         continue;
                     }

@@ -16,6 +16,15 @@
 #define INICIO_ARBOL_ANCHO 280
 #define INICIO_INSPECTOR   310
 #define INICIO_MARGEN      14
+#define INICIO_BOTON_ANCHO 58
+#define INICIO_BOTON_ALTO  20
+#define INICIO_BOTON_HUECO 4
+#define INICIO_BOTONES     7
+
+/* La vista usa el mismo Inicio del servicio CLI, asi que cada comando visual
+ * comparte snapshots con --inicio. Estas dos funciones se definen mas abajo. */
+static void ultimo_fijar(Inicio *in, const char *texto);
+static void guardar_pasado(Inicio *in);
 
 typedef struct InicioFila {
     int id;
@@ -34,6 +43,17 @@ static int g_inicio_edit_prop = -1; /* -2 = nombre, >= 0 = propiedad */
 static int g_inicio_edit_primer_caracter;
 static char g_inicio_borrador[PM_TEXTO_MAX];
 static char g_inicio_edit_error[PM_ERROR_MAX];
+static int g_inicio_reparentar_origen = -1;
+
+/* Orden de los botones de la barra del lienzo. El texto es corto para que
+ * los siete quepan en el ancho minimo del panel central. */
+static const char *const g_inicio_botones[INICIO_BOTONES] = {
+    "ESCENA", "NODO", "BORRAR", "PADRE", "RAIZ", "DESH", "REH"
+};
+enum {
+    INICIO_B_ESCENA = 0, INICIO_B_NODO, INICIO_B_BORRAR,
+    INICIO_B_PADRE, INICIO_B_RAIZ, INICIO_B_DESH, INICIO_B_REH
+};
 
 static Zona inicio_cuerpo(void) {
     int alto = g.alto - AREA_SUP_ALTO - BARRA_ABAJO_ALTO;
@@ -260,7 +280,8 @@ static int inicio_padre_valido(ProjectModel *modelo, EntidadModelo *nodo,
 
 int inicio_modelo_editar(int id, const char *campo, const char *valor,
                          char *diagnostico, size_t longitud) {
-    ProjectModel copia;
+    Inicio *in = inicio_servicio();
+    ProjectModel nuevo;
     EntidadModelo *e;
     int n, i, inicial;
     char validacion[PM_ERROR_MAX];
@@ -269,62 +290,58 @@ int inicio_modelo_editar(int id, const char *campo, const char *valor,
         inicio_diagnostico(diagnostico, longitud, "no hay modelo cargado");
         return 0;
     }
-    e = pm_entidad(g_inicio_modelo, id);
-    if (!e || !campo || !campo[0] || !valor) {
+    if (!pm_entidad(g_inicio_modelo, id) || !campo || !campo[0] || !valor) {
         inicio_diagnostico(diagnostico, longitud, "entidad o campo inexistente");
         return 0;
     }
-    if (!inicio_valor_propiedad_valido(e, campo, valor)) {
+    if (!inicio_valor_propiedad_valido(pm_entidad_const(g_inicio_modelo, id),
+                                       campo, valor)) {
         inicio_diagnostico(diagnostico, longitud, "valor no valido para el campo");
         return 0;
     }
-    copia = *g_inicio_modelo;
+    /* Se edita una copia: solo se publica si el grafo sigue siendo valido.
+     * El snapshot del pasado se guarda en ese momento, nunca antes. */
+    pm_copiar(g_inicio_modelo, &nuevo);
+    e = pm_entidad(&nuevo, id);
 
     if (strcmp(campo, "nombre") == 0) {
         if (!valor[0] || !pm_renombrar(e, valor)) {
-            *g_inicio_modelo = copia;
             inicio_diagnostico(diagnostico, longitud, "el nombre no puede estar vacio");
             return 0;
         }
     } else if (e->kind == PM_KIND_NODO && strcmp(campo, "padre") == 0) {
         if (!inicio_entero_exacto(valor, &n) || n < 0 ||
-            !inicio_padre_valido(g_inicio_modelo, e, n)) {
-            *g_inicio_modelo = copia;
+            !inicio_padre_valido(&nuevo, e, n)) {
             inicio_diagnostico(diagnostico, longitud, "padre invalido o ciclo jerarquico");
             return 0;
         }
         if (!pm_propiedad(e, "padre", valor, e->origen.linea) ||
             (n > 0 ? pm_referencia(e, "padre", n, NULL, e->origen.linea)
                    : (pm_quitar_referencia(e, "padre"), 1))) {
-            *g_inicio_modelo = copia;
             inicio_diagnostico(diagnostico, longitud, "no se pudo actualizar el padre");
             return 0;
         }
     } else if (strcmp(campo, "escena") == 0 && e->kind == PM_KIND_NODO) {
-        *g_inicio_modelo = copia;
         inicio_diagnostico(diagnostico, longitud,
                            "la escena de un nodo se cambia desde su montaje");
         return 0;
     } else if (strcmp(campo, "inicial") == 0 && e->kind == PM_KIND_ESCENA) {
         if (!inicio_entero_exacto(valor, &inicial) || (inicial != 0 && inicial != 1)) {
-            *g_inicio_modelo = copia;
             inicio_diagnostico(diagnostico, longitud, "inicial debe ser 0 o 1");
             return 0;
         }
-        for (i = 0; i < g_inicio_modelo->num_entidades; i++) {
-            EntidadModelo *otra = &g_inicio_modelo->entidades[i];
+        for (i = 0; i < nuevo.num_entidades; i++) {
+            EntidadModelo *otra = &nuevo.entidades[i];
             if (otra->kind == PM_KIND_ESCENA && inicial)
                 pm_propiedad(otra, "inicial", otra->id == e->id ? "1" : "0",
                              otra->origen.linea);
         }
         if (!inicial && !pm_propiedad(e, "inicial", "0", e->origen.linea)) {
-            *g_inicio_modelo = copia;
             inicio_diagnostico(diagnostico, longitud, "no se pudo actualizar inicial");
             return 0;
         }
     } else if (inicio_propiedad_conocida(e, campo) || inicio_prop(e, campo)[0]) {
         if (!pm_propiedad(e, campo, valor, e->origen.linea)) {
-            *g_inicio_modelo = copia;
             inicio_diagnostico(diagnostico, longitud, "no caben mas propiedades");
             return 0;
         }
@@ -333,18 +350,18 @@ int inicio_modelo_editar(int id, const char *campo, const char *valor,
         return 0;
     }
 
-    if (pm_validar(g_inicio_modelo, validacion, sizeof(validacion))) {
-        *g_inicio_modelo = copia;
+    if (pm_validar(&nuevo, validacion, sizeof(validacion))) {
         inicio_diagnostico(diagnostico, longitud, validacion);
         return 0;
     }
+    guardar_pasado(in);
+    pm_copiar(&nuevo, &in->modelo);
+    ultimo_fijar(in, "editado");
     inicio_diagnostico(diagnostico, longitud, "sin errores");
     inicio_filas_construir();
     app_invalidar();
     return 1;
-}
-
-static void inicio_escribir_valor(FILE *f, const char *clave, const char *valor) {
+}static void inicio_escribir_valor(FILE *f, const char *clave, const char *valor) {
     const char *p = valor ? valor : "";
     if (clave && clave[0]) fprintf(f, " %s \"", clave);
     else fputs(" \"", f);
@@ -554,6 +571,163 @@ static Zona inicio_nodo_zona(const EntidadModelo *e, Zona lienzo) {
     return zona_hacer(x, y, ancho, alto);
 }
 
+/* ------------------------------------------------------------------ */
+/* Barra de comandos del lienzo Inicio                                 */
+/* ------------------------------------------------------------------ */
+
+static Zona inicio_boton_zona(Zona lienzo, int indice) {
+    int bloque = INICIO_BOTONES * INICIO_BOTON_ANCHO +
+                 (INICIO_BOTONES - 1) * INICIO_BOTON_HUECO;
+    int x = zona_derecha(lienzo) - bloque - 8;
+    int y = lienzo.y + 6;
+    return zona_hacer(x + indice * (INICIO_BOTON_ANCHO + INICIO_BOTON_HUECO),
+                      y, INICIO_BOTON_ANCHO, INICIO_BOTON_ALTO);
+}
+
+static void inicio_dibujar_botones(Zona lienzo) {
+    Inicio *in = inicio_servicio();
+    int i, ancho;
+    ancho = INICIO_BOTONES * INICIO_BOTON_ANCHO +
+            (INICIO_BOTONES - 1) * INICIO_BOTON_HUECO;
+    if (zona_derecha(lienzo) - ancho - 8 < lienzo.x + 150) return;
+    for (i = 0; i < INICIO_BOTONES; i++) {
+        Zona b = inicio_boton_zona(lienzo, i);
+        int activo = (i == INICIO_B_PADRE && g_inicio_reparentar_origen > 0) ||
+                     (i == INICIO_B_DESH && in->num_pasado > 0) ||
+                     (i == INICIO_B_REH && in->num_futuro > 0);
+        int sobre = zona_contiene(b, g.raton_x, g.raton_y);
+        dibujar_rect_z(b, activo ? INICIO_SELECCION :
+                           sobre ? INICIO_NODO : INICIO_PANEL_2);
+        dibujar_marco_z(b, activo ? INICIO_ACCENTO : INICIO_LINEA);
+        fuente_dibujar(b.x + 5, b.y + 5, g_inicio_botones[i],
+                       activo || sobre ? TEXTO_CLARO : INICIO_TEXTO);
+    }
+}
+
+static int inicio_boton_en(int x, int y) {
+    Zona lienzo = inicio_lienzo();
+    int i;
+    for (i = 0; i < INICIO_BOTONES; i++)
+        if (zona_contiene(inicio_boton_zona(lienzo, i), x, y)) return i;
+    return -1;
+}
+
+static void inicio_nombre_auto(char *dst, size_t tam, int kind) {
+    const char *base = kind == PM_KIND_ESCENA ? "Escena" : "Nodo";
+    int n;
+    for (n = 1; n < 999; n++) {
+        int i, libre = 1;
+        _snprintf(dst, tam, "%s %d", base, n);
+        dst[tam - 1] = 0;
+        if (!g_inicio_modelo) return;
+        for (i = 0; i < g_inicio_modelo->num_entidades; i++)
+            if (strcmp(g_inicio_modelo->entidades[i].nombre, dst) == 0)
+                libre = 0;
+        if (libre) return;
+    }
+    dst[0] = 0;
+}
+
+static void inicio_accion_fallo(const char *texto) {
+    inicio_diagnostico(NULL, 0, texto);
+    app_estado("%s", texto);
+    app_invalidar();
+}
+
+static int inicio_accion_crear(int kind) {
+    Inicio *in = inicio_servicio();
+    char nombre[PM_NOMBRE_MAX];
+    const EntidadModelo *sel;
+    int padre = 0, id;
+
+    if (!g_inicio_modelo) {
+        inicio_accion_fallo("carga un .log antes de crear nodos");
+        return 0;
+    }
+    sel = inicio_entidad(g_inicio_seleccion);
+    if (kind == PM_KIND_NODO && sel && sel->kind == PM_KIND_NODO)
+        padre = sel->id;
+    inicio_nombre_auto(nombre, sizeof(nombre), kind);
+    if (!nombre[0]) {
+        inicio_accion_fallo("no queda un nombre libre");
+        return 0;
+    }
+    if (!inicio_crear(in, kind, nombre, padre)) {
+        inicio_accion_fallo(in->ultimo);
+        return 0;
+    }
+    id = in->modelo.siguiente_id - 1;
+    g_inicio_seleccion = id;
+    g_inicio_reparentar_origen = -1;
+    inicio_filas_construir();
+    app_estado("creado %s #%d", pm_kind_nombre(kind), id);
+    app_invalidar();
+    return 1;
+}
+
+static int inicio_accion_borrar(void) {
+    Inicio *in = inicio_servicio();
+    const EntidadModelo *e = inicio_entidad(g_inicio_seleccion);
+    int id = g_inicio_seleccion;
+
+    if (!e) {
+        inicio_accion_fallo("selecciona una entidad para borrar");
+        return 0;
+    }
+    if (!inicio_borrar(in, id)) {
+        inicio_accion_fallo(in->ultimo);
+        return 0;
+    }
+    g_inicio_seleccion = -1;
+    g_inicio_reparentar_origen = -1;
+    inicio_filas_construir();
+    app_estado("borrada entidad #%d", id);
+    app_invalidar();
+    return 1;
+}
+
+static int inicio_accion_reparentar(int id, int padre) {
+    Inicio *in = inicio_servicio();
+    if (!inicio_reparentar(in, id, padre)) {
+        inicio_accion_fallo(in->ultimo);
+        return 0;
+    }
+    g_inicio_seleccion = id;
+    g_inicio_reparentar_origen = -1;
+    inicio_filas_construir();
+    app_estado("nodo #%d reparentado a %d", id, padre);
+    app_invalidar();
+    return 1;
+}
+
+static void inicio_accion_marcar_padre(void) {
+    const EntidadModelo *e = inicio_entidad(g_inicio_seleccion);
+    if (!e || e->kind != PM_KIND_NODO) {
+        inicio_accion_fallo("selecciona un nodo antes de elegir padre");
+        return;
+    }
+    g_inicio_reparentar_origen = e->id;
+    app_estado("elige el padre de #%d (clic en el lienzo o RAIZ)", e->id);
+    app_invalidar();
+}
+
+static int inicio_accion_historial(int deshacer) {
+    Inicio *in = inicio_servicio();
+    int ok = deshacer ? inicio_deshacer(in) : inicio_rehacer(in);
+    if (!ok) {
+        inicio_accion_fallo(in->ultimo);
+        return 0;
+    }
+    if (g_inicio_seleccion > 0 &&
+        !inicio_entidad(g_inicio_seleccion))
+        g_inicio_seleccion = -1;
+    g_inicio_reparentar_origen = -1;
+    inicio_filas_construir();
+    app_estado("%s", in->ultimo);
+    app_invalidar();
+    return 1;
+}
+
 static void inicio_dibujar_rejilla(Zona z) {
     int x, y;
     dibujar_rect_z(z, 0x00182430u);
@@ -609,6 +783,7 @@ static void inicio_dibujar_lienzo(void) {
               esc ? esc->nombre : "sin escena");
     titulo[sizeof(titulo) - 1] = 0;
     fuente_dibujar(z.x + INICIO_MARGEN, z.y + 11, titulo, INICIO_TEXTO);
+    inicio_dibujar_botones(z);
     if (!g_inicio_modelo) {
         fuente_dibujar(z.x + INICIO_MARGEN, z.y + 58,
                        "Carga un .log LOG 2 para comenzar", INICIO_MUTED);
@@ -702,8 +877,19 @@ static void inicio_dibujar_inspector(void) {
 }
 
 void inicio_modelo_cargar(ProjectModel *modelo, const char *ruta) {
-    inicio_modelo_limpiar();
-    g_inicio_modelo = modelo;
+    Inicio *in = inicio_servicio();
+    /* El modelo de la vista es el mismo del servicio: asi los botones y
+     * --inicio comparten snapshots, seleccion y diagnostico. */
+    inicio_iniciar(in);
+    if (modelo) {
+        pm_copiar(modelo, &in->modelo);
+        pm_destruir(modelo);
+        g_inicio_modelo = &in->modelo;
+        recortar_texto(in->origen, ruta ? ruta : "", sizeof(in->origen));
+        ultimo_fijar(in, "cargado");
+    } else {
+        g_inicio_modelo = NULL;
+    }
     recortar_texto(g_inicio_ruta, ruta ? ruta : "", sizeof(g_inicio_ruta));
     g_inicio_seleccion = -1;
     g_inicio_scroll = 0;
@@ -712,11 +898,14 @@ void inicio_modelo_cargar(ProjectModel *modelo, const char *ruta) {
     g_inicio_edit_primer_caracter = 0;
     g_inicio_borrador[0] = 0;
     g_inicio_edit_error[0] = 0;
+    g_inicio_reparentar_origen = -1;
     inicio_filas_construir();
 }
 
 void inicio_modelo_limpiar(void) {
-    if (g_inicio_modelo) pm_destruir(g_inicio_modelo);
+    Inicio *in = inicio_servicio();
+    /* No se libera g_inicio_modelo: apunta al modelo embebido del servicio. */
+    if (g_inicio_modelo == &in->modelo) inicio_iniciar(in);
     g_inicio_modelo = NULL;
     g_inicio_ruta[0] = 0;
     g_inicio_seleccion = -1;
@@ -727,6 +916,7 @@ void inicio_modelo_limpiar(void) {
     g_inicio_edit_primer_caracter = 0;
     g_inicio_borrador[0] = 0;
     g_inicio_edit_error[0] = 0;
+    g_inicio_reparentar_origen = -1;
 }
 
 void inicio_dibujar(void) {
@@ -811,25 +1001,51 @@ static void inicio_editar_iniciar(int campo) {
 }
 
 void inicio_pulsar(int x, int y, int boton) {
-    int fila, id, campo;
+    int fila, id, campo, boton_barra;
     if (boton != 0) return;
     inicio_filas_construir();
+    boton_barra = inicio_boton_en(x, y);
+    if (boton_barra >= 0) {
+        switch (boton_barra) {
+        case INICIO_B_ESCENA: inicio_accion_crear(PM_KIND_ESCENA); break;
+        case INICIO_B_NODO:   inicio_accion_crear(PM_KIND_NODO); break;
+        case INICIO_B_BORRAR: inicio_accion_borrar(); break;
+        case INICIO_B_PADRE:  inicio_accion_marcar_padre(); break;
+        case INICIO_B_RAIZ:
+            if (g_inicio_reparentar_origen > 0)
+                inicio_accion_reparentar(g_inicio_reparentar_origen, 0);
+            else if (inicio_entidad(g_inicio_seleccion))
+                inicio_accion_reparentar(g_inicio_seleccion, 0);
+            else
+                inicio_accion_fallo("selecciona un nodo antes de quitar el padre");
+            break;
+        case INICIO_B_DESH: inicio_accion_historial(1); break;
+        case INICIO_B_REH:  inicio_accion_historial(0); break;
+        }
+        return;
+    }
     campo = inicio_inspector_campo_en(x, y);
     if (campo >= 0 || campo == -2) {
         inicio_editar_iniciar(campo);
         return;
     }
     fila = inicio_fila_en(x, y);
-    if (fila >= 0) {
-        g_inicio_seleccion = g_inicio_filas[fila].id;
-        app_estado("entidad #%d seleccionada", g_inicio_seleccion);
-        app_invalidar();
+    id = fila >= 0 ? g_inicio_filas[fila].id : inicio_nodo_en(x, y);
+    if (g_inicio_reparentar_origen > 0) {
+        if (id > 0)
+            inicio_accion_reparentar(g_inicio_reparentar_origen, id);
+        else if (zona_contiene(inicio_lienzo(), x, y))
+            inicio_accion_reparentar(g_inicio_reparentar_origen, 0);
+        else {
+            g_inicio_reparentar_origen = -1;
+            app_estado("reparentado cancelado");
+            app_invalidar();
+        }
         return;
     }
-    id = inicio_nodo_en(x, y);
     if (id > 0) {
         g_inicio_seleccion = id;
-        app_estado("nodo #%d seleccionado", id);
+        app_estado("entidad #%d seleccionada", id);
         app_invalidar();
     }
 }
@@ -847,7 +1063,6 @@ void inicio_rueda(int x, int y, int delta, int ctrl) {
 
 void inicio_tecla(int vk, int ctrl, int shift) {
     char diagnostico[PM_ERROR_MAX];
-    (void)ctrl; (void)shift;
     if (g_inicio_editando) {
         if (vk == VK_ESCAPE) {
             g_inicio_editando = 0;
@@ -890,9 +1105,29 @@ void inicio_tecla(int vk, int ctrl, int shift) {
         return;
     }
     if (vk == VK_ESCAPE) {
-        g_inicio_seleccion = -1;
+        if (g_inicio_reparentar_origen > 0) {
+            g_inicio_reparentar_origen = -1;
+            app_estado("reparentado cancelado");
+        } else {
+            g_inicio_seleccion = -1;
+        }
         app_invalidar();
+        return;
     }
+    if (ctrl && (vk == 'Z' || vk == 'z')) {
+        inicio_accion_historial(!shift);
+        return;
+    }
+    if (ctrl && (vk == 'Y' || vk == 'y')) {
+        inicio_accion_historial(0);
+        return;
+    }
+    if (vk == VK_DELETE) {
+        inicio_accion_borrar();
+        return;
+    }
+    if (vk == VK_INSERT)
+        inicio_accion_crear(shift ? PM_KIND_ESCENA : PM_KIND_NODO);
 }
 
 void inicio_caracter(int ch) {
@@ -911,6 +1146,7 @@ void inicio_caracter(int ch) {
 }
 
 void inicio_vista_volcar(const char *ruta) {
+    Inicio *in = inicio_servicio();
     FILE *f;
     int i, escenas = 0, nodos = 0, scripts = 0, asociaciones = 0;
     const EntidadModelo *e;
@@ -929,6 +1165,9 @@ void inicio_vista_volcar(const char *ruta) {
     fprintf(f, "inicio_vista=1\n");
     fprintf(f, "inicio_ruta=%s\n", g_inicio_ruta);
     fprintf(f, "inicio_sel=%d\n", g_inicio_seleccion);
+    fprintf(f, "inicio_undo=%d redo=%d ultimo=%s reparentar=%d\n",
+            in->num_pasado, in->num_futuro, in->ultimo,
+            g_inicio_reparentar_origen);
     fprintf(f, "inicio_filas=%d\n", g_inicio_num_filas);
     fprintf(f, "inicio_entidades=%d escenas=%d nodos=%d scripts=%d asociaciones=%d\n",
             g_inicio_modelo ? g_inicio_modelo->num_entidades : 0,

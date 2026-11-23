@@ -27,8 +27,8 @@ visual antiguo hasta que la migración y las pruebas correspondientes pasen.
 - [x] Hacer editable el inspector de Inicio sobre el `ProjectModel` real.
 - [x] Guardar el modelo editado como `LOG 2` determinista y recargarlo sin perder referencias.
 - [x] Verificar el flujo completo con `inicio_editar`: clic, teclado, guardado, LOGIC3 y runtime.
-- [ ] Añadir comandos de creación, borrado y reparentado desde Inicio.
-- [ ] Añadir transacciones de deshacer/rehacer para cambios del inspector.
+- [x] Añadir comandos de creación, borrado y reparentado desde Inicio.
+- [x] Añadir transacciones de deshacer/rehacer para cambios del inspector.
 - [ ] Retirada gradual de la UI visual antigua.
 
 ---

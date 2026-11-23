@@ -22,6 +22,8 @@
 #   arrastre_gestor --gestor permite arrastrar una pieza sin --programa
 #   inicio_modelo   Inicio dibuja el arbol, el lienzo y el inspector del LOG 2
 #   inicio_editar   el inspector cambia una propiedad y la guarda como LOG 2
+#   inicio_comandos botones visuales crean, borran, reparentan y deshacen
+#   inicio_atajos   Supr, Ins, Ctrl+Z, Ctrl+Y y Ctrl+Shift+Z desde el teclado
 #   modelo_runtime  LOG 2 genera escenas, objetos y scripts ejecutables
 #
 # Uso:
@@ -176,6 +178,26 @@ function Get-PixelesPrograma([string]$bmp) {
         $puntos = @("140,118", "140,214", "140,310", "600,240", "500,410",
                     "540,300", "586,226", "483,244", "706,247", "496,260",
                     "584,260", "716,260", "660,300", "180,682", "921,68")
+        $salida = @()
+        foreach ($punto in $puntos) {
+            $xy = $punto.Split(",")
+            $color = $imagen.GetPixel([int]$xy[0], [int]$xy[1])
+            $salida += ("{0}={1:X2}{2:X2}{3:X2}" -f $punto, $color.R,
+                        $color.G, $color.B)
+        }
+        return ($salida -join " ")
+    } finally {
+        $imagen.Dispose()
+    }
+}
+
+# Sondas de la barra de comandos de Inicio a 1200x700: interior de los siete
+# botones (DESH y REH deben quedar activos) y zona vacia del lienzo.
+function Get-PixelesInicioComandos([string]$bmp) {
+    $imagen = [System.Drawing.Bitmap]::FromFile($bmp)
+    try {
+        $puntos = @("454,60", "516,60", "578,60", "640,60", "702,60",
+                    "764,60", "826,60", "550,200")
         $salida = @()
         foreach ($punto in $puntos) {
             $xy = $punto.Split(",")
@@ -629,6 +651,90 @@ Ejecutar-Caso "inicio_editar" {
     if ($motorCodigo -ne 0) { [void]$problemas.Add("el motor no cargo el LOGIC3 editado") }
     if ((Get-Content -LiteralPath $traza -Raw) -notlike "*ent 2 99 80*") {
         [void]$problemas.Add("el runtime no partio de la posicion editada")
+    }
+}
+
+Ejecutar-Caso "inicio_comandos" {
+    param($dir, $problemas)
+    $entrada = Join-Path $dir "escena.log"
+    $volcado = Join-Path $dir "comandos.txt"
+    $captura = Join-Path $dir "comandos.bmp"
+    Copy-Item (Join-Path $raiz "pruebas\modelo\escena_scripts.log") $entrada
+
+    # NODO, ESCENA, DESH, REH, seleccionar la escena nueva, BORRAR,
+    # seleccionar Camera2D, PADRE, clic en lienzo vacio, DESH, REH,
+    # RAIZ y DESH. Los centros son los de la barra del lienzo a 1200x700.
+    $clics = "543,68;481,68;791,68;853,68;80,190;605,68;" +
+             "80,168;667,68;550,200;791,68;853,68;729,68;791,68"
+    $codigo = Ejecutar-Editor $dir @("--inicio-modelo", "escena.log",
+                                     "--sin-ventanas", "--clics", $clics,
+                                     "--captura", $captura,
+                                     "--volcar-inicio", $volcado)
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    foreach ($archivo in @($captura, $volcado)) {
+        if (-not (Test-Path -LiteralPath $archivo)) {
+            [void]$problemas.Add("falta " + (Split-Path -Leaf $archivo))
+        }
+    }
+    if ($problemas.Count -gt 0) { return }
+
+    $texto = Get-TextoNormalizado $volcado
+    foreach ($linea in @(
+        "inicio_sel=13",
+        "inicio_undo=4 redo=1 ultimo=deshecho reparentar=-1",
+        "inicio_entidades=9 escenas=1 nodos=4 scripts=1 asociaciones=1",
+        "inicio_seleccion=nodo #13",
+        "inicio_nodo=13 escena=10 padre=12 nombre=Camera2D",
+        "inicio_nodo=16 escena=0 padre=0 nombre=Nodo 1")) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("falta en Inicio: " + $linea)
+        }
+    }
+    if ((Get-Content -LiteralPath $volcado -Raw) -match "padre=0 nombre=Camera2D") {
+        [void]$problemas.Add("el ultimo desh no restauro el padre de Camera2D")
+    }
+    Comprobar-Texto "inicio_comandos" ".pixeles" `
+                    (Get-PixelesInicioComandos $captura) $problemas
+}
+
+Ejecutar-Caso "inicio_atajos" {
+    param($dir, $problemas)
+    $entrada = Join-Path $dir "escena.log"
+    $volcado = Join-Path $dir "atajos.txt"
+    $captura = Join-Path $dir "atajos.bmp"
+    Copy-Item (Join-Path $raiz "pruebas\modelo\escena_scripts.log") $entrada
+
+    # Supr borra Camera2D; las tres combinaciones de deshacer y rehacer
+    # recorren el historial; Ins crea un nodo, Mayus+Ins una escena y Esc
+    # deja la seleccion vacia.
+    $teclas = '\d\z\y\z\Z\z\i\I\e'
+    $codigo = Ejecutar-Editor $dir @("--inicio-modelo", "escena.log",
+                                     "--sin-ventanas", "--clics", "80,168",
+                                     "--inicio-teclas", $teclas,
+                                     "--captura", $captura,
+                                     "--volcar-inicio", $volcado)
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    if (-not (Test-Path -LiteralPath $volcado)) {
+        [void]$problemas.Add("falta atajos.txt")
+        return
+    }
+    if (-not (Test-Path -LiteralPath $captura)) {
+        [void]$problemas.Add("falta atajos.bmp")
+    }
+    $texto = Get-TextoNormalizado $volcado
+    foreach ($linea in @(
+        "inicio_sel=-1",
+        "inicio_filas=7",
+        "inicio_undo=2 redo=0 ultimo=creado reparentar=-1",
+        "inicio_entidades=10 escenas=2 nodos=4 scripts=1 asociaciones=1",
+        "inicio_nodo=13 escena=10 padre=12 nombre=Camera2D",
+        "inicio_nodo=16 escena=0 padre=0 nombre=Nodo 1")) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("falta en Inicio: " + $linea)
+        }
+    }
+    if ($texto.Contains("inicio_seleccion=")) {
+        [void]$problemas.Add("Escape no limpio la seleccion")
     }
 }
 
