@@ -1027,6 +1027,11 @@ procesado en `src\nucleo.c`.
   `--leer-modelo "entrada.log|volcado.txt|diagnostico.txt|recursos.txt"`
   expone la conversion y la validacion en las pruebas; el ultimo campo es
   opcional, no abre ventanas ni modifica archivos de juego.
+  `pm_validar_recursos_json()` reutiliza esa misma comprobacion y devuelve un
+  JSON de una linea con `estado`, `total` y un `errores` con codigo, linea,
+  id y nombre de cada fallo; `--diagnostico-json
+  "entrada.log|salida.json"` lo escribe para que una IA pueda leerlo sin
+  interpretar texto libre.
   `programa_proyectar_modelo()` muestra ese mismo grafo en el Gestor de
   logica: cada entidad se convierte en una pieza real del lienzo, cada
   `conecta` pasa a ser el `enlace` de la pieza de origen y el inspector

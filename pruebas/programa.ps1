@@ -9,6 +9,7 @@
 #   modelo_minimo   vuelca el ProjectModel con los siete tipos y dos enlaces
 #   modelo_desde_log lee el .log de ejemplo y vuelca el grafo convertido
 #   modelo_recursos valida el PNG del actor y su conexion
+#   diagnostico_json emite los recursos faltantes como JSON
 #   modelo_gestor   el .log se ve igual en el lienzo y en el inspector
 #   modelo_logic3   el LOGIC3 generado conserva la traza del .log original
 #   preview_captura preview y motor capturan el mismo fotograma del LOGIC3
@@ -340,6 +341,41 @@ Ejecutar-Caso "modelo_recursos" {
     if (-not $texto_desconectado.Contains("linea 8: actor 2 sin recurso conectado")) {
         [void]$problemas.Add("no se diagnostico el actor sin recurso")
     }
+}
+
+Ejecutar-Caso "diagnostico_json" {
+    param($dir, $problemas)
+    $entrada = Join-Path $dir "entrada.log"
+    $bmp = Join-Path $dir "json.bmp"
+    $tiles = Join-Path $dir "tiles"
+    $png = Join-Path $tiles "jugador.png"
+    $salida = Join-Path $dir "salida.json"
+    Copy-Item (Join-Path $raiz "pruebas\modelo\juego_ia.log") $entrada
+    if (-not (Test-Path -LiteralPath $tiles)) {
+        [void](New-Item -ItemType Directory -Path $tiles)
+    }
+
+    # Sin PNG: el JSON debe contener el recurso ausente con su linea y ruta.
+    if (Test-Path -LiteralPath $png) { Remove-Item -LiteralPath $png }
+    $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $bmp,
+                                     "--diagnostico-json",
+                                     "entrada.log|salida.json")
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    if (-not (Test-Path -LiteralPath $salida)) {
+        [void]$problemas.Add("no se emitio el diagnostico JSON")
+        return
+    }
+    Comprobar-Texto "diagnostico_json" ".json" `
+                    (Get-TextoNormalizado $salida) $problemas
+
+    # Con el PNG presente el estado cambia a ok y la lista queda vacia.
+    [void](New-Item -ItemType File -Path $png -Force)
+    Remove-Item -LiteralPath $salida
+    [void](Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $bmp,
+                                  "--diagnostico-json",
+                                  "entrada.log|salida.json"))
+    Comprobar-Texto "diagnostico_json_ok" ".json" `
+                    (Get-TextoNormalizado $salida) $problemas
 }
 
 Ejecutar-Caso "modelo_gestor" {

@@ -84,9 +84,10 @@ a la suite de conformidad.
 `pruebas\programa` contiene dos LOGIC3 sin CRC: `mapa_solo.logic3` lleva
 `sistema.opciones` con `jugador_implicito=0`, y `legacy.logic3` no lleva la
 pieza. Ambos apuntan al mapa `pruebas/colisiones/fisica.mav` y no tienen
-objetos. La suite comprueba catorce cosas: el volcado del `ProjectModel` minimo,
+objetos. La suite comprueba quince cosas: el volcado del `ProjectModel` minimo,
 la conversion del `.log` de ejemplo, la validacion de recursos del actor,
-que el mismo grafo aparece en el lienzo y en el inspector, que el LOGIC3
+el diagnostico JSON de recurso faltante, que el mismo grafo aparece en el
+lienzo y en el inspector, que el LOGIC3
 generado conserva la traza del juego, que preview y motor capturan el mismo
 fotograma, que un proyecto
 nuevo guarda la
@@ -120,6 +121,12 @@ Por ultimo cambia `conecta 5 -> 2` por `conecta 5 -> 3` y espera
 `linea 8: actor 2 sin recurso conectado`. La validacion es generica: no nombra
 el proyecto de ejemplo y solo exige que todo recurso exista y que todo actor
 tenga un recurso entrante.
+
+El caso `diagnostico_json` usa `--diagnostico-json` sobre el mismo `.log` y
+comprueba que, sin el PNG, el JSON informa `recurso_sin_archivo` con la linea
+11, la entidad 5 y la ruta `tiles/jugador.png`. Despues crea el archivo y
+exige `estado=ok`, `total=0` y la lista de errores vacia. Los dos patrones
+son `diagnostico_json.json` y `diagnostico_json_ok.json`.
 
 El caso `modelo_gestor` abre `pruebas/modelo/juego_ia.log` con
 `--gestor-modelo` y comprueba que el lienzo y el inspector reciben el mismo

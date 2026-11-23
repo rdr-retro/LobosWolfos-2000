@@ -1,0 +1,1 @@
+{"version":1,"proyecto":"Juego IA","validacion":"recursos","estado":"error","total":1,"errores":[{"codigo":"recurso_sin_archivo","linea":11,"id_entidad":5,"nombre":"Textura pintada","ruta":"tiles/jugador.png"}]}

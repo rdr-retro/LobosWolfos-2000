@@ -2959,6 +2959,40 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 }
             }
         }
+        /* Plan 16.7: diagnostico JSON de recursos faltantes. Usa el mismo
+         * ProjectModel que --leer-modelo y la misma comprobacion en disco;
+         * solo cambia el formato de salida para que una IA pueda leerlo. */
+        {
+            char *dj = arg_valor(cmd, "--diagnostico-json");
+            if (dj) {
+                char entrada[MAX_PATH];
+                char salida[MAX_PATH];
+                char raiz[MAX_PATH];
+                char diagnostico[PM_ERROR_MAX];
+                char json[32768];
+                const char *p = dj;
+                ProjectModel *m;
+                FILE *df;
+
+                tramo_flag_modelo(entrada, (int)sizeof(entrada), &p);
+                tramo_flag_modelo(salida, (int)sizeof(salida), &p);
+                diagnostico[0] = '\0';
+                m = ml_leer(entrada, diagnostico, sizeof(diagnostico));
+                if (m) {
+                    ruta_carpeta(raiz, (int)sizeof(raiz), entrada);
+                    if (!raiz[0]) strcpy(raiz, ".");
+                    pm_validar_recursos_json(m, raiz, json, sizeof(json));
+                    pm_destruir(m);
+                } else {
+                    pm_validar_recursos_json(NULL, NULL, json, sizeof(json));
+                }
+                if (salida[0] && (df = fopen(salida, "w")) != NULL) {
+                    fputs(json, df);
+                    fputc('\n', df);
+                    fclose(df);
+                }
+            }
+        }
         /* Plan 16.5: escribe el LOGIC3 canonico del ProjectModel leido del
          * .log. El formato, el CRC y el resultado del juego los decide el
          * escritor de siempre; este flag solo puentea las dos capas. */

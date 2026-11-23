@@ -7,6 +7,7 @@
 #include "proyecto_modelo.h"
 
 #include <limits.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -304,56 +305,222 @@ static int actor_con_recurso(const ProjectModel *m, int id_actor) {
     return 0;
 }
 
-int pm_validar_recursos(const ProjectModel *m, const char *raiz,
-                        char *diagnostico, size_t longitud) {
+/* Un fallo de recursos con los datos que necesitan tanto el diagnostico
+ * de texto como el JSON. El codigo 4 representa la ausencia de modelo. */
+typedef struct {
+    int codigo; /* 1 sin ruta, 2 sin archivo, 3 actor sin recurso, 4 modelo */
+    int linea;
+    int id;
+    char nombre[PM_NOMBRE_MAX];
+    char ruta[PM_RUTA_MAX];
+} FalloRecurso;
+
+static int validar_recursos_detallado(const ProjectModel *m, const char *raiz,
+                                      FalloRecurso *fallos, int max) {
     const EntidadModelo *e;
     const PropiedadModelo *p;
-    char primera[PM_ERROR_MAX];
-    char buf[PM_ERROR_MAX];
     char ruta[PM_RUTA_MAX * 2 + 4];
     FILE *f;
-    int fallos = 0;
+    int n = 0;
     int i;
 
-    primera[0] = '\0';
     if (!m) {
-        anotar_fallo(primera, sizeof(primera), &fallos, "sin modelo");
-    } else {
-        for (i = 0; i < m->num_entidades; i++) {
-            e = &m->entidades[i];
-            if (e->kind == PM_KIND_RECURSO) {
-                p = buscar_propiedad(e, "ruta");
-                if (!p || !p->valor[0]) {
-                    snprintf(buf, sizeof(buf), "linea %d: recurso %d sin ruta",
-                             e->origen.linea, e->id);
-                    anotar_fallo(primera, sizeof(primera), &fallos, buf);
-                    continue;
+        if (n < max) {
+            memset(&fallos[n], 0, sizeof(fallos[n]));
+            fallos[n].codigo = 4;
+            n++;
+        }
+        return n;
+    }
+    for (i = 0; i < m->num_entidades; i++) {
+        e = &m->entidades[i];
+        if (e->kind == PM_KIND_RECURSO) {
+            p = buscar_propiedad(e, "ruta");
+            if (!p || !p->valor[0]) {
+                if (n < max) {
+                    memset(&fallos[n], 0, sizeof(fallos[n]));
+                    fallos[n].codigo = 1;
+                    fallos[n].linea = e->origen.linea;
+                    fallos[n].id = e->id;
+                    copiar_seguro(fallos[n].nombre,
+                                  sizeof(fallos[n].nombre), e->nombre);
+                    n++;
                 }
-                if (raiz && raiz[0])
-                    snprintf(ruta, sizeof(ruta), "%s/%s", raiz, p->valor);
-                else
-                    copiar_seguro(ruta, sizeof(ruta), p->valor);
-                f = fopen(ruta, "rb");
-                if (f) fclose(f);
-                else {
-                    snprintf(buf, sizeof(buf),
-                             "linea %d: recurso %d sin archivo: %s",
-                             p->linea, e->id, p->valor);
-                    anotar_fallo(primera, sizeof(primera), &fallos, buf);
-                }
-            } else if (e->kind == PM_KIND_ACTOR) {
-                if (!actor_con_recurso(m, e->id)) {
-                    snprintf(buf, sizeof(buf),
-                             "linea %d: actor %d sin recurso conectado",
-                             e->origen.linea, e->id);
-                    anotar_fallo(primera, sizeof(primera), &fallos, buf);
-                }
+                continue;
+            }
+            if (raiz && raiz[0])
+                snprintf(ruta, sizeof(ruta), "%s/%s", raiz, p->valor);
+            else
+                copiar_seguro(ruta, sizeof(ruta), p->valor);
+            f = fopen(ruta, "rb");
+            if (f) fclose(f);
+            else if (n < max) {
+                memset(&fallos[n], 0, sizeof(fallos[n]));
+                fallos[n].codigo = 2;
+                fallos[n].linea = p->linea;
+                fallos[n].id = e->id;
+                copiar_seguro(fallos[n].nombre,
+                              sizeof(fallos[n].nombre), e->nombre);
+                copiar_seguro(fallos[n].ruta,
+                              sizeof(fallos[n].ruta), p->valor);
+                n++;
+            }
+        } else if (e->kind == PM_KIND_ACTOR) {
+            if (!actor_con_recurso(m, e->id) && n < max) {
+                memset(&fallos[n], 0, sizeof(fallos[n]));
+                fallos[n].codigo = 3;
+                fallos[n].linea = e->origen.linea;
+                fallos[n].id = e->id;
+                copiar_seguro(fallos[n].nombre,
+                              sizeof(fallos[n].nombre), e->nombre);
+                n++;
             }
         }
     }
-    if (diagnostico && longitud > 0)
-        copiar_seguro(diagnostico, longitud, fallos ? primera : "sin errores");
-    return fallos;
+    return n;
+}
+
+static const char *codigo_fallo(int codigo) {
+    switch (codigo) {
+    case 1: return "recurso_sin_ruta";
+    case 2: return "recurso_sin_archivo";
+    case 3: return "actor_sin_recurso";
+    default: return "sin_modelo";
+    }
+}
+
+static void texto_fallo(const FalloRecurso *f, char *dst, size_t tam) {
+    if (!f || !dst || tam == 0) return;
+    switch (f->codigo) {
+    case 1:
+        snprintf(dst, tam, "linea %d: recurso %d sin ruta",
+                 f->linea, f->id);
+        break;
+    case 2:
+        snprintf(dst, tam, "linea %d: recurso %d sin archivo: %s",
+                 f->linea, f->id, f->ruta);
+        break;
+    case 3:
+        snprintf(dst, tam, "linea %d: actor %d sin recurso conectado",
+                 f->linea, f->id);
+        break;
+    default:
+        copiar_seguro(dst, tam, "sin modelo");
+        break;
+    }
+}
+
+int pm_validar_recursos(const ProjectModel *m, const char *raiz,
+                        char *diagnostico, size_t longitud) {
+    FalloRecurso fallos[PM_ENTIDADES_MAX];
+    char buf[PM_ERROR_MAX];
+    int fallos_n = validar_recursos_detallado(m, raiz, fallos,
+                                              PM_ENTIDADES_MAX);
+
+    if (diagnostico && longitud > 0) {
+        if (fallos_n > 0) {
+            texto_fallo(&fallos[0], buf, sizeof(buf));
+            copiar_seguro(diagnostico, longitud, buf);
+        } else {
+            copiar_seguro(diagnostico, longitud, "sin errores");
+        }
+    }
+    return fallos_n;
+}
+
+static void json_anadir(char *dst, size_t tam, size_t *usado,
+                        const char *formato, ...) {
+    va_list args;
+    int n;
+    if (!dst || tam == 0 || !usado || *usado >= tam) return;
+    va_start(args, formato);
+    n = vsnprintf(dst + *usado, tam - *usado, formato, args);
+    va_end(args);
+    if (n < 0) {
+        dst[*usado] = '\0';
+        return;
+    }
+    if ((size_t)n >= tam - *usado) *usado = tam - 1;
+    else *usado += (size_t)n;
+    dst[*usado] = '\0';
+}
+
+/* Escapa comillas, contrabarras y caracteres de control para que el texto
+ * del .log siga siendo un string JSON valido sin convertir codificacion. */
+static void json_texte(char *dst, size_t tam, const char *src) {
+    size_t j = 0;
+    const unsigned char *p;
+    if (!dst || tam == 0) return;
+    if (!src) src = "";
+    for (p = (const unsigned char *)src; *p; p++) {
+        char extra[8];
+        size_t n = 1;
+        if (*p == '"' || *p == '\\') {
+            extra[0] = '\\';
+            extra[1] = (char)*p;
+            n = 2;
+        } else if (*p < 32) {
+            snprintf(extra, sizeof(extra), "\\u%04x", (unsigned int)*p);
+            n = 6;
+        } else {
+            extra[0] = (char)*p;
+            extra[1] = '\0';
+        }
+        if (j + n + 1 >= tam) break;
+        memcpy(dst + j, extra, n);
+        j += n;
+    }
+    dst[j] = '\0';
+}
+
+static const char *json_proyecto(const ProjectModel *m) {
+    int i;
+    if (!m) return "";
+    for (i = 0; i < m->num_entidades; i++)
+        if (m->entidades[i].kind == PM_KIND_PROYECTO)
+            return m->entidades[i].nombre;
+    return "";
+}
+
+int pm_validar_recursos_json(const ProjectModel *m, const char *raiz,
+                             char *json, size_t longitud) {
+    FalloRecurso fallos[PM_ENTIDADES_MAX];
+    char nombre[PM_NOMBRE_MAX * 6];
+    char ruta[PM_RUTA_MAX * 6];
+    size_t usado = 0;
+    int n;
+    int i;
+
+    if (!json || longitud == 0) return 0;
+    json[0] = '\0';
+    n = validar_recursos_detallado(m, raiz, fallos, PM_ENTIDADES_MAX);
+    json_anadir(json, longitud, &usado,
+                "{\"version\":1,\"proyecto\":\"");
+    json_texte(nombre, sizeof(nombre), json_proyecto(m));
+    json_anadir(json, longitud, &usado, "%s", nombre);
+    json_anadir(json, longitud, &usado,
+                "\",\"validacion\":\"recursos\",\"estado\":\"%s\","
+                "\"total\":%d,\"errores\":[",
+                n ? "error" : "ok", n);
+    for (i = 0; i < n; i++) {
+        if (i) json_anadir(json, longitud, &usado, ",");
+        json_anadir(json, longitud, &usado,
+                    "{\"codigo\":\"%s\",\"linea\":%d,"
+                    "\"id_entidad\":%d,\"nombre\":\"",
+                    codigo_fallo(fallos[i].codigo),
+                    fallos[i].linea, fallos[i].id);
+        json_texte(nombre, sizeof(nombre), fallos[i].nombre);
+        json_anadir(json, longitud, &usado, "%s", nombre);
+        json_anadir(json, longitud, &usado, "\"");
+        if (fallos[i].codigo == 2) {
+            json_anadir(json, longitud, &usado, ",\"ruta\":\"");
+            json_texte(ruta, sizeof(ruta), fallos[i].ruta);
+            json_anadir(json, longitud, &usado, "%s\"", ruta);
+        }
+        json_anadir(json, longitud, &usado, "}");
+    }
+    json_anadir(json, longitud, &usado, "]}");
+    return n;
 }
 
 void pm_volcar(const ProjectModel *m, const char *ruta) {

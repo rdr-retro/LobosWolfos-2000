@@ -103,6 +103,12 @@ int pm_validar(const ProjectModel *m, char *diagnostico, size_t longitud);
  * presentes y puede ejecutarse antes de que existan los recursos. */
 int pm_validar_recursos(const ProjectModel *m, const char *raiz,
                         char *diagnostico, size_t longitud);
+/* Igual comprobacion, pero el resultado es un JSON de una sola linea con
+ * todos los fallos (codigo, linea, id y nombre de la entidad y, cuando
+ * aplica, la ruta del recurso). No escribe archivos; devuelve el numero de
+ * fallos y deja el texto en `json`. */
+int pm_validar_recursos_json(const ProjectModel *m, const char *raiz,
+                             char *json, size_t longitud);
 void pm_volcar(const ProjectModel *m, const char *ruta);
 const char *pm_kind_nombre(int kind);
 
