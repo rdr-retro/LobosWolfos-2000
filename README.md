@@ -1034,8 +1034,10 @@ ejemplo con cabecera LOGIC3 y una sección `montaje` de cinco nodos y tres
    para el LOGIC3 generado; el caso `preview_captura` lo comprueba.
 
 Las comprobaciones están en `pruebas/programa.ps1` y sus patrones en
-`pruebas/programa/esperado/`. Ninguno de estos flags modifica el archivo de
-entrada ni desplaza los índices de menú (`ARCHIVO=1`, `MODO=2`, `AYUDA=9`).
+`pruebas/programa/esperado/`. El caso `recorrido_autoria` encadena la lectura,
+la validación, el guardado y la ejecución para detectar cambios que los casos
+aislados no verían. Ninguno de estos flags modifica el archivo de entrada ni
+desplaza los índices de menú (`ARCHIVO=1`, `MODO=2`, `AYUDA=9`).
 
 ## Estructura
 

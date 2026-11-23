@@ -84,12 +84,13 @@ a la suite de conformidad.
 `pruebas\programa` contiene dos LOGIC3 sin CRC: `mapa_solo.logic3` lleva
 `sistema.opciones` con `jugador_implicito=0`, y `legacy.logic3` no lleva la
 pieza. Ambos apuntan al mapa `pruebas/colisiones/fisica.mav` y no tienen
-objetos. La suite comprueba quince cosas: el volcado del `ProjectModel` minimo,
+objetos. La suite comprueba dieciseis cosas: el volcado del `ProjectModel` minimo,
 la conversion del `.log` de ejemplo, la validacion de recursos del actor,
 el diagnostico JSON de recurso faltante, que el mismo grafo aparece en el
 lienzo y en el inspector, que el LOGIC3
 generado conserva la traza del juego, que preview y motor capturan el mismo
-fotograma, que un proyecto
+fotograma, que un solo recorrido encadena lectura, validacion, guardado y
+ejecucion, que un proyecto
 nuevo guarda la
 pieza de opciones, que `mapa_solo` mantiene `lobo 16 16` con `--tecla
 derecha`, que `legacy` mueve el lobo y dibuja un BMP distinto, que
@@ -153,6 +154,12 @@ genera con `--generar-logic3`, despues abre esa ruta en la vista previa con
 `--captura` se descarta; se compara el BMP de juego de las dos vias y su hash
 con `preview_captura.bmp.sha256`. Asi queda verificada la igualdad que ya
 documentaba `README.md` sin depender de un ejecutable recompilado a mano.
+
+El caso `recorrido_autoria` encadena esos pasos en una sola prueba: lee el
+`.log` con `--leer-modelo`, valida con `--diagnostico-json`, guarda con
+`--generar-logic3` y ejecuta ese LOGIC3 en preview y en `game.exe`. Reutiliza
+los patrones de los casos anteriores, asi que no añade fixtures nuevas: si
+algún eslabón cambia, el recorrido falla aunque cada caso aislado siga pasando.
 
 El caso `entrada_gestor` fija el volcado `programa_modo=1 programa_piezas=0`,
 el hash del BMP y 15 sondas de pixel; la paleta aparece sin resaltar la primera

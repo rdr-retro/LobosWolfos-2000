@@ -13,6 +13,7 @@
 #   modelo_gestor   el .log se ve igual en el lienzo y en el inspector
 #   modelo_logic3   el LOGIC3 generado conserva la traza del .log original
 #   preview_captura preview y motor capturan el mismo fotograma del LOGIC3
+#   recorrido_autoria encadena lectura, validacion, LOGIC3 y ejecucion
 #   opciones_nuevo  el editor crea sistema.opciones en un proyecto nuevo
 #   mapa_solo       mapa sin opciones de jugador: lobo quieto y sin sprite
 #   legacy          sin sistema.opciones: lobo se mueve y el BMP cambia
@@ -493,6 +494,79 @@ Ejecutar-Caso "preview_captura" {
     }
 
     # --captura-juego requiere --captura: el BMP de la UI se descarta.
+    $e = Ejecutar-Editor $dir @("--sin-ventanas", "--abrir-logic3", $salida,
+                                "--captura", $ui, "--captura-juego", $preview,
+                                "--fotogramas", "6")
+    $m = Ejecutar-Motor $dir @("--logic3", $salida, "--captura", $motorBmp,
+                               "--fotogramas", "6")
+    if ($e -ne 0 -or $m -ne 0) {
+        [void]$problemas.Add("preview o motor devolvieron $e / $m")
+        return
+    }
+    if (-not (Test-Path -LiteralPath $preview) -or
+        -not (Test-Path -LiteralPath $motorBmp)) {
+        [void]$problemas.Add("falta la captura de preview o de motor")
+        return
+    }
+    $hPreview = Get-Sha256 $preview
+    $hMotor = Get-Sha256 $motorBmp
+    if ($hPreview -ne $hMotor) {
+        [void]$problemas.Add(
+            "preview y motor dibujan distinto: $hPreview / $hMotor")
+    }
+    Comprobar-Hash "preview_captura" $hPreview $problemas
+}
+
+Ejecutar-Caso "recorrido_autoria" {
+    param($dir, $problemas)
+
+    $entrada = Join-Path $dir "entrada.log"
+    $volcado = Join-Path $dir "modelo.txt"
+    $diagnostico = Join-Path $dir "estructura.txt"
+    $json = Join-Path $dir "salida.json"
+    $salida = Join-Path $dir "generado.logic3"
+    $ui = Join-Path $dir "ui.bmp"
+    $preview = Join-Path $dir "preview.bmp"
+    $motorBmp = Join-Path $dir "motor.bmp"
+    $tiles = Join-Path $dir "tiles"
+    Copy-Item (Join-Path $raiz "pruebas\modelo\juego_ia.log") $entrada
+    if (-not (Test-Path -LiteralPath $tiles)) {
+        [void](New-Item -ItemType Directory -Path $tiles)
+    }
+    [void](New-Item -ItemType File -Path (Join-Path $tiles "jugador.png") -Force)
+
+    # Un solo recorrido: el .log se lee, se valida y se guarda como LOGIC3.
+    $leer = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $ui,
+                                   "--leer-modelo",
+                                   "entrada.log|modelo.txt|estructura.txt")
+    $validar = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $ui,
+                                      "--diagnostico-json",
+                                      "entrada.log|salida.json")
+    $guardar = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $ui,
+                                      "--generar-logic3",
+                                      "entrada.log|generado.logic3")
+    if ($leer -ne 0 -or $validar -ne 0 -or $guardar -ne 0) {
+        [void]$problemas.Add("el recorrido devolvio $leer / $validar / $guardar")
+        return
+    }
+    if (-not (Test-Path -LiteralPath $volcado) -or
+        -not (Test-Path -LiteralPath $diagnostico) -or
+        -not (Test-Path -LiteralPath $json) -or
+        -not (Test-Path -LiteralPath $salida)) {
+        [void]$problemas.Add("falta algun paso del recorrido")
+        return
+    }
+    $texto = Get-TextoNormalizado $volcado
+    if (-not $texto.Contains("diagnostico=sin_errores")) {
+        [void]$problemas.Add("el .log no paso la validacion estructural")
+    }
+    Comprobar-Texto "modelo_desde_log" ".volcar" $texto $problemas
+    Comprobar-Texto "diagnostico_json_ok" ".json" `
+                    (Get-TextoNormalizado $json) $problemas
+    Comprobar-Texto "modelo_logic3" ".logic3" `
+                    (Get-TextoNormalizado $salida) $problemas
+
+    # El mismo LOGIC3 se ejecuta en las dos vias y produce la misma captura.
     $e = Ejecutar-Editor $dir @("--sin-ventanas", "--abrir-logic3", $salida,
                                 "--captura", $ui, "--captura-juego", $preview,
                                 "--fotogramas", "6")
