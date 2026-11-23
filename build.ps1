@@ -49,7 +49,7 @@ $Fuentes = @(
     "src\tiles_modo.c", "src\pestanas.c", "src\app.c", "src\ajustes.c",
     "src\compilar.c", "src\juego_ventana.c", "src\ejemplo.c",
     "src\proyecto_modelo.c", "src\modelo_log.c", "src\modelo_logic3.c",
-    "motor\lobo.c", "motor\activo.c", "motor\nucleo32.s"
+    "src\inicio.c", "motor\lobo.c", "motor\activo.c", "motor\nucleo32.s"
 )
 
 # El editor lleva la plantilla del motor como recurso (menu COMPILE):

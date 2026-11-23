@@ -84,13 +84,14 @@ a la suite de conformidad.
 `pruebas\programa` contiene dos LOGIC3 sin CRC: `mapa_solo.logic3` lleva
 `sistema.opciones` con `jugador_implicito=0`, y `legacy.logic3` no lleva la
 pieza. Ambos apuntan al mapa `pruebas/colisiones/fisica.mav` y no tienen
-objetos. La suite comprueba dieciseis cosas: el volcado del `ProjectModel` minimo,
+objetos. La suite comprueba dieciocho cosas: el volcado del `ProjectModel` minimo,
 la conversion del `.log` de ejemplo, la validacion de recursos del actor,
 el diagnostico JSON de recurso faltante, que el mismo grafo aparece en el
 lienzo y en el inspector, que el LOGIC3
 generado conserva la traza del juego, que preview y motor capturan el mismo
 fotograma, que un solo recorrido encadena lectura, validacion, guardado y
-ejecucion, que un proyecto
+ejecucion, que Inicio crea, reparenta, borra y deshace nodos con un historial
+compartido, que un ciclo de padres se rechaza con diagnostico, que un proyecto
 nuevo guarda la
 pieza de opciones, que `mapa_solo` mantiene `lobo 16 16` con `--tecla
 derecha`, que `legacy` mueve el lobo y dibuja un BMP distinto, que
@@ -160,6 +161,16 @@ El caso `recorrido_autoria` encadena esos pasos en una sola prueba: lee el
 `--generar-logic3` y ejecuta ese LOGIC3 en preview y en `game.exe`. Reutiliza
 los patrones de los casos anteriores, asi que no añade fixtures nuevas: si
 algún eslabón cambia, el recorrido falla aunque cada caso aislado siga pasando.
+
+El caso `inicio_nodos` usa una sola flag `--inicio` para cargar el `.log`,
+crear una escena y un actor, reparentar el actor, borrar la escena, deshacer y
+rehacer. Intercala `volcar|ruta` para congelar tres estados y comprueba que el
+borrado de un actor con dos conexiones reduce el grafo a seis entidades y una
+conexion. Los cuatro patrones son `inicio_nodos.paso.txt`,
+`inicio_nodos.deshecho.txt`, `inicio_nodos.rehecho.txt` y
+`inicio_nodos.borrado.txt`. El caso `inicio_ciclos` encadena dos reparentados
+que forman un ciclo, exige codigo de salida 2 y fija el mensaje
+`inicio_ciclos.diag.txt` sin llegar a volcar el grafo invalido.
 
 El caso `entrada_gestor` fija el volcado `programa_modo=1 programa_piezas=0`,
 el hash del BMP y 15 sondas de pixel; la paleta aparece sin resaltar la primera

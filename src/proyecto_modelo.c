@@ -208,6 +208,133 @@ int pm_conectar(ProjectModel *m, int origen, const char *puerto_origen,
     return id;
 }
 
+/* Quita una referencia por nombre compactando el array. Se usa para dejar
+ * un nodo sin padre, algo que pm_referencia no puede hacer con ID 0. */
+static void quitar_referencia(EntidadModelo *e, const char *nombre) {
+    int i, j;
+    if (!e || !nombre) return;
+    for (i = 0; i < e->num_referencias; i++) {
+        if (strcmp(e->referencias[i].nombre, nombre) != 0) continue;
+        for (j = i + 1; j < e->num_referencias; j++)
+            e->referencias[j - 1] = e->referencias[j];
+        e->num_referencias--;
+        return;
+    }
+}
+
+int pm_padre(const ProjectModel *m, int id) {
+    const EntidadModelo *e = pm_entidad_const(m, id);
+    int i;
+    if (!e) return 0;
+    for (i = 0; i < e->num_referencias; i++)
+        if (strcmp(e->referencias[i].nombre, "padre") == 0)
+            return e->referencias[i].id;
+    return 0;
+}
+
+int pm_borrar(ProjectModel *m, int id) {
+    int borrar[PM_ENTIDADES_MAX];
+    EntidadModelo *e;
+    int padre, i, j, n, destino;
+
+    if (!m) return 0;
+    e = pm_entidad(m, id);
+    if (!e) {
+        error_fijar(m, "no existe la entidad");
+        return 0;
+    }
+    if (e->kind == PM_KIND_PROYECTO) {
+        error_fijar(m, "no se puede borrar el proyecto");
+        return 0;
+    }
+    memset(borrar, 0, sizeof(borrar));
+    borrar[e - m->entidades] = 1;
+    n = 1;
+    for (i = 0; i < m->num_entidades; i++) {
+        if (borrar[i] ||
+            m->entidades[i].kind != PM_KIND_CONEXION) continue;
+        for (j = 0; j < m->entidades[i].num_referencias; j++) {
+            if (m->entidades[i].referencias[j].id == id) {
+                borrar[i] = 1;
+                n++;
+                break;
+            }
+        }
+    }
+    padre = pm_padre(m, id);
+    /* Los hijos del nodo borrado suben un nivel para no quedar colgados. */
+    for (i = 0; i < m->num_entidades; i++) {
+        if (borrar[i] || pm_padre(m, m->entidades[i].id) != id) continue;
+        if (padre)
+            pm_referencia(&m->entidades[i], "padre", padre, NULL, 0);
+        else
+            quitar_referencia(&m->entidades[i], "padre");
+    }
+    destino = 0;
+    for (i = 0; i < m->num_entidades; i++) {
+        if (borrar[i]) continue;
+        if (destino != i) m->entidades[destino] = m->entidades[i];
+        destino++;
+    }
+    m->num_entidades = destino;
+    return n;
+}
+
+int pm_reparentar(ProjectModel *m, int id, int id_padre) {
+    EntidadModelo *e;
+    int actual, pasos;
+
+    if (!m) return 0;
+    e = pm_entidad(m, id);
+    if (!e) {
+        error_fijar(m, "no existe la entidad");
+        return 0;
+    }
+    if (id_padre < 0) {
+        error_fijar(m, "el padre debe ser un ID o 0");
+        return 0;
+    }
+    if (id_padre == id) {
+        error_fijar(m, "un nodo no puede ser su propio padre");
+        return 0;
+    }
+    if (id_padre && !pm_entidad(m, id_padre)) {
+        error_fijar(m, "no existe el padre");
+        return 0;
+    }
+    if (id_padre && pm_entidad_const(m, id_padre)->kind == PM_KIND_CONEXION) {
+        error_fijar(m, "el padre no puede ser una conexion");
+        return 0;
+    }
+    actual = id_padre;
+    pasos = 0;
+    while (actual && pasos++ <= m->num_entidades) {
+        if (actual == id) {
+            error_fijar(m, "el reparentado formaria un ciclo");
+            return 0;
+        }
+        actual = pm_padre(m, actual);
+    }
+    if (actual) {
+        error_fijar(m, "el arbol de padres es demasiado largo");
+        return 0;
+    }
+    if (id_padre) {
+        if (!pm_referencia(e, "padre", id_padre, NULL, 0)) {
+            error_fijar(m, "no cabe la referencia padre");
+            return 0;
+        }
+    } else {
+        quitar_referencia(e, "padre");
+    }
+    return 1;
+}
+
+void pm_copiar(const ProjectModel *origen, ProjectModel *destino) {
+    if (!origen || !destino) return;
+    memcpy(destino, origen, sizeof(*destino));
+}
+
 const char *pm_kind_nombre(int kind) {
     switch (kind) {
     case PM_KIND_PROYECTO:  return "proyecto";

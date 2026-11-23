@@ -14,6 +14,8 @@
 #   modelo_logic3   el LOGIC3 generado conserva la traza del .log original
 #   preview_captura preview y motor capturan el mismo fotograma del LOGIC3
 #   recorrido_autoria encadena lectura, validacion, LOGIC3 y ejecucion
+#   inicio_nodos    crear, reparentar, borrar y undo/redo en el servicio Inicio
+#   inicio_ciclos   el reparentado circular se rechaza con diagnostico
 #   opciones_nuevo  el editor crea sistema.opciones en un proyecto nuevo
 #   mapa_solo       mapa sin opciones de jugador: lobo quieto y sin sprite
 #   legacy          sin sistema.opciones: lobo se mueve y el BMP cambia
@@ -588,6 +590,119 @@ Ejecutar-Caso "recorrido_autoria" {
             "preview y motor dibujan distinto: $hPreview / $hMotor")
     }
     Comprobar-Hash "preview_captura" $hPreview $problemas
+}
+
+Ejecutar-Caso "inicio_nodos" {
+    param($dir, $problemas)
+
+    $entrada = Join-Path $dir "entrada.log"
+    $paso = Join-Path $dir "paso.txt"
+    $deshecho = Join-Path $dir "deshecho.txt"
+    $rehecho = Join-Path $dir "rehecho.txt"
+    $borrado = Join-Path $dir "borrado.txt"
+    $bmp = Join-Path $dir "inicio.bmp"
+    Copy-Item (Join-Path $raiz "pruebas\modelo\juego_ia.log") $entrada
+
+    $ordenes = "cargar|entrada.log;crear|escena|Bosque;crear|actor|Lobo;" +
+               "reparentar|11|10;volcar|paso.txt;borrar|10;deshacer;" +
+               "volcar|deshecho.txt;rehacer;volcar|rehecho.txt"
+    $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $bmp,
+                                     "--inicio", $ordenes)
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    if (Test-Path -LiteralPath (Join-Path $dir "inicio.diagnostico.txt")) {
+        [void]$problemas.Add("Inicio escribio un diagnostico en una secuencia valida")
+    }
+    foreach ($ruta in @($paso, $deshecho, $rehecho)) {
+        if (-not (Test-Path -LiteralPath $ruta)) {
+            [void]$problemas.Add("falta el volcado " + (Split-Path -Leaf $ruta))
+            return
+        }
+    }
+    $pasoTexto = Get-TextoNormalizado $paso
+    $deshechoTexto = Get-TextoNormalizado $deshecho
+    $rehechoTexto = Get-TextoNormalizado $rehecho
+    Comprobar-Texto "inicio_nodos" ".paso.txt" $pasoTexto $problemas
+    Comprobar-Texto "inicio_nodos" ".deshecho.txt" $deshechoTexto $problemas
+    Comprobar-Texto "inicio_nodos" ".rehecho.txt" $rehechoTexto $problemas
+
+    foreach ($linea in @(
+        "proyecto_modelo entidades=11 conexiones=3 validacion=0 diagnostico=sin_errores",
+        "entidad=10:escena:Bosque:origen=-:0:ui=0,0,0,0,0,00000000,0",
+        "entidad=11:actor:Lobo:origen=-:0:ui=0,0,0,0,0,00000000,0",
+        "referencia=11:padre:10:-:0",
+        "inicio undo=3 redo=0 ultimo=reparentado")) {
+        if (-not $pasoTexto.Contains($linea)) {
+            [void]$problemas.Add("falta en el paso: " + $linea)
+        }
+    }
+    foreach ($linea in @(
+        "entidad=10:escena:Bosque:origen=-:0:ui=0,0,0,0,0,00000000,0",
+        "referencia=11:padre:10:-:0",
+        "inicio undo=3 redo=1 ultimo=deshecho")) {
+        if (-not $deshechoTexto.Contains($linea)) {
+            [void]$problemas.Add("falta al deshacer: " + $linea)
+        }
+    }
+    if ($rehechoTexto.Contains("entidad=10:escena:Bosque")) {
+        [void]$problemas.Add("rehacer no aplico el borrado")
+    }
+    if ($rehechoTexto.Contains("referencia=11:padre")) {
+        [void]$problemas.Add("rehacer dejo una referencia al nodo borrado")
+    }
+    if (-not $rehechoTexto.Contains(
+            "inicio undo=4 redo=0 ultimo=rehecho")) {
+        [void]$problemas.Add("rehacer no actualizo los contadores")
+    }
+
+    # Borrar un actor con dos conexiones deja el grafo sin enlaces colgados.
+    $ordenes2 = "cargar|entrada.log;borrar|2;volcar|borrado.txt"
+    $codigo2 = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $bmp,
+                                      "--inicio", $ordenes2)
+    if ($codigo2 -ne 0) { [void]$problemas.Add("el editor devolvio $codigo2") }
+    if (-not (Test-Path -LiteralPath $borrado)) {
+        [void]$problemas.Add("falta el volcado del borrado de conexiones")
+        return
+    }
+    $borradoTexto = Get-TextoNormalizado $borrado
+    Comprobar-Texto "inicio_nodos" ".borrado.txt" $borradoTexto $problemas
+    if (-not $borradoTexto.Contains(
+            "proyecto_modelo entidades=6 conexiones=1")) {
+        [void]$problemas.Add("borrar no quito las dos conexiones del actor")
+    }
+    if ($borradoTexto.Contains("conexion=7:") -or
+        $borradoTexto.Contains("conexion=9:")) {
+        [void]$problemas.Add("quedaron conexiones que referenciaban al actor")
+    }
+}
+
+Ejecutar-Caso "inicio_ciclos" {
+    param($dir, $problemas)
+
+    $entrada = Join-Path $dir "entrada.log"
+    $volcado = Join-Path $dir "ciclo.txt"
+    $bmp = Join-Path $dir "inicio.bmp"
+    Copy-Item (Join-Path $raiz "pruebas\modelo\juego_ia.log") $entrada
+
+    $ordenes = "cargar|entrada.log;crear|escena|A;crear|escena|B;" +
+               "reparentar|10|11;reparentar|11|10;volcar|ciclo.txt"
+    $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $bmp,
+                                     "--inicio", $ordenes)
+    if ($codigo -eq 0) {
+        [void]$problemas.Add("el ciclo de padres deberia devolver error")
+    }
+    if (Test-Path -LiteralPath $volcado) {
+        [void]$problemas.Add("no se debio volcar un estado con ciclo")
+    }
+    $diag = Join-Path $dir "inicio.diagnostico.txt"
+    if (-not (Test-Path -LiteralPath $diag)) {
+        [void]$problemas.Add("falta el diagnostico del ciclo")
+        return
+    }
+    $texto = Get-TextoNormalizado $diag
+    Comprobar-Texto "inicio_ciclos" ".diag.txt" $texto $problemas
+    if (-not $texto.Contains("comando 5 (reparentar): el reparentado formaria un ciclo")) {
+        [void]$problemas.Add("el diagnostico no senala el comando 5")
+    }
 }
 
 Ejecutar-Caso "opciones_nuevo" {

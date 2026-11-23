@@ -6,6 +6,7 @@
 #include "proyecto_modelo.h"
 #include "modelo_log.h"
 #include "modelo_logic3.h"
+#include "inicio.h"
 
 App g;
 
@@ -1768,6 +1769,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
     }
     if (captura) {
         int ok;
+        int inicio_ok = 1;
         char *menu_arg = arg_valor(cmd, "--menu");
         char *vista_arg = arg_valor(cmd, "--vista");
         char *raton_arg = arg_valor(cmd, "--raton");
@@ -3016,6 +3018,25 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 }
             }
         }
+        /* Inicio: creacion, borrado, reparentado y undo/redo del ProjectModel.
+         * Una sola flag encadena las ordenes separadas por ';' para poder
+         * congelar estados intermedios con 'volcar|ruta' en las pruebas. */
+        {
+            char *ini = arg_valor(cmd, "--inicio");
+            if (ini) {
+                char diagnostico[PM_ERROR_MAX];
+                inicio_ok = inicio_ejecutar(inicio_servicio(), ini,
+                                            diagnostico, sizeof(diagnostico));
+                if (!inicio_ok) {
+                    FILE *df = fopen("inicio.diagnostico.txt", "w");
+                    if (df) {
+                        fputs(diagnostico, df);
+                        fputc('\n', df);
+                        fclose(df);
+                    }
+                }
+            }
+        }
         /* Vuelca el lobo generado (fase 33) como texto plano. */
         {
             char *codigo_arg = arg_valor(cmd, "--volcar-codigo");
@@ -3041,7 +3062,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
         DestroyWindow(hwnd);
         g.hwnd = NULL;
         app_terminar();
-        return ok ? 0 : 2;
+        return (ok && inicio_ok) ? 0 : 2;
     }
 
     ShowWindow(hwnd, mostrar == SW_SHOWMAXIMIZED ? SW_SHOWMAXIMIZED : SW_SHOW);

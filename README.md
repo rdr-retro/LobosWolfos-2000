@@ -1032,6 +1032,14 @@ ejemplo con cabecera LOGIC3 y una sección `montaje` de cinco nodos y tres
 6. La orden `--captura-juego ruta --fotogramas N` de la vista previa y la
    orden `--captura ruta --fotogramas N` de `game.exe` producen el mismo BMP
    para el LOGIC3 generado; el caso `preview_captura` lo comprueba.
+7. `src/inicio.c` expone el servicio de la futura vista Inicio. `pm_borrar()`
+   quita una entidad y sus conexiones, `pm_reparentar()` guarda el padre en la
+   referencia `padre` y rechaza ciclos, y cada cambio guarda un snapshot antes
+   de aplicarse, así que `deshacer` y `rehacer` cubren crear, borrar y
+   reparentar con el mismo historial. La flag
+   `--inicio "cargar|ruta;crear|kind|nombre|padre;borrar|id;reparentar|id|padre;deshacer;rehacer;volcar|ruta"`
+   encadena órdenes y permite volcar estados intermedios. No dibuja, no toca
+   menús y no escribe LOGIC3.
 
 Las comprobaciones están en `pruebas/programa.ps1` y sus patrones en
 `pruebas/programa/esperado/`. El caso `recorrido_autoria` encadena la lectura,
@@ -1072,6 +1080,10 @@ desplaza los índices de menú (`ARCHIVO=1`, `MODO=2`, `AYUDA=9`).
   añade el resumen `grafo: N entidades, C conexiones` con su origen. El flag
   `--gestor-modelo "entrada.log"` abre esa vista sin escribir LOGIC3 y sin
   crear actor, jugador ni movimiento.
+  `src/inicio.c` y `src/inicio.h` añaden `pm_borrar()`, `pm_reparentar()`,
+  `pm_padre()` y `pm_copiar()` al modelo, y mantienen el servicio Inicio con
+  16 snapshots para deshacer y rehacer. La vista visual se enganchara después
+  a `inicio_servicio()`; por ahora solo existe la via CLI.
   `src/modelo_logic3.c` y `src/modelo_logic3.h` cierran el ciclo: convierten
   el modelo en bloques `sistema.pieza` y delegan en `logic3_guardar()`, asi
   que el formato y el CRC siguen siendo los del escritor canonico. La
