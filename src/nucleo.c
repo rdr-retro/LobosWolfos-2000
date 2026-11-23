@@ -4,6 +4,7 @@
 #include "app.h"
 #include "logic3.h"
 #include "proyecto_modelo.h"
+#include "modelo_log.h"
 
 App g;
 
@@ -58,6 +59,18 @@ void recortar_texto(char *dst, const char *src, int max) {
     if (n >= max) n = max - 1;
     memcpy(dst, src, (size_t)n);
     dst[n] = '\0';
+}
+
+/* Parte un valor de flag escrito como "a|b|c" sin modificar la original. */
+static void tramo_flag_modelo(char *dst, int max, const char **p) {
+    const char *inicio = *p ? *p : "";
+    const char *fin = strchr(inicio, '|');
+    int n = fin ? (int)(fin - inicio) : (int)strlen(inicio);
+    if (max <= 0) return;
+    if (n >= max) n = max - 1;
+    memcpy(dst, inicio, (size_t)n);
+    dst[n] = '\0';
+    *p = fin ? fin + 1 : inicio + strlen(inicio);
 }
 
 int termina_con(const char *texto, const char *sufijo) {
@@ -2862,6 +2875,35 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 char ruta[MAX_PATH];
                 recortar_texto(ruta, vm, sizeof(ruta));
                 volcar_modelo_minimo(ruta);
+            }
+        }
+        /* Plan 16.2: convierte el .log de ejemplo al ProjectModel.
+         * --leer-modelo "entrada.log|volcado.txt|diagnostico.txt" */
+        {
+            char *lm = arg_valor(cmd, "--leer-modelo");
+            if (lm) {
+                char entrada[MAX_PATH];
+                char volcado[MAX_PATH];
+                char ruta_diag[MAX_PATH];
+                char diagnostico[PM_ERROR_MAX];
+                const char *p = lm;
+                ProjectModel *m;
+                FILE *df;
+
+                tramo_flag_modelo(entrada, (int)sizeof(entrada), &p);
+                tramo_flag_modelo(volcado, (int)sizeof(volcado), &p);
+                tramo_flag_modelo(ruta_diag, (int)sizeof(ruta_diag), &p);
+                diagnostico[0] = '\0';
+                m = ml_leer(entrada, diagnostico, sizeof(diagnostico));
+                if (m) {
+                    pm_volcar(m, volcado);
+                    pm_destruir(m);
+                }
+                if (ruta_diag[0] && (df = fopen(ruta_diag, "w")) != NULL) {
+                    fputs(diagnostico, df);
+                    fputc('\n', df);
+                    fclose(df);
+                }
             }
         }
         /* Vuelca el lobo generado (fase 33) como texto plano. */

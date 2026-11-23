@@ -23,7 +23,8 @@
 #define PM_ERROR_MAX        192
 
 /* Tipos semanticos. Una conexion es tambien una entidad para que tenga
- * ID, nombre y origen como cualquier otra pieza del grafo. */
+ * ID, nombre y origen como cualquier otra pieza del grafo. PM_KIND_ACCION
+ * representa las acciones del .log actual sin renumerar los tipos minimos. */
 enum {
     PM_KIND_PROYECTO = 1,
     PM_KIND_RECURSO,
@@ -31,7 +32,8 @@ enum {
     PM_KIND_ACTOR,
     PM_KIND_INSTANCIA,
     PM_KIND_CONTROL,
-    PM_KIND_CONEXION
+    PM_KIND_CONEXION,
+    PM_KIND_ACCION
 };
 
 typedef struct {

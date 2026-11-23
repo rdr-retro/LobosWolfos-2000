@@ -84,8 +84,8 @@ a la suite de conformidad.
 `pruebas\programa` contiene dos LOGIC3 sin CRC: `mapa_solo.logic3` lleva
 `sistema.opciones` con `jugador_implicito=0`, y `legacy.logic3` no lleva la
 pieza. Ambos apuntan al mapa `pruebas/colisiones/fisica.mav` y no tienen
-objetos. La suite comprueba nueve cosas: el volcado del `ProjectModel` minimo,
-que un proyecto nuevo guarda la
+objetos. La suite comprueba diez cosas: el volcado del `ProjectModel` minimo,
+la conversion del `.log` de ejemplo, que un proyecto nuevo guarda la
 pieza de opciones, que `mapa_solo` mantiene `lobo 16 16` con `--tecla
 derecha`, que `legacy` mueve el lobo y dibuja un BMP distinto, que
 `ui_programa` construye un lienzo con Escenario, Actor y Teclado enlazados,
@@ -100,6 +100,14 @@ grafo con proyecto, dos recursos, escena, actor, instancia, control y dos
 conexiones con puertos. No lee `.log`, no dibuja y no escribe LOGIC3. Su unico
 patron es `modelo_minimo.volcar`, que fija IDs, nombres, origen, estado de UI,
 referencias, puertos y un diagnostico `sin_errores`.
+
+El caso `modelo_desde_log` copia `pruebas/modelo/juego_ia.log` al directorio
+del caso y usa `--leer-modelo` para convertirlo. Comprueba que los cinco nodos
+conservan su ID y su linea, que la cabecera `proyecto` toma el primer ID libre,
+que la ruta `tiles/jugador.png` se construye con la carpeta del nodo, que los
+tres `conecta` se vuelven conexiones con puertos y que el diagnostico es
+`sin errores`. Despues rompe un enlace y comprueba que no se escribe volcado y
+que el diagnostico senala `linea 13`.
 
 El caso `entrada_gestor` fija el volcado `programa_modo=1 programa_piezas=0`,
 el hash del BMP y 15 sondas de pixel; la paleta aparece sin resaltar la primera

@@ -7,6 +7,7 @@
 #
 # Casos:
 #   modelo_minimo   vuelca el ProjectModel con los siete tipos y dos enlaces
+#   modelo_desde_log lee el .log de ejemplo y vuelca el grafo convertido
 #   opciones_nuevo  el editor crea sistema.opciones en un proyecto nuevo
 #   mapa_solo       mapa sin opciones de jugador: lobo quieto y sin sprite
 #   legacy          sin sistema.opciones: lobo se mueve y el BMP cambia
@@ -215,6 +216,59 @@ Ejecutar-Caso "modelo_minimo" {
         if (-not $texto.Contains($linea)) {
             [void]$problemas.Add("falta en el volcado: " + $linea)
         }
+    }
+}
+
+Ejecutar-Caso "modelo_desde_log" {
+    param($dir, $problemas)
+    $entrada = Join-Path $dir "entrada.log"
+    $volcado = Join-Path $dir "convertido.txt"
+    $diag = Join-Path $dir "diagnostico.txt"
+    $bmp = Join-Path $dir "convertido.bmp"
+    Copy-Item (Join-Path $raiz "pruebas\modelo\juego_ia.log") $entrada
+    $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $bmp,
+                                     "--leer-modelo",
+                                     "entrada.log|convertido.txt|diagnostico.txt")
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    if (-not (Test-Path -LiteralPath $volcado)) {
+        [void]$problemas.Add("falta el volcado del .log convertido")
+        return
+    }
+    $texto = Get-TextoNormalizado $volcado
+    Comprobar-Texto "modelo_desde_log" ".volcar" $texto $problemas
+    Comprobar-Texto "modelo_desde_log" ".diag" `
+                    (Get-TextoNormalizado $diag) $problemas
+    foreach ($linea in @(
+        "proyecto_modelo entidades=9 conexiones=3 validacion=0 diagnostico=sin_errores",
+        "entidad=1:escena:Escenario:origen=entrada.log:7:ui=160,80,0,0,0,00000000,0",
+        "entidad=2:actor:Jugador:origen=entrada.log:8:ui=360,80,0,0,0,00000000,0",
+        "entidad=3:control:Teclado:origen=entrada.log:9:",
+        "entidad=4:accion:Mover:origen=entrada.log:10:",
+        "entidad=5:recurso:Textura_pintada:origen=entrada.log:11:",
+        "entidad=6:proyecto:Juego_IA:origen=entrada.log:3:",
+        "propiedad=5:ruta=tiles/jugador.png:11",
+        "conexion=7:2:salida:3:entrada:12",
+        "conexion=8:3:salida:4:entrada:13",
+        "conexion=9:5:salida:2:entrada:14")) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("falta en el volcado: " + $linea)
+        }
+    }
+
+    $roto = Join-Path $dir "roto.log"
+    $salida_rota = Join-Path $dir "roto.txt"
+    $diag_roto = Join-Path $dir "roto.diag"
+    (Get-Content -LiteralPath $entrada) -replace 'conecta 3 -> 4', 'conecta 3 -> 99' | Set-Content -LiteralPath $roto
+    [void](Ejecutar-Editor $dir @("--sin-ventanas",
+                                  "--captura", (Join-Path $dir "roto.bmp"),
+                                  "--leer-modelo",
+                                  "roto.log|roto.txt|roto.diag"))
+    if (Test-Path -LiteralPath $salida_rota) {
+        [void]$problemas.Add("un .log roto no debe generar volcado")
+    }
+    $texto_roto = Get-TextoNormalizado $diag_roto
+    if (-not $texto_roto.Contains("linea 13: conecta referencia un nodo inexistente")) {
+        [void]$problemas.Add("falta el diagnostico con numero de linea")
     }
 }
 

@@ -1016,8 +1016,12 @@ procesado en `src\nucleo.c`.
   `src/bloques_ui.c` el modelo y el dibujo del lienzo de bloques.
   `src/proyecto_modelo.c` y `src/proyecto_modelo.h` definen el contrato minimo
   del `ProjectModel` del plan: entidades con ID estable, propiedades,
-  referencias, estado de UI, origen y conexiones con puertos. Todavia no lee
-  `.log`, no dibuja y no escribe LOGIC3.
+  referencias, estado de UI, origen y conexiones con puertos. No dibuja ni
+  escribe LOGIC3. `src/modelo_log.c` y `src/modelo_log.h` leen el `.log` de
+  ejemplo con seccion `montaje` y lo convierten a ese modelo sin tocar los
+  lectores de LOGIC3. El flag `--leer-modelo "entrada.log|volcado.txt|diagnostico.txt"`
+  expone la conversion en las pruebas; no abre ventanas ni modifica archivos
+  de juego.
 - `motor/` — motor egine: núcleo en ensamblador 32 bits (`nucleo32.s`),
   interfaz común (`motor.h`), carga del proyecto (`activo.c`) y `juego.c`
   (`game.exe`).

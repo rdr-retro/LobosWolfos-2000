@@ -216,6 +216,7 @@ const char *pm_kind_nombre(int kind) {
     case PM_KIND_INSTANCIA: return "instancia";
     case PM_KIND_CONTROL:   return "control";
     case PM_KIND_CONEXION:  return "conexion";
+    case PM_KIND_ACCION:    return "accion";
     default:                return "desconocido";
     }
 }
