@@ -313,6 +313,7 @@ typedef struct {
     int id;
     char nombre[PM_NOMBRE_MAX];
     char ruta[PM_RUTA_MAX];
+    char archivo[PM_RUTA_MAX];
 } FalloRecurso;
 
 static int validar_recursos_detallado(const ProjectModel *m, const char *raiz,
@@ -344,6 +345,9 @@ static int validar_recursos_detallado(const ProjectModel *m, const char *raiz,
                     fallos[n].id = e->id;
                     copiar_seguro(fallos[n].nombre,
                                   sizeof(fallos[n].nombre), e->nombre);
+                    copiar_seguro(fallos[n].archivo,
+                                  sizeof(fallos[n].archivo),
+                                  e->origen.archivo);
                     n++;
                 }
                 continue;
@@ -363,6 +367,9 @@ static int validar_recursos_detallado(const ProjectModel *m, const char *raiz,
                               sizeof(fallos[n].nombre), e->nombre);
                 copiar_seguro(fallos[n].ruta,
                               sizeof(fallos[n].ruta), p->valor);
+                copiar_seguro(fallos[n].archivo,
+                              sizeof(fallos[n].archivo),
+                              e->origen.archivo);
                 n++;
             }
         } else if (e->kind == PM_KIND_ACTOR) {
@@ -373,6 +380,9 @@ static int validar_recursos_detallado(const ProjectModel *m, const char *raiz,
                 fallos[n].id = e->id;
                 copiar_seguro(fallos[n].nombre,
                               sizeof(fallos[n].nombre), e->nombre);
+                copiar_seguro(fallos[n].archivo,
+                              sizeof(fallos[n].archivo),
+                              e->origen.archivo);
                 n++;
             }
         }
@@ -386,6 +396,17 @@ static const char *codigo_fallo(int codigo) {
     case 2: return "recurso_sin_archivo";
     case 3: return "actor_sin_recurso";
     default: return "sin_modelo";
+    }
+}
+
+/* La sugerencia es una orden concreta, no una explicacion: quien corrige el
+ * .log sabe que propiedad tocar sin leer el codigo del validador. */
+static const char *sugerencia_fallo(int codigo) {
+    switch (codigo) {
+    case 1: return "anade la propiedad ruta con una ruta relativa";
+    case 2: return "crea el archivo indicado o corrige la ruta del recurso";
+    case 3: return "conecta un recurso de imagen al actor";
+    default: return "revisa el archivo de entrada del proyecto";
     }
 }
 
@@ -487,6 +508,8 @@ int pm_validar_recursos_json(const ProjectModel *m, const char *raiz,
     FalloRecurso fallos[PM_ENTIDADES_MAX];
     char nombre[PM_NOMBRE_MAX * 6];
     char ruta[PM_RUTA_MAX * 6];
+    char archivo[PM_RUTA_MAX * 6];
+    char sugerencia[PM_TEXTO_MAX * 6];
     size_t usado = 0;
     int n;
     int i;
@@ -504,20 +527,23 @@ int pm_validar_recursos_json(const ProjectModel *m, const char *raiz,
                 n ? "error" : "ok", n);
     for (i = 0; i < n; i++) {
         if (i) json_anadir(json, longitud, &usado, ",");
+        json_anadir(json, longitud, &usado, "{\"codigo\":\"%s\",\"archivo\":\"",
+                    codigo_fallo(fallos[i].codigo));
+        json_texte(archivo, sizeof(archivo), fallos[i].archivo);
         json_anadir(json, longitud, &usado,
-                    "{\"codigo\":\"%s\",\"linea\":%d,"
-                    "\"id_entidad\":%d,\"nombre\":\"",
-                    codigo_fallo(fallos[i].codigo),
-                    fallos[i].linea, fallos[i].id);
+                    "%s\",\"linea\":%d,\"id_entidad\":%d,\"nombre\":\"",
+                    archivo, fallos[i].linea, fallos[i].id);
         json_texte(nombre, sizeof(nombre), fallos[i].nombre);
-        json_anadir(json, longitud, &usado, "%s", nombre);
-        json_anadir(json, longitud, &usado, "\"");
+        json_anadir(json, longitud, &usado, "%s\"", nombre);
         if (fallos[i].codigo == 2) {
             json_anadir(json, longitud, &usado, ",\"ruta\":\"");
             json_texte(ruta, sizeof(ruta), fallos[i].ruta);
             json_anadir(json, longitud, &usado, "%s\"", ruta);
         }
-        json_anadir(json, longitud, &usado, "}");
+        json_anadir(json, longitud, &usado, ",\"sugerencia\":\"");
+        json_texte(sugerencia, sizeof(sugerencia),
+                   sugerencia_fallo(fallos[i].codigo));
+        json_anadir(json, longitud, &usado, "%s\"}", sugerencia);
     }
     json_anadir(json, longitud, &usado, "]}");
     return n;

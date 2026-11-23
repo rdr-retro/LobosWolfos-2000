@@ -123,8 +123,9 @@ el proyecto de ejemplo y solo exige que todo recurso exista y que todo actor
 tenga un recurso entrante.
 
 El caso `diagnostico_json` usa `--diagnostico-json` sobre el mismo `.log` y
-comprueba que, sin el PNG, el JSON informa `recurso_sin_archivo` con la linea
-11, la entidad 5 y la ruta `tiles/jugador.png`. Despues crea el archivo y
+comprueba que, sin el PNG, el JSON informa `recurso_sin_archivo` con el archivo
+`entrada.log`, la linea 11, la entidad 5, la ruta `tiles/jugador.png` y la
+sugerencia de crear el archivo o corregir la ruta. Despues crea el archivo y
 exige `estado=ok`, `total=0` y la lista de errores vacia. Los dos patrones
 son `diagnostico_json.json` y `diagnostico_json_ok.json`.
 

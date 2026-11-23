@@ -1022,7 +1022,8 @@ ejemplo con cabecera LOGIC3 y una sección `montaje` de cinco nodos y tres
    actor reciba uno por conexión. La orden
    `--diagnostico-json "entrada.log|salida.json"` emite lo mismo como JSON con
    `version`, `proyecto`, `estado`, `total` y `errores[]`; cada error trae
-   `codigo`, `linea`, `id_entidad`, `nombre` y, cuando aplica, `ruta`.
+   `codigo`, `archivo`, `linea`, `id_entidad`, `nombre`, `sugerencia` y,
+   cuando aplica, `ruta`. Así una IA sabe qué archivo abrir y qué corregir.
 4. `--gestor-modelo "entrada.log"` proyecta el grafo en piezas reales del
    lienzo y en el inspector sin escribir LOGIC3.
 5. `--generar-logic3 "entrada.log|salida.logic3"` delega en
@@ -1059,8 +1060,8 @@ entrada ni desplaza los índices de menú (`ARCHIVO=1`, `MODO=2`, `AYUDA=9`).
   expone la conversion y la validacion en las pruebas; el ultimo campo es
   opcional, no abre ventanas ni modifica archivos de juego.
   `pm_validar_recursos_json()` reutiliza esa misma comprobacion y devuelve un
-  JSON de una linea con `estado`, `total` y un `errores` con codigo, linea,
-  id y nombre de cada fallo; `--diagnostico-json
+  JSON de una linea con `estado`, `total` y un `errores` con codigo, archivo,
+  linea, id, nombre y sugerencia de cada fallo; `--diagnostico-json
   "entrada.log|salida.json"` lo escribe para que una IA pueda leerlo sin
   interpretar texto libre.
   `programa_proyectar_modelo()` muestra ese mismo grafo en el Gestor de
