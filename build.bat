@@ -42,16 +42,16 @@ rem Windows XP: subsistema 5.01 y sin funciones modernas.
 set "CFLAGS=-m32 -std=c99 -O2 -Wall -Wextra -Wno-unused-parameter -D_WIN32_WINNT=0x0501 -DWINVER=0x0501 -UUNICODE -U_UNICODE -fno-strict-aliasing"
 set "LIBS=-lcomctl32 -lcomdlg32 -lgdiplus -lgdi32 -luser32 -lkernel32 -lmsimg32 -lole32 -luuid"
 
-rem El editor lleva la plantilla del motor como recurso (menu COMPILE):
+rem El editor lleva la plantilla del motor como recurso (menu JUEGO):
 rem compilarla antes de leer los recursos, porque windres la incrusta.
-echo Compilando el motor egine (plantilla del menu COMPILE)...
+echo Compilando el motor (plantilla del menu JUEGO)...
 call "%AQUI%motor\build.bat" "%MINGW%"
 if errorlevel 1 goto error
 
 rem Lo mismo con la plantilla de arranque del kernel loboswolfos (menu
-rem COMPILE, "Compilar para BIOS", fase 7): el xtask la escribe en
+rem JUEGO, "Compilar para BIOS", fase 7): el xtask la escribe en
 rem loboswolfos\build\plantilla-kernel.bin y windres la incrusta.
-echo Compilando el kernel loboswolfos (plantilla del menu COMPILE)...
+echo Compilando el kernel loboswolfos (plantilla del menu JUEGO)...
 cargo run --manifest-path "%AQUI%loboswolfos\xtask\Cargo.toml" -- plantilla
 if errorlevel 1 goto error
 
@@ -62,14 +62,14 @@ echo Compilando recursos...
 if errorlevel 1 goto error_pop
 
 echo Compilando C...
-for %%F in (src\nucleo.c src\fuente.c src\documento.c src\imagen.c src\pintura.c src\texto.c src\ui.c src\tiles.c src\mapa.c src\tiles_modo.c src\pestanas.c src\app.c src\ajustes.c src\compilar.c src\juego_ventana.c src\ejemplo.c src\plantillas.c src\logic3.c src\estudio.c src\estudio_ui.c src\datos.c src\sonido.c src\productividad.c src\bloques.c src\bloques_ui.c src\compilador_bloques.c src\sistema.c src\programa.c src\proyecto_modelo.c src\modelo_log.c src\modelo_logic3.c src\inicio.c motor\lobo.c motor\entrada.c motor\activo.c motor\colisiones.c motor\hud.c motor\audio.c motor\save.c motor\logic3_motor.c motor\nucleo32.s) do (
+for %%F in (src\nucleo.c src\fuente.c src\documento.c src\imagen.c src\pintura.c src\texto.c src\ui.c src\tiles.c src\mapa.c src\tiles_modo.c src\pestanas.c src\app.c src\ajustes.c src\compilar.c src\juego_ventana.c src\ejemplo.c src\plantillas.c src\logic3.c src\estudio.c src\estudio_ui.c src\datos.c src\sonido.c src\productividad.c src\bloques.c src\bloques_ui.c src\compilador_bloques.c src\sistema.c src\programa.c src\proyecto_modelo.c src\modelo_log.c src\modelo_logic3.c src\inicio.c motor\lobo.c motor\entrada.c motor\activo.c motor\colisiones.c motor\entidades.c motor\hud.c motor\audio.c motor\save.c motor\logic3_motor.c motor\programa_runtime.c motor\nucleo32.s) do (
     echo   %%~nxF
     "%GCC%" %CFLAGS% -c "%%~F" -o "obj\%%~nF.o"
     if errorlevel 1 goto error_pop
 )
 
 echo Enlazando...
-"%GCC%" -m32 -o "LobosWolfos2000.exe" obj\nucleo.o obj\fuente.o obj\documento.o obj\imagen.o obj\pintura.o obj\texto.o obj\ui.o obj\tiles.o obj\mapa.o obj\tiles_modo.o obj\pestanas.o obj\app.o obj\ajustes.o obj\compilar.o obj\juego_ventana.o obj\ejemplo.o obj\plantillas.o obj\logic3.o obj\estudio.o obj\estudio_ui.o obj\datos.o obj\sonido.o obj\productividad.o obj\bloques.o obj\bloques_ui.o obj\compilador_bloques.o obj\sistema.o obj\programa.o obj\proyecto_modelo.o obj\modelo_log.o obj\modelo_logic3.o obj\inicio.o obj\lobo.o obj\entrada.o obj\activo.o obj\colisiones.o obj\hud.o obj\audio.o obj\logic3_motor.o obj\nucleo32.o obj\recurso.o %LIBS% -mwindows -static-libgcc
+"%GCC%" -m32 -o "LobosWolfos2000.exe" obj\nucleo.o obj\fuente.o obj\documento.o obj\imagen.o obj\pintura.o obj\texto.o obj\ui.o obj\tiles.o obj\mapa.o obj\tiles_modo.o obj\pestanas.o obj\app.o obj\ajustes.o obj\compilar.o obj\juego_ventana.o obj\ejemplo.o obj\plantillas.o obj\logic3.o obj\estudio.o obj\estudio_ui.o obj\datos.o obj\sonido.o obj\productividad.o obj\bloques.o obj\bloques_ui.o obj\compilador_bloques.o obj\sistema.o obj\programa.o obj\proyecto_modelo.o obj\modelo_log.o obj\modelo_logic3.o obj\inicio.o obj\lobo.o obj\entrada.o obj\activo.o obj\colisiones.o obj\entidades.o obj\hud.o obj\audio.o obj\logic3_motor.o obj\programa_runtime.o obj\nucleo32.o obj\recurso.o %LIBS% -mwindows -static-libgcc
 if errorlevel 1 goto error_pop
 popd
 goto exito

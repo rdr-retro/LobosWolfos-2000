@@ -43,6 +43,7 @@ typedef struct EntidadTipo {
     int id;                           /* id del objeto en LOGIC3 */
     char nombre[ENTIDAD_NOMBRE_MAX];  /* tag que usa crear("tag", x, y) */
     int escena;
+    int padre;                        /* id del objeto padre, 0 = raiz */
     int x, y, w, h;
     int visible;
     int capa;
@@ -57,6 +58,8 @@ typedef struct Entidad {
     int id;        /* id monotono, nunca 0 */
     int tipo;      /* indice en la tabla de tipos */
     int escena;
+    int padre;     /* id de la entidad padre, 0 = raiz */
+    int local_x, local_y; /* transformacion local respecto al padre */
     int x, y, w, h;
     int visible;
     int capa;
@@ -78,7 +81,8 @@ void entidades_vaciar(void);
 /* Registra un objeto como tipo de entidad. Devuelve el indice del tipo o
  * -1 si no cabe. Si el id de objeto ya existe, devuelve el tipo actual. */
 int entidades_tipo_agregar(int id_objeto, const char *nombre, int escena,
-                           int x, int y, int w, int h, int visible, int capa);
+                           int padre, int x, int y, int w, int h,
+                           int visible, int capa);
 
 /* Declara una variable del tipo en un slot global. */
 int entidades_tipo_var(int tipo, int slot, const char *nombre, int valor);
@@ -107,6 +111,10 @@ int entidades_de_objeto(int id_objeto, int *salida, int maximo);
  * hueco, limite de altas del fotograma o tipo invalido). */
 int entidad_crear(int tipo, int x, int y);
 
+/* Crea una entidad con transformacion local y una entidad padre. Si el padre
+ * no existe, la entidad se comporta como raiz sin perder sus coordenadas. */
+int entidad_crear_hijo(int tipo, int x, int y, int padre);
+
 /* Copia una entidad viva (posicion, traje, vida y variables). */
 int entidades_clonar(int id);
 
@@ -123,6 +131,13 @@ int entidad_por_tag(const char *tag);
 /* Mueve una entidad y la cambia de escena. Devuelven 1 o -1. */
 int entidad_mover(int id, int x, int y);
 int entidad_cambiar_escena(int id, int escena);
+
+/* Recalcula las posiciones globales a partir de las transformaciones locales
+ * despues de ejecutar scripts o controles. */
+void entidades_recalcular_jerarquia(void);
+
+/* Primera instancia viva de un objeto en una escena. */
+int entidad_de_objeto_escena(int id_objeto, int escena);
 
 /* Entrada por indice (0..ENTIDADES_MAX-1) para recorrer el array. */
 Entidad *entidad_indice(int i);

@@ -11,6 +11,11 @@
  * \n. Las secciones desconocidas se ignoran para poder ampliar el
  * formato sin romper archivos viejos.
  *
+ * Un archivo con extension .log puede anadir la seccion `montaje`: sus
+ * registros `nodo ID tipo ...` y `conecta ID -> ID` describen las piezas
+ * visuales del juego de forma editable por texto. El lector convierte esa
+ * seccion a bloques `sistema.pieza` y trata sus enlaces como fuente de verdad.
+ *
  * Los topes son los presupuestos de Windows de la tabla 3.2 del plan
  * maestro. Los objetos y los bloques se reservan en el monton para que
  * un proyecto vacio no pague la memoria de los topes.
@@ -150,6 +155,7 @@ typedef struct {
     int id;
     char nombre[L3_NOMBRE_MAX];
     int escena;
+    int padre; /* 0 = raiz; ID del objeto padre en la misma escena */
     int x, y, w, h;
     int visible;
     int capa;

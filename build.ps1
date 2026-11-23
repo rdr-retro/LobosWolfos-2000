@@ -47,24 +47,31 @@ $Fuentes = @(
     "src\nucleo.c", "src\fuente.c", "src\documento.c", "src\imagen.c",
     "src\pintura.c", "src\texto.c", "src\ui.c", "src\tiles.c", "src\mapa.c",
     "src\tiles_modo.c", "src\pestanas.c", "src\app.c", "src\ajustes.c",
-    "src\compilar.c", "src\juego_ventana.c", "src\ejemplo.c",
-    "src\proyecto_modelo.c", "src\modelo_log.c", "src\modelo_logic3.c",
-    "src\inicio.c", "motor\lobo.c", "motor\activo.c", "motor\nucleo32.s"
+    "src\compilar.c", "src\juego_ventana.c", "src\ejemplo.c", "src\plantillas.c",
+    "src\logic3.c", "src\estudio.c", "src\estudio_ui.c", "src\datos.c",
+    "src\sonido.c", "src\productividad.c", "src\bloques.c", "src\bloques_ui.c",
+    "src\compilador_bloques.c", "src\sistema.c", "src\programa.c",
+    "src\proyecto_modelo.c", "src\modelo_log.c", "src\modelo_logic3.c", "src\inicio.c",
+    "motor\lobo.c", "motor\entrada.c", "motor\activo.c", "motor\depurador.c",
+    "motor\panel_debug.c", "motor\colisiones.c", "motor\hud.c", "motor\audio.c",
+    "motor\save.c", "motor\logic3_motor.c",
+    "motor\entidades.c", "motor\eventos.c", "motor\render.c",
+    "motor\programa_runtime.c", "motor\nucleo32.s"
 )
 
-# El editor lleva la plantilla del motor como recurso (menu COMPILE):
+# El editor lleva la plantilla del motor como recurso (menu JUEGO):
 # compilarla antes de leer los recursos, porque windres la incrusta.
 # Mismas piezas y banderas que motor\build.bat.
-Write-Host "Compilando el motor egine (plantilla del menu COMPILE)..." -ForegroundColor Cyan
+Write-Host "Compilando el motor (plantilla del menu JUEGO)..." -ForegroundColor Cyan
 Push-Location (Join-Path $Aqui "motor")
-& $Gcc @CFlags nucleo32.s activo.c juego.c lobo.c -o game.exe -lgdiplus -lgdi32 -luser32 -lkernel32 -lole32 -mwindows -static-libgcc
+& $Gcc @CFlags nucleo32.s activo.c juego.c lobo.c entrada.c depurador.c panel_debug.c hud.c audio.c save.c logic3_motor.c entidades.c eventos.c colisiones.c render.c programa_runtime.c -o game.exe -lgdiplus -lgdi32 -luser32 -lkernel32 -lole32 -mwindows -static-libgcc
 if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Error "fallo la compilacion del motor"; exit 1 }
 Pop-Location
 
 # Lo mismo con la plantilla de arranque del kernel loboswolfos (menu
-# COMPILE, "Compilar para BIOS", fase 7): el xtask la escribe en
+# JUEGO, "Compilar para BIOS", fase 7): el xtask la escribe en
 # loboswolfos\build\plantilla-kernel.bin y windres la incrusta.
-Write-Host "Compilando el kernel loboswolfos (plantilla del menu COMPILE)..." -ForegroundColor Cyan
+Write-Host "Compilando el kernel loboswolfos (plantilla del menu JUEGO)..." -ForegroundColor Cyan
 & cargo run --manifest-path (Join-Path $Aqui "loboswolfos\xtask\Cargo.toml") -- plantilla
 if ($LASTEXITCODE -ne 0) { Write-Error "fallo la compilacion del kernel"; exit 1 }
 

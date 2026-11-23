@@ -1,4 +1,4 @@
-/* compilar.c - menu COMPILE: compilar el proyecto (fases 4 y 7).
+/* compilar.c - menu JUEGO: compilar el proyecto (fases 4 y 7).
  *
  * "Compilar para Windows" produce un game.exe autonomo: la plantilla
  * del motor (motor/game.exe, que viaja incrustada en el editor como
@@ -1110,7 +1110,7 @@ static int escribir_ceros(FILE *f, int n) {
 }
 
 /* Compila el proyecto activo en la imagen USB de loboswolfos (menu
- * COMPILE, "Compilar para BIOS", fase 7): la plantilla de arranque
+ * JUEGO, "Compilar para BIOS", fase 7): la plantilla de arranque
  * (MBR + tramo 2 + kernel, incrustada como recurso IDR_KERNEL) seguida
  * de la zona del juego con el blob LGB1 del proyecto y ceros hasta los
  * 32 MiB.
@@ -1205,7 +1205,7 @@ int compilar_bios(const char *ruta) {
     return 1;
 }
 
-/* Dialogo del menu COMPILE: elige donde guardar el game.exe compilado. */
+/* Dialogo del menu JUEGO: elige donde guardar el game.exe compilado. */
 void dialogo_compilar_windows(void) {
     char ruta[MAX_PATH];
     OPENFILENAMEA ofn;
@@ -1228,7 +1228,7 @@ void dialogo_compilar_windows(void) {
     app_invalidar();
 }
 
-/* Dialogo del menu COMPILE: elige donde guardar la imagen USB. */
+/* Dialogo del menu JUEGO: elige donde guardar la imagen USB. */
 void dialogo_compilar_bios(void) {
     char ruta[MAX_PATH];
     OPENFILENAMEA ofn;

@@ -7,7 +7,6 @@
 #include "proyecto_modelo.h"
 
 #include <limits.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,6 +46,9 @@ static const PropiedadModelo *buscar_propiedad(const EntidadModelo *e,
             return &e->propiedades[i];
     return NULL;
 }
+
+static const ReferenciaModelo *buscar_referencia(const EntidadModelo *e,
+                                                 const char *nombre);
 
 ProjectModel *pm_crear(void) {
     ProjectModel *m = (ProjectModel *)calloc(1, sizeof(ProjectModel));
@@ -143,6 +145,19 @@ int pm_propiedad(EntidadModelo *e, const char *clave, const char *valor,
     return 1;
 }
 
+int pm_quitar_propiedad(EntidadModelo *e, const char *clave) {
+    int i;
+    if (!e || !clave) return 0;
+    for (i = 0; i < e->num_propiedades; i++) {
+        if (strcmp(e->propiedades[i].clave, clave) != 0) continue;
+        for (; i + 1 < e->num_propiedades; i++)
+            e->propiedades[i] = e->propiedades[i + 1];
+        e->num_propiedades--;
+        return 1;
+    }
+    return 0;
+}
+
 int pm_referencia(EntidadModelo *e, const char *nombre, int id,
                   const char *ruta, int linea) {
     ReferenciaModelo *r;
@@ -165,6 +180,19 @@ int pm_referencia(EntidadModelo *e, const char *nombre, int id,
     copiar_seguro(r->ruta, sizeof(r->ruta), ruta);
     r->linea = linea;
     return 1;
+}
+
+int pm_quitar_referencia(EntidadModelo *e, const char *nombre) {
+    int i;
+    if (!e || !nombre) return 0;
+    for (i = 0; i < e->num_referencias; i++) {
+        if (strcmp(e->referencias[i].nombre, nombre) != 0) continue;
+        for (; i + 1 < e->num_referencias; i++)
+            e->referencias[i] = e->referencias[i + 1];
+        e->num_referencias--;
+        return 1;
+    }
+    return 0;
 }
 
 void pm_origen(EntidadModelo *e, const char *archivo, int linea) {
@@ -208,133 +236,6 @@ int pm_conectar(ProjectModel *m, int origen, const char *puerto_origen,
     return id;
 }
 
-/* Quita una referencia por nombre compactando el array. Se usa para dejar
- * un nodo sin padre, algo que pm_referencia no puede hacer con ID 0. */
-static void quitar_referencia(EntidadModelo *e, const char *nombre) {
-    int i, j;
-    if (!e || !nombre) return;
-    for (i = 0; i < e->num_referencias; i++) {
-        if (strcmp(e->referencias[i].nombre, nombre) != 0) continue;
-        for (j = i + 1; j < e->num_referencias; j++)
-            e->referencias[j - 1] = e->referencias[j];
-        e->num_referencias--;
-        return;
-    }
-}
-
-int pm_padre(const ProjectModel *m, int id) {
-    const EntidadModelo *e = pm_entidad_const(m, id);
-    int i;
-    if (!e) return 0;
-    for (i = 0; i < e->num_referencias; i++)
-        if (strcmp(e->referencias[i].nombre, "padre") == 0)
-            return e->referencias[i].id;
-    return 0;
-}
-
-int pm_borrar(ProjectModel *m, int id) {
-    int borrar[PM_ENTIDADES_MAX];
-    EntidadModelo *e;
-    int padre, i, j, n, destino;
-
-    if (!m) return 0;
-    e = pm_entidad(m, id);
-    if (!e) {
-        error_fijar(m, "no existe la entidad");
-        return 0;
-    }
-    if (e->kind == PM_KIND_PROYECTO) {
-        error_fijar(m, "no se puede borrar el proyecto");
-        return 0;
-    }
-    memset(borrar, 0, sizeof(borrar));
-    borrar[e - m->entidades] = 1;
-    n = 1;
-    for (i = 0; i < m->num_entidades; i++) {
-        if (borrar[i] ||
-            m->entidades[i].kind != PM_KIND_CONEXION) continue;
-        for (j = 0; j < m->entidades[i].num_referencias; j++) {
-            if (m->entidades[i].referencias[j].id == id) {
-                borrar[i] = 1;
-                n++;
-                break;
-            }
-        }
-    }
-    padre = pm_padre(m, id);
-    /* Los hijos del nodo borrado suben un nivel para no quedar colgados. */
-    for (i = 0; i < m->num_entidades; i++) {
-        if (borrar[i] || pm_padre(m, m->entidades[i].id) != id) continue;
-        if (padre)
-            pm_referencia(&m->entidades[i], "padre", padre, NULL, 0);
-        else
-            quitar_referencia(&m->entidades[i], "padre");
-    }
-    destino = 0;
-    for (i = 0; i < m->num_entidades; i++) {
-        if (borrar[i]) continue;
-        if (destino != i) m->entidades[destino] = m->entidades[i];
-        destino++;
-    }
-    m->num_entidades = destino;
-    return n;
-}
-
-int pm_reparentar(ProjectModel *m, int id, int id_padre) {
-    EntidadModelo *e;
-    int actual, pasos;
-
-    if (!m) return 0;
-    e = pm_entidad(m, id);
-    if (!e) {
-        error_fijar(m, "no existe la entidad");
-        return 0;
-    }
-    if (id_padre < 0) {
-        error_fijar(m, "el padre debe ser un ID o 0");
-        return 0;
-    }
-    if (id_padre == id) {
-        error_fijar(m, "un nodo no puede ser su propio padre");
-        return 0;
-    }
-    if (id_padre && !pm_entidad(m, id_padre)) {
-        error_fijar(m, "no existe el padre");
-        return 0;
-    }
-    if (id_padre && pm_entidad_const(m, id_padre)->kind == PM_KIND_CONEXION) {
-        error_fijar(m, "el padre no puede ser una conexion");
-        return 0;
-    }
-    actual = id_padre;
-    pasos = 0;
-    while (actual && pasos++ <= m->num_entidades) {
-        if (actual == id) {
-            error_fijar(m, "el reparentado formaria un ciclo");
-            return 0;
-        }
-        actual = pm_padre(m, actual);
-    }
-    if (actual) {
-        error_fijar(m, "el arbol de padres es demasiado largo");
-        return 0;
-    }
-    if (id_padre) {
-        if (!pm_referencia(e, "padre", id_padre, NULL, 0)) {
-            error_fijar(m, "no cabe la referencia padre");
-            return 0;
-        }
-    } else {
-        quitar_referencia(e, "padre");
-    }
-    return 1;
-}
-
-void pm_copiar(const ProjectModel *origen, ProjectModel *destino) {
-    if (!origen || !destino) return;
-    memcpy(destino, origen, sizeof(*destino));
-}
-
 const char *pm_kind_nombre(int kind) {
     switch (kind) {
     case PM_KIND_PROYECTO:  return "proyecto";
@@ -345,6 +246,9 @@ const char *pm_kind_nombre(int kind) {
     case PM_KIND_CONTROL:   return "control";
     case PM_KIND_CONEXION:  return "conexion";
     case PM_KIND_ACCION:    return "accion";
+    case PM_KIND_NODO:      return "nodo";
+    case PM_KIND_SCRIPT:    return "script";
+    case PM_KIND_BINDING:   return "asociacion";
     default:                return "desconocido";
     }
 }
@@ -373,6 +277,60 @@ int pm_validar(const ProjectModel *m, char *diagnostico, size_t longitud) {
                 p = buscar_propiedad(e, "ruta");
                 if (!p || !p->valor[0]) {
                     snprintf(buf, sizeof(buf), "recurso %d sin ruta", e->id);
+                    anotar_fallo(primera, sizeof(primera), &fallos, buf);
+                }
+            }
+            if (e->kind == PM_KIND_SCRIPT) {
+                p = buscar_propiedad(e, "ruta");
+                if (!p || !p->valor[0]) {
+                    snprintf(buf, sizeof(buf), "script %d sin ruta", e->id);
+                    anotar_fallo(primera, sizeof(primera), &fallos, buf);
+                }
+            }
+            if (e->kind == PM_KIND_NODO) {
+                const ReferenciaModelo *rs = buscar_referencia(e, "escena");
+                const ReferenciaModelo *rp = buscar_referencia(e, "padre");
+                const EntidadModelo *es = rs ? pm_entidad_const(m, rs->id) : NULL;
+                const EntidadModelo *ep = rp ? pm_entidad_const(m, rp->id) : NULL;
+                int escena_id;
+                p = buscar_propiedad(e, "escena");
+                escena_id = rs ? rs->id : (p ? atoi(p->valor) : 0);
+                if (!p || atoi(p->valor) <= 0) {
+                    snprintf(buf, sizeof(buf), "nodo %d sin escena", e->id);
+                    anotar_fallo(primera, sizeof(primera), &fallos, buf);
+                }
+                if (!es || es->kind != PM_KIND_ESCENA ||
+                    (p && atoi(p->valor) != es->id)) {
+                    snprintf(buf, sizeof(buf), "nodo %d con escena invalida", e->id);
+                    anotar_fallo(primera, sizeof(primera), &fallos, buf);
+                }
+                if (rp && (!ep || ep->kind != PM_KIND_NODO || ep->id == e->id)) {
+                    snprintf(buf, sizeof(buf), "nodo %d con padre invalido", e->id);
+                    anotar_fallo(primera, sizeof(primera), &fallos, buf);
+                } else if (rp && ep) {
+                    const ReferenciaModelo *padre_escena =
+                        buscar_referencia(ep, "escena");
+                    if (!padre_escena || padre_escena->id != escena_id) {
+                        snprintf(buf, sizeof(buf),
+                                 "nodo %d con padre de otra escena", e->id);
+                        anotar_fallo(primera, sizeof(primera), &fallos, buf);
+                    }
+                }
+            }
+            if (e->kind == PM_KIND_BINDING) {
+                const ReferenciaModelo *rs = buscar_referencia(e, "script");
+                const ReferenciaModelo *rn = buscar_referencia(e, "nodo");
+                const ReferenciaModelo *re = buscar_referencia(e, "escena");
+                const EntidadModelo *es = rs ? pm_entidad_const(m, rs->id) : NULL;
+                const EntidadModelo *en = rn ? pm_entidad_const(m, rn->id) : NULL;
+                const EntidadModelo *ee = re ? pm_entidad_const(m, re->id) : NULL;
+                p = buscar_propiedad(e, "evento");
+                if (!p || !p->valor[0] || !rs || !es ||
+                    es->kind != PM_KIND_SCRIPT ||
+                    ((rn != NULL) == (re != NULL)) ||
+                    (rn && (!en || en->kind != PM_KIND_NODO)) ||
+                    (re && (!ee || ee->kind != PM_KIND_ESCENA))) {
+                    snprintf(buf, sizeof(buf), "asociacion %d incompleta", e->id);
                     anotar_fallo(primera, sizeof(primera), &fallos, buf);
                 }
             }
@@ -432,248 +390,56 @@ static int actor_con_recurso(const ProjectModel *m, int id_actor) {
     return 0;
 }
 
-/* Un fallo de recursos con los datos que necesitan tanto el diagnostico
- * de texto como el JSON. El codigo 4 representa la ausencia de modelo. */
-typedef struct {
-    int codigo; /* 1 sin ruta, 2 sin archivo, 3 actor sin recurso, 4 modelo */
-    int linea;
-    int id;
-    char nombre[PM_NOMBRE_MAX];
-    char ruta[PM_RUTA_MAX];
-    char archivo[PM_RUTA_MAX];
-} FalloRecurso;
-
-static int validar_recursos_detallado(const ProjectModel *m, const char *raiz,
-                                      FalloRecurso *fallos, int max) {
-    const EntidadModelo *e;
-    const PropiedadModelo *p;
-    char ruta[PM_RUTA_MAX * 2 + 4];
-    FILE *f;
-    int n = 0;
-    int i;
-
-    if (!m) {
-        if (n < max) {
-            memset(&fallos[n], 0, sizeof(fallos[n]));
-            fallos[n].codigo = 4;
-            n++;
-        }
-        return n;
-    }
-    for (i = 0; i < m->num_entidades; i++) {
-        e = &m->entidades[i];
-        if (e->kind == PM_KIND_RECURSO) {
-            p = buscar_propiedad(e, "ruta");
-            if (!p || !p->valor[0]) {
-                if (n < max) {
-                    memset(&fallos[n], 0, sizeof(fallos[n]));
-                    fallos[n].codigo = 1;
-                    fallos[n].linea = e->origen.linea;
-                    fallos[n].id = e->id;
-                    copiar_seguro(fallos[n].nombre,
-                                  sizeof(fallos[n].nombre), e->nombre);
-                    copiar_seguro(fallos[n].archivo,
-                                  sizeof(fallos[n].archivo),
-                                  e->origen.archivo);
-                    n++;
-                }
-                continue;
-            }
-            if (raiz && raiz[0])
-                snprintf(ruta, sizeof(ruta), "%s/%s", raiz, p->valor);
-            else
-                copiar_seguro(ruta, sizeof(ruta), p->valor);
-            f = fopen(ruta, "rb");
-            if (f) fclose(f);
-            else if (n < max) {
-                memset(&fallos[n], 0, sizeof(fallos[n]));
-                fallos[n].codigo = 2;
-                fallos[n].linea = p->linea;
-                fallos[n].id = e->id;
-                copiar_seguro(fallos[n].nombre,
-                              sizeof(fallos[n].nombre), e->nombre);
-                copiar_seguro(fallos[n].ruta,
-                              sizeof(fallos[n].ruta), p->valor);
-                copiar_seguro(fallos[n].archivo,
-                              sizeof(fallos[n].archivo),
-                              e->origen.archivo);
-                n++;
-            }
-        } else if (e->kind == PM_KIND_ACTOR) {
-            if (!actor_con_recurso(m, e->id) && n < max) {
-                memset(&fallos[n], 0, sizeof(fallos[n]));
-                fallos[n].codigo = 3;
-                fallos[n].linea = e->origen.linea;
-                fallos[n].id = e->id;
-                copiar_seguro(fallos[n].nombre,
-                              sizeof(fallos[n].nombre), e->nombre);
-                copiar_seguro(fallos[n].archivo,
-                              sizeof(fallos[n].archivo),
-                              e->origen.archivo);
-                n++;
-            }
-        }
-    }
-    return n;
-}
-
-static const char *codigo_fallo(int codigo) {
-    switch (codigo) {
-    case 1: return "recurso_sin_ruta";
-    case 2: return "recurso_sin_archivo";
-    case 3: return "actor_sin_recurso";
-    default: return "sin_modelo";
-    }
-}
-
-/* La sugerencia es una orden concreta, no una explicacion: quien corrige el
- * .log sabe que propiedad tocar sin leer el codigo del validador. */
-static const char *sugerencia_fallo(int codigo) {
-    switch (codigo) {
-    case 1: return "anade la propiedad ruta con una ruta relativa";
-    case 2: return "crea el archivo indicado o corrige la ruta del recurso";
-    case 3: return "conecta un recurso de imagen al actor";
-    default: return "revisa el archivo de entrada del proyecto";
-    }
-}
-
-static void texto_fallo(const FalloRecurso *f, char *dst, size_t tam) {
-    if (!f || !dst || tam == 0) return;
-    switch (f->codigo) {
-    case 1:
-        snprintf(dst, tam, "linea %d: recurso %d sin ruta",
-                 f->linea, f->id);
-        break;
-    case 2:
-        snprintf(dst, tam, "linea %d: recurso %d sin archivo: %s",
-                 f->linea, f->id, f->ruta);
-        break;
-    case 3:
-        snprintf(dst, tam, "linea %d: actor %d sin recurso conectado",
-                 f->linea, f->id);
-        break;
-    default:
-        copiar_seguro(dst, tam, "sin modelo");
-        break;
-    }
-}
-
 int pm_validar_recursos(const ProjectModel *m, const char *raiz,
                         char *diagnostico, size_t longitud) {
-    FalloRecurso fallos[PM_ENTIDADES_MAX];
+    const EntidadModelo *e;
+    const PropiedadModelo *p;
+    char primera[PM_ERROR_MAX];
     char buf[PM_ERROR_MAX];
-    int fallos_n = validar_recursos_detallado(m, raiz, fallos,
-                                              PM_ENTIDADES_MAX);
-
-    if (diagnostico && longitud > 0) {
-        if (fallos_n > 0) {
-            texto_fallo(&fallos[0], buf, sizeof(buf));
-            copiar_seguro(diagnostico, longitud, buf);
-        } else {
-            copiar_seguro(diagnostico, longitud, "sin errores");
-        }
-    }
-    return fallos_n;
-}
-
-static void json_anadir(char *dst, size_t tam, size_t *usado,
-                        const char *formato, ...) {
-    va_list args;
-    int n;
-    if (!dst || tam == 0 || !usado || *usado >= tam) return;
-    va_start(args, formato);
-    n = vsnprintf(dst + *usado, tam - *usado, formato, args);
-    va_end(args);
-    if (n < 0) {
-        dst[*usado] = '\0';
-        return;
-    }
-    if ((size_t)n >= tam - *usado) *usado = tam - 1;
-    else *usado += (size_t)n;
-    dst[*usado] = '\0';
-}
-
-/* Escapa comillas, contrabarras y caracteres de control para que el texto
- * del .log siga siendo un string JSON valido sin convertir codificacion. */
-static void json_texte(char *dst, size_t tam, const char *src) {
-    size_t j = 0;
-    const unsigned char *p;
-    if (!dst || tam == 0) return;
-    if (!src) src = "";
-    for (p = (const unsigned char *)src; *p; p++) {
-        char extra[8];
-        size_t n = 1;
-        if (*p == '"' || *p == '\\') {
-            extra[0] = '\\';
-            extra[1] = (char)*p;
-            n = 2;
-        } else if (*p < 32) {
-            snprintf(extra, sizeof(extra), "\\u%04x", (unsigned int)*p);
-            n = 6;
-        } else {
-            extra[0] = (char)*p;
-            extra[1] = '\0';
-        }
-        if (j + n + 1 >= tam) break;
-        memcpy(dst + j, extra, n);
-        j += n;
-    }
-    dst[j] = '\0';
-}
-
-static const char *json_proyecto(const ProjectModel *m) {
-    int i;
-    if (!m) return "";
-    for (i = 0; i < m->num_entidades; i++)
-        if (m->entidades[i].kind == PM_KIND_PROYECTO)
-            return m->entidades[i].nombre;
-    return "";
-}
-
-int pm_validar_recursos_json(const ProjectModel *m, const char *raiz,
-                             char *json, size_t longitud) {
-    FalloRecurso fallos[PM_ENTIDADES_MAX];
-    char nombre[PM_NOMBRE_MAX * 6];
-    char ruta[PM_RUTA_MAX * 6];
-    char archivo[PM_RUTA_MAX * 6];
-    char sugerencia[PM_TEXTO_MAX * 6];
-    size_t usado = 0;
-    int n;
+    char ruta[PM_RUTA_MAX * 2 + 4];
+    FILE *f;
+    int fallos = 0;
     int i;
 
-    if (!json || longitud == 0) return 0;
-    json[0] = '\0';
-    n = validar_recursos_detallado(m, raiz, fallos, PM_ENTIDADES_MAX);
-    json_anadir(json, longitud, &usado,
-                "{\"version\":1,\"proyecto\":\"");
-    json_texte(nombre, sizeof(nombre), json_proyecto(m));
-    json_anadir(json, longitud, &usado, "%s", nombre);
-    json_anadir(json, longitud, &usado,
-                "\",\"validacion\":\"recursos\",\"estado\":\"%s\","
-                "\"total\":%d,\"errores\":[",
-                n ? "error" : "ok", n);
-    for (i = 0; i < n; i++) {
-        if (i) json_anadir(json, longitud, &usado, ",");
-        json_anadir(json, longitud, &usado, "{\"codigo\":\"%s\",\"archivo\":\"",
-                    codigo_fallo(fallos[i].codigo));
-        json_texte(archivo, sizeof(archivo), fallos[i].archivo);
-        json_anadir(json, longitud, &usado,
-                    "%s\",\"linea\":%d,\"id_entidad\":%d,\"nombre\":\"",
-                    archivo, fallos[i].linea, fallos[i].id);
-        json_texte(nombre, sizeof(nombre), fallos[i].nombre);
-        json_anadir(json, longitud, &usado, "%s\"", nombre);
-        if (fallos[i].codigo == 2) {
-            json_anadir(json, longitud, &usado, ",\"ruta\":\"");
-            json_texte(ruta, sizeof(ruta), fallos[i].ruta);
-            json_anadir(json, longitud, &usado, "%s\"", ruta);
+    primera[0] = '\0';
+    if (!m) {
+        anotar_fallo(primera, sizeof(primera), &fallos, "sin modelo");
+    } else {
+        for (i = 0; i < m->num_entidades; i++) {
+            e = &m->entidades[i];
+            if (e->kind == PM_KIND_RECURSO) {
+                p = buscar_propiedad(e, "ruta");
+                if (!p || !p->valor[0]) {
+                    snprintf(buf, sizeof(buf), "linea %d: recurso %d sin ruta",
+                             e->origen.linea, e->id);
+                    anotar_fallo(primera, sizeof(primera), &fallos, buf);
+                    continue;
+                }
+                if (raiz && raiz[0])
+                    snprintf(ruta, sizeof(ruta), "%s/%s", raiz, p->valor);
+                else
+                    copiar_seguro(ruta, sizeof(ruta), p->valor);
+                f = fopen(ruta, "rb");
+                if (f) fclose(f);
+                else {
+                    snprintf(buf, sizeof(buf),
+                             "linea %d: recurso %d sin archivo: %s",
+                             p->linea, e->id, p->valor);
+                    anotar_fallo(primera, sizeof(primera), &fallos, buf);
+                }
+            } else if (e->kind == PM_KIND_ACTOR) {
+                if (!actor_con_recurso(m, e->id)) {
+                    snprintf(buf, sizeof(buf),
+                             "linea %d: actor %d sin recurso conectado",
+                             e->origen.linea, e->id);
+                    anotar_fallo(primera, sizeof(primera), &fallos, buf);
+                }
+            }
         }
-        json_anadir(json, longitud, &usado, ",\"sugerencia\":\"");
-        json_texte(sugerencia, sizeof(sugerencia),
-                   sugerencia_fallo(fallos[i].codigo));
-        json_anadir(json, longitud, &usado, "%s\"}", sugerencia);
     }
-    json_anadir(json, longitud, &usado, "]}");
-    return n;
+    if (diagnostico && longitud > 0)
+        copiar_seguro(diagnostico, longitud, fallos ? primera : "sin errores");
+    return fallos;
 }
 
 void pm_volcar(const ProjectModel *m, const char *ruta) {

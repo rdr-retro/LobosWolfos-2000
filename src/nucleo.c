@@ -540,6 +540,8 @@ void app_actualizar_titulo(void) {
         strcpy(titulo, "LobosWolfos 2000 - Gestor de lógica");
     } else if (g.vista == VISTA_MENUS) {
         strcpy(titulo, "LobosWolfos 2000 - Editor de menús");
+    } else if (g.vista == VISTA_INICIO) {
+        strcpy(titulo, "LobosWolfos 2000 - Inicio del proyecto");
     } else if (g.hover_herramienta >= 0) {
         nombre = ui_nombre_herramienta(g.hover_herramienta);
         _snprintf(titulo, sizeof(titulo), "LobosWolfos 2000 - %s", nombre);
@@ -821,6 +823,7 @@ int app_iniciar(void) {
 
 void app_terminar(void) {
     int i;
+    inicio_modelo_limpiar();
     juego_ventana_terminar();
     pestanas_terminar();
     pila_liberar(&g.deshacer);
@@ -1766,10 +1769,27 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
          * vista y no dependen de si el proyecto trae sistema.opciones. */
         if (g.vista == VISTA_MODULOS)
             programa_vista_preparar(arg_presente(cmd, "--compatibilidad") ? 0 : 1);
+        /* La vista Inicio tambien funciona en el editor normal; el flag de
+         * captura repite esta carga mas abajo para conservar el orden de las
+         * pruebas automatizadas. */
+        {
+            char *im = arg_valor(cmd, "--inicio-modelo");
+            if (im) {
+                char entrada[MAX_PATH];
+                char diagnostico[PM_ERROR_MAX];
+                ProjectModel *m;
+                recortar_texto(entrada, im, sizeof(entrada));
+                diagnostico[0] = '\0';
+                m = ml_leer(entrada, diagnostico, sizeof(diagnostico));
+                if (m) inicio_modelo_cargar(m, entrada);
+                else inicio_modelo_cargar(NULL, entrada);
+                g.vista = VISTA_INICIO;
+                app_actualizar_titulo();
+            }
+        }
     }
     if (captura) {
         int ok;
-        int inicio_ok = 1;
         char *menu_arg = arg_valor(cmd, "--menu");
         char *vista_arg = arg_valor(cmd, "--vista");
         char *raton_arg = arg_valor(cmd, "--raton");
@@ -1828,6 +1848,43 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
             g.patron_visible = 0;
             g.info_visible = 0;
             g.tiles_visible = 0;
+        }
+        /* Vista Inicio: se carga antes de --clics para que las pruebas y la
+         * automatizacion puedan seleccionar nodos del arbol o del lienzo. */
+        {
+            char *im = arg_valor(cmd, "--inicio-modelo");
+            if (im) {
+                char entrada[MAX_PATH];
+                char diagnostico[PM_ERROR_MAX];
+                ProjectModel *m;
+                recortar_texto(entrada, im, sizeof(entrada));
+                diagnostico[0] = '\0';
+                m = ml_leer(entrada, diagnostico, sizeof(diagnostico));
+                if (m) {
+                    inicio_modelo_cargar(m, entrada);
+                    g.vista = VISTA_INICIO;
+                    g.programa_modo = 0;
+                } else {
+                    inicio_modelo_cargar(NULL, entrada);
+                    g.vista = VISTA_INICIO;
+                }
+                app_actualizar_titulo();
+            }
+        }
+        /* Flujo reproducible de texturas: permite crear un lienzo pequeno,
+         * pintarlo con --arrastre y exportarlo como PNG sin dialogos. */
+        {
+            char *tam_arg = arg_valor(cmd, "--tamano-imagen");
+            if (tam_arg && g.vista == VISTA_PINTAR) {
+                int ancho = 0, alto = 0;
+                if (sscanf(tam_arg, "%d,%d", &ancho, &alto) == 2 &&
+                    ancho >= 1 && ancho <= LIENZO_MAX &&
+                    alto >= 1 && alto <= LIENZO_MAX) {
+                    doc_redimensionar(&g.doc, ancho, alto);
+                    doc_componer_todo(&g.doc);
+                    lienzo_actualizar();
+                }
+            }
         }
         /* Fase 48: cualquier entrada al gestor abre el constructor. La vista
          * interactiva usa programa_modo_poner para mostrar el aviso; aqui se
@@ -2047,6 +2104,70 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                     break;
                 }
                 while (*p == ';' || *p == ' ' || *p == ',') p++;
+            }
+        }
+        /* Edicion determinista del ProjectModel de Inicio. Cada segmento es
+         * "id:campo=valor" y se pueden encadenar con punto y coma. El mismo
+         * contrato lo usa el inspector con clic + teclado, de modo que las
+         * IAs pueden modificar el .log sin simular coordenadas. */
+        {
+            char *editar_arg = arg_valor(cmd, "--inicio-editar");
+            if (editar_arg && g.vista == VISTA_INICIO) {
+                const char *seg = editar_arg;
+                while (*seg) {
+                    char parte[PM_TEXTO_MAX * 2];
+                    char campo[PM_NOMBRE_MAX];
+                    const char *dos_puntos = strchr(seg, ':');
+                    const char *igual = strchr(seg, '=');
+                    const char *fin = strchr(seg, ';');
+                    const char *limite = fin ? fin : seg + strlen(seg);
+                    int id = 0;
+                    size_t nparte, ncampo, nvalor;
+                    char diagnostico[PM_ERROR_MAX];
+                    if (!dos_puntos || !igual || dos_puntos >= igual ||
+                        dos_puntos >= limite || igual >= limite) break;
+                    nparte = (size_t)(limite - seg);
+                    if (nparte >= sizeof(parte)) nparte = sizeof(parte) - 1;
+                    memcpy(parte, seg, nparte);
+                    parte[nparte] = 0;
+                    if (sscanf(parte, "%d", &id) != 1) break;
+                    ncampo = (size_t)(igual - (dos_puntos + 1));
+                    nvalor = (size_t)(limite - (igual + 1));
+                    if (ncampo == 0 || ncampo >= sizeof(campo)) break;
+                    memcpy(campo, dos_puntos + 1, ncampo);
+                    campo[ncampo] = 0;
+                    if (nvalor >= PM_TEXTO_MAX) nvalor = PM_TEXTO_MAX - 1;
+                    {
+                        char valor[PM_TEXTO_MAX];
+                        memcpy(valor, igual + 1, nvalor);
+                        valor[nvalor] = 0;
+                        diagnostico[0] = 0;
+                        inicio_modelo_editar(id, campo, valor, diagnostico,
+                                             sizeof(diagnostico));
+                    }
+                    seg = fin ? fin + 1 : limite;
+                }
+            }
+        }
+        /* Teclado del inspector de Inicio despues de los clics. Es una
+         * variante aislada de --teclas para poder reproducir el gesto real:
+         * seleccionar entidad, pulsar un campo, escribir y confirmar. */
+        {
+            char *inicio_teclas_arg = arg_valor(cmd, "--inicio-teclas");
+            if (inicio_teclas_arg && g.vista == VISTA_INICIO) {
+                const char *p = inicio_teclas_arg;
+                while (*p) {
+                    if (p[0] == '\\' && p[1]) {
+                        if (p[1] == 'b') { app_tecla(VK_BACK, 0, 0); p += 2; continue; }
+                        if (p[1] == 'n') { app_tecla(VK_RETURN, 0, 0); p += 2; continue; }
+                        if (p[1] == 'e') { app_tecla(VK_ESCAPE, 0, 0); p += 2; continue; }
+                        if (p[1] == '\\') { app_caracter('\\'); p += 2; continue; }
+                        p++;
+                        continue;
+                    }
+                    app_caracter((unsigned char)*p);
+                    p++;
+                }
             }
         }
         /* Fase 47: gestos de arrastre del constructor de programa. El formato
@@ -2558,6 +2679,22 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 if (l3_ruta[0]) logic3_guardar_actual(l3_ruta);
             }
         }
+        /* Exporta el lienzo que se acaba de pintar. Es deliberadamente
+         * independiente del LOGIC3: el .log solo referencia el nombre PNG. */
+        {
+            char *imagen_arg = arg_valor(cmd, "--guardar-imagen");
+            if (imagen_arg) {
+                char imagen_ruta[MAX_PATH];
+                int n = 0;
+                while (imagen_arg[n] && imagen_arg[n] != ' ' &&
+                       imagen_arg[n] != '\t' && n < MAX_PATH - 1) {
+                    imagen_ruta[n] = imagen_arg[n];
+                    n++;
+                }
+                imagen_ruta[n] = 0;
+                if (imagen_ruta[0]) app_guardar_imagen(imagen_ruta, 1);
+            }
+        }
         /* Fase 35: guarda el LOGIC3 y el archivo lateral de datos. El
          * escritor canonico no cambia; el sidecar solo se crea con esta
          * flag o desde el boton del editor. */
@@ -2897,6 +3034,27 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 g.programa_modo = 1;
             }
         }
+        {
+            char *vi = arg_valor(cmd, "--volcar-inicio");
+            if (vi) {
+                char ruta[MAX_PATH];
+                recortar_texto(ruta, vi, sizeof(ruta));
+                inicio_volcar(ruta);
+            }
+        }
+        /* Guarda el ProjectModel vivo de Inicio en LOG 2, manteniendo el
+         * mismo orden semantico que el lector y todas sus referencias. */
+        {
+            char *gm2 = arg_valor(cmd, "--guardar-modelo");
+            if (gm2 && g.vista == VISTA_INICIO) {
+                char ruta[MAX_PATH];
+                char diagnostico[PM_ERROR_MAX];
+                recortar_texto(ruta, gm2, sizeof(ruta));
+                diagnostico[0] = 0;
+                if (!inicio_modelo_guardar(ruta, diagnostico, sizeof(diagnostico)))
+                    app_estado("no se pudo guardar el modelo: %s", diagnostico);
+            }
+        }
         /* Fase 47: volcado propio del constructor, con flag nuevo para no
          * alterar ninguna suite anterior. */
         {
@@ -2961,79 +3119,34 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 }
             }
         }
-        /* Plan 16.7: diagnostico JSON de recursos faltantes. Usa el mismo
-         * ProjectModel que --leer-modelo y la misma comprobacion en disco;
-         * solo cambia el formato de salida para que una IA pueda leerlo. */
+        /* Plan 16.6: puente sin ventanas .log -> modelo -> LOGIC3. El
+         * adaptador usa el escritor canonico y deja un diagnostico opcional. */
         {
-            char *dj = arg_valor(cmd, "--diagnostico-json");
-            if (dj) {
+            char *m3 = arg_valor(cmd, "--modelo-logic3");
+            if (m3) {
                 char entrada[MAX_PATH];
                 char salida[MAX_PATH];
-                char raiz[MAX_PATH];
+                char ruta_diag[MAX_PATH];
                 char diagnostico[PM_ERROR_MAX];
-                char json[32768];
-                const char *p = dj;
+                const char *p = m3;
                 ProjectModel *m;
                 FILE *df;
 
                 tramo_flag_modelo(entrada, (int)sizeof(entrada), &p);
                 tramo_flag_modelo(salida, (int)sizeof(salida), &p);
+                tramo_flag_modelo(ruta_diag, (int)sizeof(ruta_diag), &p);
                 diagnostico[0] = '\0';
                 m = ml_leer(entrada, diagnostico, sizeof(diagnostico));
                 if (m) {
-                    ruta_carpeta(raiz, (int)sizeof(raiz), entrada);
-                    if (!raiz[0]) strcpy(raiz, ".");
-                    pm_validar_recursos_json(m, raiz, json, sizeof(json));
+                    if (ml3_generar(m, salida, diagnostico,
+                                    sizeof(diagnostico)))
+                        strcpy(diagnostico, "sin errores");
                     pm_destruir(m);
-                } else {
-                    pm_validar_recursos_json(NULL, NULL, json, sizeof(json));
                 }
-                if (salida[0] && (df = fopen(salida, "w")) != NULL) {
-                    fputs(json, df);
+                if (ruta_diag[0] && (df = fopen(ruta_diag, "w")) != NULL) {
+                    fputs(diagnostico, df);
                     fputc('\n', df);
                     fclose(df);
-                }
-            }
-        }
-        /* Plan 16.5: escribe el LOGIC3 canonico del ProjectModel leido del
-         * .log. El formato, el CRC y el resultado del juego los decide el
-         * escritor de siempre; este flag solo puentea las dos capas. */
-        {
-            char *gl = arg_valor(cmd, "--generar-logic3");
-            if (gl) {
-                char entrada[MAX_PATH];
-                char salida[MAX_PATH];
-                char diagnostico[PM_ERROR_MAX];
-                const char *p = gl;
-                ProjectModel *m;
-
-                tramo_flag_modelo(entrada, (int)sizeof(entrada), &p);
-                tramo_flag_modelo(salida, (int)sizeof(salida), &p);
-                diagnostico[0] = '\0';
-                m = ml_leer(entrada, diagnostico, sizeof(diagnostico));
-                if (m) {
-                    (void)ml3_generar(m, salida, diagnostico,
-                                      sizeof(diagnostico));
-                    pm_destruir(m);
-                }
-            }
-        }
-        /* Inicio: creacion, borrado, reparentado y undo/redo del ProjectModel.
-         * Una sola flag encadena las ordenes separadas por ';' para poder
-         * congelar estados intermedios con 'volcar|ruta' en las pruebas. */
-        {
-            char *ini = arg_valor(cmd, "--inicio");
-            if (ini) {
-                char diagnostico[PM_ERROR_MAX];
-                inicio_ok = inicio_ejecutar(inicio_servicio(), ini,
-                                            diagnostico, sizeof(diagnostico));
-                if (!inicio_ok) {
-                    FILE *df = fopen("inicio.diagnostico.txt", "w");
-                    if (df) {
-                        fputs(diagnostico, df);
-                        fputc('\n', df);
-                        fclose(df);
-                    }
                 }
             }
         }
@@ -3062,7 +3175,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
         DestroyWindow(hwnd);
         g.hwnd = NULL;
         app_terminar();
-        return (ok && inicio_ok) ? 0 : 2;
+        return ok ? 0 : 2;
     }
 
     ShowWindow(hwnd, mostrar == SW_SHOWMAXIMIZED ? SW_SHOWMAXIMIZED : SW_SHOW);

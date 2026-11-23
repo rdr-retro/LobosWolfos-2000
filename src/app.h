@@ -829,7 +829,8 @@ typedef enum {
     VISTA_MAPA,
     VISTA_MODULOS,
     VISTA_MENUS,
-    VISTA_ESTUDIO
+    VISTA_ESTUDIO,
+    VISTA_INICIO
 } Vista;
 
 /* Estado de una pestana. Todas las pestanas comparten el mismo documento, el
@@ -1493,6 +1494,16 @@ int  titulo_boton_en(int x, int y);
 int  titulo_zona_interactiva(int x, int y);
 void titulo_accion(int boton);
 void ui_dibujar(void);
+void inicio_modelo_cargar(ProjectModel *modelo, const char *ruta);
+void inicio_modelo_limpiar(void);
+void inicio_dibujar(void);
+void inicio_pulsar(int x, int y, int boton);
+void inicio_soltar(int x, int y, int boton);
+void inicio_mover(int x, int y, int botones);
+void inicio_rueda(int x, int y, int delta, int ctrl);
+void inicio_tecla(int vk, int ctrl, int shift);
+void inicio_caracter(int ch);
+void inicio_volcar(const char *ruta);
 void ui_dibujar_barra_menus(void);
 void ui_dibujar_sidebar(void);
 void ui_dibujar_topbar(void);
@@ -1765,6 +1776,7 @@ void dialogo_exportar_bmp(void);
 void dialogo_abrir_mapa(void);
 void dialogo_guardar_mapa(void);
 void dialogo_guardar_logica(void);
+void dialogo_guardar_montaje(void);
 void dialogo_abrir_logica(void);
 void dialogo_guardar_wolfo(void);
 void dialogo_abrir_wolfo(void);
@@ -1927,7 +1939,7 @@ int  ajustes_caracter(int ch);
 int  ajustes_proyecto_linea(char *dst, int tam);
 int  ajustes_proyecto_cargar_linea(const char *linea);
 
-/* Menu COMPILE (compilar.c) */
+/* Menu JUEGO (probar y compilar, compilar.c) */
 int  compilar_windows(const char *ruta);
 void dialogo_compilar_windows(void);
 int  compilar_bios(const char *ruta);

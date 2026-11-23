@@ -433,6 +433,21 @@ int activo_resolver_activo(const char *proyecto_ruta,
 
     if (!nombre || !nombre[0] || !dst || tam <= 0) return 0;
     ruta_carpeta(proyecto_ruta ? proyecto_ruta : "", base, sizeof(base));
+    /* Si la pieza ya trae una ruta como `tiles\jugador.png`, probarla
+     * literalmente antes de anteponer la carpeta semantica del recurso.
+     * Esto permite que una textura pintada se use desde un .log relativo
+     * al directorio actual, sin convertirla en `trajes\tiles\...`. */
+    if (strchr(nombre, '\\') || strchr(nombre, '/')) {
+        if (archivo_existe(nombre)) {
+            strncpy(dst, nombre, (size_t)tam - 1);
+            dst[tam - 1] = '\0';
+            return 1;
+        }
+        if (base[0]) {
+            unir_ruta(dst, tam, base, nombre);
+            if (archivo_existe(dst)) return 1;
+        }
+    }
     if (base[0]) {
         unir_ruta(carpeta, sizeof(carpeta), base, carpeta_usar);
         unir_ruta(dst, tam, carpeta, nombre);
@@ -451,6 +466,10 @@ int activo_resolver_activo(const char *proyecto_ruta,
 
     GetCurrentDirectoryA(MAX_PATH, base);
     base[MAX_PATH - 1] = '\0';
+    if (strchr(nombre, '\\') || strchr(nombre, '/')) {
+        unir_ruta(dst, tam, base, nombre);
+        if (archivo_existe(dst)) return 1;
+    }
     unir_ruta(carpeta, sizeof(carpeta), base, carpeta_usar);
     unir_ruta(dst, tam, carpeta, nombre);
     return archivo_existe(dst);

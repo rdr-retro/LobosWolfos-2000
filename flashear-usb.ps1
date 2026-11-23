@@ -10,7 +10,7 @@
     ni interpretar nada. El pendrive queda arrancable por BIOS (MBR) y el
     juego del editor arranca desde la BIOS sin Windows.
 
-    La imagen la genera el editor con el menu COMPILE, "Compilar para
+    La imagen la genera el editor con el menu JUEGO, "Compilar para
     BIOS" (o el xtask de loboswolfos con `build`); el script solo la copia.
 
     El script se eleva solo (hace falta ser administrador para escribir en
@@ -65,7 +65,7 @@ if (-not $Imagen) {
 }
 if (-not (Test-Path -LiteralPath $Imagen)) {
     Write-Host "loboswolfos-usb: no encuentro la imagen '$Imagen'." -ForegroundColor Red
-    Write-Host '           compila el juego en el editor con el menu COMPILE,'
+    Write-Host '           compila el juego en el editor con el menu JUEGO,'
     Write-Host '           "Compilar para BIOS" (o el xtask de loboswolfos).'
     exit 1
 }

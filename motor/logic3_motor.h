@@ -9,7 +9,8 @@
  * El lector es tolerante: las secciones que no entiende las ignora y los
  * errores de sintaxis devuelven 0 con "linea N: motivo" en `error`. El
  * texto de los bloques acepta los mismos escapes que LOGIC3 (\" \\ \n) y
- * las lineas CRLF de Windows.
+ * las lineas CRLF de Windows. Los `.log` pueden incluir `montaje`, con nodos
+ * de la paleta y conexiones `conecta origen -> destino`.
  */
 #ifndef LOGIC3_MOTOR_H
 #define LOGIC3_MOTOR_H
@@ -28,6 +29,7 @@
 #define MOTOR_L3_TEXTOS_MAX   32   /* textos globales compartidos */
 #define MOTOR_L3_TEXTO_MAX    64   /* bytes por texto */
 #define MOTOR_L3_TRAJES_MAX  32   /* trajes por objeto */
+#define MOTOR_L3_PIEZAS_MAX  128  /* piezas del constructor de programa */
 
 /* Un script del proyecto: el codigo lobo de un bloque codigo.lobo que
  * cuelga de un evento. `tipo` usa los valores de LOGIC3 (1 inicio,
@@ -150,11 +152,25 @@ typedef struct MotorL3Sistema {
     int num_reglas;
 } MotorL3Sistema;
 
+/* Una pieza `sistema.pieza` del constructor visual. El editor conserva
+ * estas piezas para no cambiar el formato LOGIC3; el runtime las proyecta a
+ * controles y actores cuando no hay bloques canonicos equivalentes. */
+typedef struct MotorL3Pieza {
+    int id;
+    int x, y;
+    int enlace;
+    char tipo[MOTOR_L3_NOMBRE_MAX];
+    char nombre[MOTOR_L3_NOMBRE_MAX];
+    char valor[MOTOR_L3_RUTA_MAX];
+    char valor2[MOTOR_L3_RUTA_MAX];
+} MotorL3Pieza;
+
 /* Un objeto LOGIC3: el tipo de las entidades que se instancian. */
 typedef struct MotorL3Objeto {
     int id;
     char nombre[MOTOR_L3_NOMBRE_MAX];
     int escena;
+    int padre;       /* 0 = raiz; ID del objeto padre */
     int x, y, w, h;
     int visible;
     int capa;
@@ -189,6 +205,8 @@ typedef struct MotorL3 {
     MotorL3Script scripts[MOTOR_L3_SCRIPTS_MAX];
     int num_scripts;
     MotorL3Sistema sistema; /* fase 46, piezas del constructor */
+    MotorL3Pieza piezas[MOTOR_L3_PIEZAS_MAX];
+    int num_piezas;
     int num_bloques; /* bloques vistos, informativo para --volcar */
 } MotorL3;
 

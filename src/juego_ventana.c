@@ -18,6 +18,7 @@
 #include "../motor/colisiones.h"
 #include "../motor/entrada.h"
 #include "../motor/logic3_motor.h"
+#include "../motor/programa.h"
 
 #define JV_ANCHO      640
 #define JV_ALTO       480
@@ -48,6 +49,7 @@ static MotorMapa g_mapa;
 static char g_mapa_usado[MAX_PATH];
 static MotorL3 g_l3;           /* fase 46: mismo modelo que usa game.exe */
 static int jv_sprite_clasico = 1;
+static int jv_programa_actor;
 
 static u32 g_sprite[JV_SPRITE_LADO * JV_SPRITE_LADO];
 static int g_x, g_y;           /* posicion del sprite en el mundo */
@@ -220,6 +222,26 @@ static int jv_actualizar(void) {
         return 1;
     }
 
+    /* Primera entrega del runtime Programa: Actor + Teclado es jugable
+     * tambien en la vista previa, usando la misma resolucion de entrada que
+     * game.exe. */
+    if (jv_programa_actor) {
+        const MotorL3Control *c = motor_programa_control_principal(&g_l3);
+        int dx = 0, dy = 0;
+        if (motor_programa_movimiento(c, &g_entrada_ext, g_entrada,
+                                      jv_velocidad, &dx, &dy)) {
+            int nx = g_x, ny = g_y;
+            if (g_mapa.celdas)
+                colisionar_caja_mapa(&g_mapa, &nx, &ny, JV_SPRITE_LADO,
+                                     JV_SPRITE_LADO, dx, dy, NULL, 0, NULL,
+                                     NULL);
+            else { nx += dx; ny += dy; }
+            g_x = nx;
+            g_y = ny;
+        }
+        return 1;
+    }
+
     /* Sin jugador implicito el lobito clasico no existe. */
     if (!jv_sprite_clasico) return 1;
 
@@ -254,12 +276,15 @@ static void jv_renderizar(void) {
      * ventana queda con el color de fondo del proyecto (negro por defecto). */
     if (!g_mapa_usado[0]) {
         motor_limpiar(g_fb, jv_ancho, jv_alto, g.ajustes.fondo);
+        if (jv_sprite_clasico || jv_programa_actor)
+            motor_blit_alpha(g_fb, jv_ancho, jv_alto, g_x, g_y,
+                             g_sprite, JV_SPRITE_LADO, JV_SPRITE_LADO);
         return;
     }
 
     /* Camara centrada en el jugador implicito, o en el mundo si el
      * proyecto no tiene lobito (fase 46). */
-    if (jv_sprite_clasico) {
+    if (jv_sprite_clasico || jv_programa_actor) {
         cam_x = g_x + JV_SPRITE_LADO / 2 - jv_ancho / 2;
         cam_y = g_y + JV_SPRITE_LADO / 2 - jv_alto / 2;
     } else {
@@ -272,7 +297,7 @@ static void jv_renderizar(void) {
                       m->dibujo_celdas ? m->dibujo_celdas : m->celdas,
                       m->dibujo_celdas ? m->num_dibujo : m->num_celdas,
                       m->imagenes);
-    if (jv_sprite_clasico)
+    if (jv_sprite_clasico || jv_programa_actor)
         motor_blit_alpha(g_fb, jv_ancho, jv_alto,
                          g_x - cam_x, g_y - cam_y,
                          g_sprite, JV_SPRITE_LADO, JV_SPRITE_LADO);
@@ -371,6 +396,7 @@ static void jv_liberar(void) {
     activo_virtuales_limpiar();
     g_num_programas = 0;
     g_num_scripts = 0;
+    jv_programa_actor = 0;
     g_estado = JUEGO_VENTANA_CERRADO;
 }
 
@@ -415,6 +441,7 @@ static int jv_cargar_proyecto(int avisar) {
     memset(&g_mapa, 0, sizeof(g_mapa));
     memset(&g_l3, 0, sizeof(g_l3));
     jv_sprite_clasico = 1;
+    jv_programa_actor = 0;
     if (activo_existe_virtual("proyecto.logic3")) {
         char error[MOTOR_L3_ERROR_MAX];
         if (!motor_l3_cargar("proyecto.logic3", &g_l3, error, sizeof(error))) {
@@ -431,6 +458,8 @@ static int jv_cargar_proyecto(int avisar) {
         }
         jv_sprite_clasico =
             g_l3.sistema.opciones.jugador_implicito ? 1 : 0;
+        jv_programa_actor = !jv_sprite_clasico &&
+                            motor_programa_control_principal(&g_l3) != NULL;
         if (g_l3.mapa[0]) {
             if (!activo_cargar_mapa(g_l3.mapa, &g_mapa)) {
                 if (avisar)

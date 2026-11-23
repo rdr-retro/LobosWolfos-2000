@@ -267,6 +267,7 @@ const char *pestanas_titulo(int indice) {
     if (vista == VISTA_MODULOS) return "Logica";
     if (vista == VISTA_MENUS) return "Menus";
     if (vista == VISTA_ESTUDIO) return "Estudio";
+    if (vista == VISTA_INICIO) return "Inicio";
     if (tiles) return "Tiles";
     if (patron) return "Patron";
     return "Pintar";

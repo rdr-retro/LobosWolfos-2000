@@ -79,17 +79,36 @@ static void guardar_mapa_actual(void) {
 static void accion_archivo(int opcion) {
     int modo_mapa = (g.vista == VISTA_MAPA);
     int fila = opcion;
+    if (g.vista != VISTA_PINTAR && g.vista != VISTA_MAPA) {
+        /* Las vistas de logica, menus y estudio comparten el flujo de
+         * proyecto; ninguna debe ejecutar acciones del lienzo de pintura. */
+        switch (opcion) {
+            case 0: dialogo_abrir_logica(); break;
+            case 1: dialogo_guardar_logica(); break;
+            case 2: dialogo_guardar_montaje(); break;
+            case 3: dialogo_abrir_wolfo(); break;
+            case 4: dialogo_guardar_wolfo(); break;
+            case 5: app_cambiar_vista(VISTA_PINTAR); break;
+            default: break;
+        }
+        return;
+    }
     if (!modo_mapa) {
-        /* Sin editor de mapas las filas son: Abrir, Borrar todo, Abrir
-         * logica, Guardar logica, Abrir proyecto .wolfo y Guardar
-         * proyecto .wolfo. Exportar PNG/BMP vive en su propio menu. */
+        /* En pintura las acciones operan sobre el documento; los recursos
+         * del juego se agrupan en sus propios menús. */
         switch (fila) {
             case 0: dialogo_abrir_imagen(); return;
-            case 1: fila = 3; break;
-            case 2: fila = 6; break;
-            case 3: fila = 7; break;
-            case 4: fila = 8; break;
-            case 5: fila = 9; break;
+            case 1:
+                pila_guardar(&g.deshacer, &g.doc);
+                pila_limpiar(&g.rehacer);
+                doc_borrar_capa(&g.doc);
+                doc_componer_todo(&g.doc);
+                app_invalidar();
+                return;
+            case 2: dialogo_abrir_logica(); return;
+            case 3: dialogo_guardar_logica(); return;
+            case 4: dialogo_abrir_wolfo(); return;
+            case 5: dialogo_guardar_wolfo(); return;
             default: return;
         }
     }
@@ -107,10 +126,10 @@ static void accion_archivo(int opcion) {
             doc_componer_todo(&g.doc);
             app_invalidar();
             break;
-        case 6: dialogo_abrir_logica(); break;
-        case 7: dialogo_guardar_logica(); break;
-        case 8: dialogo_abrir_wolfo(); break;
-        case 9: dialogo_guardar_wolfo(); break;
+        case 4: dialogo_abrir_logica(); break;
+        case 5: dialogo_guardar_logica(); break;
+        case 6: dialogo_abrir_wolfo(); break;
+        case 7: dialogo_guardar_wolfo(); break;
         default: break;
     }
 }
@@ -270,9 +289,10 @@ static void ejecutar_menu(int menu, int opcion) {
             ajustes_proyecto_abrir();
             break;
         case 8:
-            /* COMPILE: Compilar para BIOS (fase 7) y para Windows (fase 4). */
-            if (opcion == 0) dialogo_compilar_bios();
+            /* JUEGO: el mismo punto de entrada para probar o distribuir. */
+            if (opcion == 0) juego_ventana_abrir();
             else if (opcion == 1) dialogo_compilar_windows();
+            else if (opcion == 2) dialogo_compilar_bios();
             break;
         case 9:
             /* AYUDA (fase 22): ejemplo listo para jugar o guia paso a paso. */
@@ -1316,15 +1336,21 @@ void dialogo_guardar_logica(void) {
 
     carpeta_logic(carpeta, sizeof(carpeta));
     crear_carpeta(carpeta);
-    strcpy(ruta, "logica.logic");
+    if (logic3_activo())
+        strcpy(ruta, "proyecto.logic3");
+    else
+        strcpy(ruta, "logica.logic");
     memset(&ofn, 0, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = g.hwnd;
-    ofn.lpstrFilter = "Logica (*.logic;*.logic3)\0*.logic;*.logic3\0Todos los archivos\0*.*\0\0";
+    if (logic3_activo())
+        ofn.lpstrFilter = "LOGIC3 (*.logic3)\0*.logic3\0Todos los archivos\0*.*\0\0";
+    else
+        ofn.lpstrFilter = "Logica (*.logic)\0*.logic\0Todos los archivos\0*.*\0\0";
     ofn.lpstrFile = ruta;
     ofn.nMaxFile = MAX_PATH;
     ofn.lpstrInitialDir = carpeta;
-    ofn.lpstrDefExt = "logic";
+    ofn.lpstrDefExt = logic3_activo() ? "logic3" : "logic";
     ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY |
                 OFN_OVERWRITEPROMPT;
     if (!GetSaveFileNameA(&ofn)) return;
@@ -1332,6 +1358,39 @@ void dialogo_guardar_logica(void) {
         app_estado("Logica guardada: %s", ruta);
     else
         dialogo_error("No se pudo guardar la logica.");
+    app_invalidar();
+}
+
+/* El .log es la version editable por texto del montaje del juego. Solo se
+ * ofrece para LOGIC3 porque el formato clasico no conserva tipos de nodo ni
+ * enlaces; abrirlo en el gestor permite crear primero el modelo LOGIC3. */
+void dialogo_guardar_montaje(void) {
+    char ruta[MAX_PATH];
+    char carpeta[MAX_PATH];
+    OPENFILENAMEA ofn;
+
+    if (!logic3_activo()) {
+        dialogo_error("El montaje .log necesita un proyecto LOGIC3 activo.");
+        return;
+    }
+    carpeta_logic(carpeta, sizeof(carpeta));
+    crear_carpeta(carpeta);
+    strcpy(ruta, "juego.log");
+    memset(&ofn, 0, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = g.hwnd;
+    ofn.lpstrFilter = "Montaje de juego (*.log)\0*.log\0Todos los archivos\0*.*\0\0";
+    ofn.lpstrFile = ruta;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrInitialDir = carpeta;
+    ofn.lpstrDefExt = "log";
+    ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY |
+                OFN_OVERWRITEPROMPT;
+    if (!GetSaveFileNameA(&ofn)) return;
+    if (logica_guardar_archivo(ruta))
+        app_estado("Montaje .log guardado: %s", ruta);
+    else
+        dialogo_error(logic3_ultimo_error());
     app_invalidar();
 }
 
@@ -1357,9 +1416,12 @@ static void nombre_archivo_wolfo(char *dst, int tam) {
  * logica, los mapas y los tiles en un solo archivo (fase 15). */
 void dialogo_guardar_wolfo(void) {
     char ruta[MAX_PATH];
+    char carpeta[MAX_PATH];
     OPENFILENAMEA ofn;
 
     nombre_archivo_wolfo(ruta, sizeof(ruta));
+    carpeta_logic(carpeta, sizeof(carpeta));
+    crear_carpeta(carpeta);
     memset(&ofn, 0, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = g.hwnd;
@@ -1367,6 +1429,7 @@ void dialogo_guardar_wolfo(void) {
         "Proyecto (*.wolfo)\0*.wolfo\0Todos los archivos\0*.*\0\0";
     ofn.lpstrFile = ruta;
     ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrInitialDir = carpeta;
     ofn.lpstrDefExt = "wolfo";
     ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY |
                 OFN_OVERWRITEPROMPT;
@@ -1408,7 +1471,7 @@ void dialogo_abrir_logica(void) {
     memset(&ofn, 0, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = g.hwnd;
-    ofn.lpstrFilter = "Logica (*.logic;*.logic3)\0*.logic;*.logic3\0Todos los archivos\0*.*\0\0";
+    ofn.lpstrFilter = "Logica (*.logic;*.logic3;*.log)\0*.logic;*.logic3;*.log\0Todos los archivos\0*.*\0\0";
     ofn.lpstrFile = ruta;
     ofn.nMaxFile = MAX_PATH;
     ofn.lpstrInitialDir = carpeta;
@@ -2655,6 +2718,11 @@ void app_pulsar(int x, int y, int boton) {
         return;
     }
 
+    if (g.vista == VISTA_INICIO) {
+        inicio_pulsar(x, y, boton);
+        return;
+    }
+
     /* El gestor de logica tiene su propio boton, lienzo y lista. La capa
      * Programa (fase 47) consume sus propios clics; si no, sigue la vista
      * LOGIC2 de siempre. */
@@ -2730,6 +2798,10 @@ void app_soltar(int x, int y, int boton) {
     g.cubo_arrastre = -1;
     if (g.vista == VISTA_ESTUDIO) {
         estudio_soltar(x, y, boton);
+        return;
+    }
+    if (g.vista == VISTA_INICIO) {
+        inicio_soltar(x, y, boton);
         return;
     }
     if (g.vista == VISTA_MODULOS) {
@@ -2828,6 +2900,12 @@ void app_mover(int x, int y, int botones) {
     /* En el estudio solo cambia el resalte de sus propios controles. */
     if (g.vista == VISTA_ESTUDIO) {
         estudio_mover(x, y, botones);
+        if (y < AREA_SUP_ALTO) app_invalidar();
+        return;
+    }
+
+    if (g.vista == VISTA_INICIO) {
+        inicio_mover(x, y, botones);
         if (y < AREA_SUP_ALTO) app_invalidar();
         return;
     }
@@ -3008,6 +3086,10 @@ void app_rueda(int x, int y, int delta, int ctrl) {
         estudio_rueda(x, y, delta, ctrl);
         return;
     }
+    if (g.vista == VISTA_INICIO) {
+        inicio_rueda(x, y, delta, ctrl);
+        return;
+    }
     if (g.vista == VISTA_MODULOS) {
         if (g.programa_modo) programa_rueda(x, y, delta, ctrl);
         else modulos_rueda(x, y, delta, ctrl);
@@ -3110,6 +3192,10 @@ void app_tecla(int vk, int ctrl, int shift) {
         estudio_tecla(vk, ctrl, shift);
         return;
     }
+    if (g.vista == VISTA_INICIO) {
+        inicio_tecla(vk, ctrl, shift);
+        return;
+    }
     /* Constructor de programa: deshacer, rehacer, borrar y cancelar. */
     if (g.vista == VISTA_MODULOS && g.programa_modo &&
         programa_tecla(vk, ctrl, shift))
@@ -3133,6 +3219,10 @@ void app_caracter(int ch) {
     if (ajustes_caracter(ch)) return;
     if (g.vista == VISTA_ESTUDIO) {
         estudio_caracter(ch);
+        return;
+    }
+    if (g.vista == VISTA_INICIO) {
+        inicio_caracter(ch);
         return;
     }
     /* Editor de codigo lobo abierto: los caracteres imprimibles son
@@ -3162,7 +3252,8 @@ void app_doble_clic(int x, int y) {
         return;
     }
     if (g.vista == VISTA_MAPA || g.vista == VISTA_MODULOS ||
-        g.vista == VISTA_MENUS || g.vista == VISTA_ESTUDIO) return;
+        g.vista == VISTA_MENUS || g.vista == VISTA_ESTUDIO ||
+        g.vista == VISTA_INICIO) return;
     pintura_doble_clic(x, y);
 }
 

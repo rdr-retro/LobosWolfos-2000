@@ -26,7 +26,7 @@ if not exist "%GCC%" (
     exit /b 1
 )
 
-echo Compilando el motor egine (nucleo ASM 32 bits + juego)...
+echo Compilando el motor (nucleo ASM 32 bits + juego)...
 
 rem Compilar desde la propia carpeta del motor: sirve igual llamado desde
 rem el raiz del repo (build.bat del editor la llama).
@@ -34,7 +34,7 @@ pushd "%AQUI%"
 "%GCC%" -m32 -std=c99 -O2 -Wall -Wextra -Wno-unused-parameter ^
     -D_WIN32_WINNT=0x0501 -DWINVER=0x0501 -UUNICODE -U_UNICODE ^
     -fno-strict-aliasing ^
-    nucleo32.s activo.c juego.c lobo.c entrada.c depurador.c panel_debug.c hud.c audio.c save.c logic3_motor.c entidades.c eventos.c colisiones.c render.c ^
+    nucleo32.s activo.c juego.c lobo.c entrada.c depurador.c panel_debug.c hud.c audio.c save.c logic3_motor.c entidades.c eventos.c colisiones.c render.c programa_runtime.c ^
     -o "%SALIDA%" ^
     -lgdiplus -lgdi32 -luser32 -lkernel32 -lole32 ^
     -mwindows -static-libgcc

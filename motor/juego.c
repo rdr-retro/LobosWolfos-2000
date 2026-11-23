@@ -57,6 +57,7 @@
 #include "hud.h"
 #include "audio.h"
 #include "save.h"
+#include "programa.h"
 
 #define VENTANA_ANCHO 640
 #define VENTANA_ALTO  480
@@ -523,14 +524,29 @@ static int col_caja_de(void *ctx, int entidad, int id, int indice) {
 
 /* Instancia los objetos de una escena (arranque y reinicio de escena). */
 static void instanciar_escena(int escena) {
-    int i;
-    for (i = 0; i < g_l3.num_objetos; i++) {
-        MotorL3Objeto *o = &g_l3.objetos[i];
-        int tipo;
-        if (o->escena != escena) continue;
-        tipo = entidades_tipo_por_objeto(o->id);
-        if (tipo >= 0) entidad_crear(tipo, o->x, o->y);
+    int pasada, i;
+    /* Los objetos pueden aparecer en cualquier orden en LOGIC3. Se crean
+     * por niveles para que un hijo reciba la transformacion global de su
+     * padre aunque el archivo declare primero al hijo. */
+    for (pasada = 0; pasada <= g_l3.num_objetos; pasada++) {
+        int progreso = 0;
+        for (i = 0; i < g_l3.num_objetos; i++) {
+            MotorL3Objeto *o = &g_l3.objetos[i];
+            int tipo, padre = 0;
+            if (o->escena != escena ||
+                entidad_de_objeto_escena(o->id, escena) > 0)
+                continue;
+            if (o->padre > 0) {
+                padre = entidad_de_objeto_escena(o->padre, escena);
+                if (padre <= 0) continue;
+            }
+            tipo = entidades_tipo_por_objeto(o->id);
+            if (tipo >= 0 && entidad_crear_hijo(tipo, o->x, o->y, padre) > 0)
+                progreso = 1;
+        }
+        if (!progreso) break;
     }
+    entidades_recalcular_jerarquia();
 }
 
 /* Registra tipos y variables del LOGIC3 e instancia los objetos de la
@@ -545,7 +561,7 @@ static void entidades_preparar(void) {
     for (i = 0; i < g_l3.num_objetos; i++) {
         MotorL3Objeto *o = &g_l3.objetos[i];
         int tipo = entidades_tipo_agregar(o->id, o->nombre, o->escena,
-                                          o->x, o->y, o->w, o->h,
+                                          o->padre, o->x, o->y, o->w, o->h,
                                           o->visible, o->capa);
         if (tipo < 0) continue;
         for (j = 0; j < o->num_variables; j++) {
@@ -558,6 +574,15 @@ static void entidades_preparar(void) {
     instanciar_escena(g_l3.escena_inicial);
     /* El cupo de altas por fotograma empieza limpio en el fotograma 1. */
     entidades_fin_fotograma();
+}
+
+/* Runtime del constructor visual: los controles explicitos se aplican
+ * despues de los eventos y antes de la fisica del fotograma. */
+static void aplicar_controles_programa(void) {
+    if (!g_modo_vm || g_l3.sistema.num_controles <= 0) return;
+    motor_programa_aplicar(&g_l3,
+                           g_entrada_extactiva ? &g_entrada_ext : NULL,
+                           juego.entrada, &juego.mapa, g_velocidad);
 }
 
 /* Remapea los indices locales de variables de entidad de un programa a
@@ -1284,6 +1309,7 @@ static void actualizar(void) {
         eventos_fotograma(&g_eventos, &st, juego.fotograma, juego.entrada,
                           juego.entrada_anterior);
         juego.entrada_anterior = juego.entrada;
+        aplicar_controles_programa();
         /* Las bajas se aplican cuando ya no queda ningun script del
          * fotograma mirando la entidad. */
         entidades_fin_fotograma();
@@ -1295,6 +1321,14 @@ static void actualizar(void) {
         aplicar_fisica(&st);
         juego.x = st.x;
         juego.y = st.y;
+        escenas_fotograma();
+        return;
+    }
+
+    /* Un proyecto Programa puede tener controles aunque todavía no tenga
+     * scripts de evento. En ese caso no debe caer en el camino legacy. */
+    if (g_modo_vm && g_l3.sistema.num_controles > 0) {
+        aplicar_controles_programa();
         escenas_fotograma();
         return;
     }
@@ -1317,8 +1351,8 @@ static void actualizar(void) {
         return;
     }
 
-    /* Sin jugador implicito no hay lobito que mover. Los actores reales
-     * se moveran desde sus propios controles en fases posteriores. */
+    /* Sin jugador implícito ni controles explícitos no hay movimiento por
+     * defecto; los scripts siguen siendo los responsables de sus actores. */
     if (!g_sprite_clasico) {
         escenas_fotograma();
         return;
@@ -1507,6 +1541,24 @@ static void dibujar_entidades(int cam_x, int cam_y, int zoom) {
     }
 }
 
+static void centro_camara_programa(int *x, int *y) {
+    const MotorL3Control *c;
+    int ids[4];
+    int n;
+    Entidad *e;
+    if (!x || !y) return;
+    *x = g_ancho / 2;
+    *y = g_alto / 2;
+    c = motor_programa_control_principal(&g_l3);
+    if (!c || c->actor <= 0) return;
+    n = entidades_de_objeto(c->actor, ids, 4);
+    if (n < 1) return;
+    e = entidad_buscar(ids[0]);
+    if (!e) return;
+    *x = e->x + (e->w > 0 ? e->w / 2 : 8);
+    *y = e->y + (e->h > 0 ? e->h / 2 : 8);
+}
+
 static void renderizar(void) {
     MotorMapa *m = &juego.mapa;
     int cam_x = 0, cam_y = 0;
@@ -1519,9 +1571,12 @@ static void renderizar(void) {
         render_camara_calcular(&g_camara, juego.fb_ancho, juego.fb_alto,
                                juego.x + SPRITE_LADO / 2,
                                juego.y + SPRITE_LADO / 2, &cam_x, &cam_y);
-    else
+    else {
+        int objetivo_x, objetivo_y;
+        centro_camara_programa(&objetivo_x, &objetivo_y);
         render_camara_calcular(&g_camara, juego.fb_ancho, juego.fb_alto,
-                               g_ancho / 2, g_alto / 2, &cam_x, &cam_y);
+                               objetivo_x, objetivo_y, &cam_x, &cam_y);
+    }
     /* Suavizado entero de camara: ni un solo pixel de diferencia en las
      * capturas antiguas porque solo se activa con --escenas. */
     if (g_escenas_activo && g_escenas.suave > 1) {
@@ -1779,6 +1834,7 @@ static int correr_ventana(HINSTANCE instancia) {
         motor_audio_fotograma();
         perfil_iniciar();
         actualizar();
+        entidades_recalcular_jerarquia();
         if (g_entrada_extactiva) motor_entrada_siguiente(&g_entrada_ext);
         if (!juego.corriendo) break;
         traza_fotograma();
@@ -2037,7 +2093,7 @@ static void estres_preparar(int entidades, int bloques) {
     if (entidades > 0 && g_l3.num_objetos > 0)
         tipo = entidades_tipo_por_objeto(g_l3.objetos[0].id);
     if (tipo < 0) tipo = entidades_tipo_agregar(-1, "estres", g_l3.escena_inicial,
-                                                0, 0, 12, 12, 1, 0);
+                                                0, 0, 0, 12, 12, 1, 0);
     if (tipo >= 0) {
         for (i = 0; i < entidades && i < ENTIDADES_MAX; i++) {
             /* El cupo de altas por fotograma es 32: se reinicia en lotes
@@ -2113,6 +2169,7 @@ static int correr_captura(const char *ruta_bmp, int fotogramas) {
         motor_audio_fotograma();
         perfil_iniciar();
         actualizar();
+        entidades_recalcular_jerarquia();
         if (g_entrada_extactiva) motor_entrada_siguiente(&g_entrada_ext);
         traza_fotograma();
         renderizar();
@@ -2206,6 +2263,7 @@ static int correr_volcar(const char *ruta, int fotogramas) {
         motor_audio_fotograma();
         perfil_iniciar();
         actualizar();
+        entidades_recalcular_jerarquia();
         if (g_entrada_extactiva) motor_entrada_siguiente(&g_entrada_ext);
         traza_fotograma();
         perfil_fin();
@@ -2685,6 +2743,9 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         g_modo_vm = 1;
         g_sprite_clasico =
             g_l3.sistema.opciones.jugador_implicito ? 1 : 0;
+        /* El constructor necesita entrada extendida incluso sin flags de
+         * prueba: sus controles usan la misma tabla de teclas configurable. */
+        if (g_l3.sistema.num_controles > 0) g_entrada_extactiva = 1;
         aplicar_ajustes_l3(&g_l3);
 
         if (g_l3.mapa[0]) {

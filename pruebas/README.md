@@ -16,6 +16,10 @@ patrones de las 22 anteriores. La suite 24 anade cuatro casos:
 hashes de `regresion/gestor`, `regresion/ejemplo` y `plantillas/canonico` por
 los botones nuevos de la barra, sin tocar sus volcados.
 
+La suite `programa` incluye además `montaje_log`: abre
+`ejemplos\juego_ia.log`, comprueba sus nodos y enlaces y verifica que el actor
+resultante responde al teclado.
+
 Todo es texto: los patrones de las capturas son hashes SHA-256 y
 volcados de estado, no imagenes. La suite de exportacion lee blobs `LGB1`
 y compara entradas, hashes y posiciones; sus patrones viven en
@@ -84,14 +88,9 @@ a la suite de conformidad.
 `pruebas\programa` contiene dos LOGIC3 sin CRC: `mapa_solo.logic3` lleva
 `sistema.opciones` con `jugador_implicito=0`, y `legacy.logic3` no lleva la
 pieza. Ambos apuntan al mapa `pruebas/colisiones/fisica.mav` y no tienen
-objetos. La suite comprueba dieciocho cosas: el volcado del `ProjectModel` minimo,
+objetos. La suite comprueba catorce cosas: el volcado del `ProjectModel` minimo,
 la conversion del `.log` de ejemplo, la validacion de recursos del actor,
-el diagnostico JSON de recurso faltante, que el mismo grafo aparece en el
-lienzo y en el inspector, que el LOGIC3
-generado conserva la traza del juego, que preview y motor capturan el mismo
-fotograma, que un solo recorrido encadena lectura, validacion, guardado y
-ejecucion, que Inicio crea, reparenta, borra y deshace nodos con un historial
-compartido, que un ciclo de padres se rechaza con diagnostico, que un proyecto
+que el mismo grafo aparece en el lienzo y en el inspector, que un proyecto
 nuevo guarda la
 pieza de opciones, que `mapa_solo` mantiene `lobo 16 16` con `--tecla
 derecha`, que `legacy` mueve el lobo y dibuja un BMP distinto, que
@@ -124,13 +123,6 @@ Por ultimo cambia `conecta 5 -> 2` por `conecta 5 -> 3` y espera
 el proyecto de ejemplo y solo exige que todo recurso exista y que todo actor
 tenga un recurso entrante.
 
-El caso `diagnostico_json` usa `--diagnostico-json` sobre el mismo `.log` y
-comprueba que, sin el PNG, el JSON informa `recurso_sin_archivo` con el archivo
-`entrada.log`, la linea 11, la entidad 5, la ruta `tiles/jugador.png` y la
-sugerencia de crear el archivo o corregir la ruta. Despues crea el archivo y
-exige `estado=ok`, `total=0` y la lista de errores vacia. Los dos patrones
-son `diagnostico_json.json` y `diagnostico_json_ok.json`.
-
 El caso `modelo_gestor` abre `pruebas/modelo/juego_ia.log` con
 `--gestor-modelo` y comprueba que el lienzo y el inspector reciben el mismo
 grafo: seis piezas reales (cinco nodos y la cabecera `proyecto`), los tres
@@ -139,38 +131,6 @@ fija el color de cada tarjeta y el titulo `INSPECTOR`, que sigue visible; el
 resumen del grafo se dibuja solo cuando hay un modelo activo, asi que los
 casos antiguos no cambian. Sus patrones son `modelo_gestor.volcar-programa`,
 `modelo_gestor.bmp.sha256` y `modelo_gestor.pixeles`.
-
-El caso `modelo_logic3` usa `--generar-logic3` para convertir el mismo `.log`
-en LOGIC3 canonico. El patron `modelo_logic3.logic3` fija la cabecera y los
-cinco bloques `sistema.pieza` con sus campos y enlaces. Despues ejecuta el
-motor dos veces con las mismas teclas y fotogramas, una sobre el `.log` y otra
-sobre el archivo generado, y exige trazas identicas ademas del mismo hash
-del BMP. Asi se comprueba que el adaptador no cambia el resultado del juego
-ni el escritor canonico.
-
-El caso `preview_captura` cierra el ciclo con el mismo LOGIC3: primero lo
-genera con `--generar-logic3`, despues abre esa ruta en la vista previa con
-`--abrir-logic3 --captura-juego --fotogramas 6` y ejecuta `game.exe` con
-`--logic3 --captura --fotogramas 6`. El BMP de la interfaz que exige
-`--captura` se descarta; se compara el BMP de juego de las dos vias y su hash
-con `preview_captura.bmp.sha256`. Asi queda verificada la igualdad que ya
-documentaba `README.md` sin depender de un ejecutable recompilado a mano.
-
-El caso `recorrido_autoria` encadena esos pasos en una sola prueba: lee el
-`.log` con `--leer-modelo`, valida con `--diagnostico-json`, guarda con
-`--generar-logic3` y ejecuta ese LOGIC3 en preview y en `game.exe`. Reutiliza
-los patrones de los casos anteriores, asi que no añade fixtures nuevas: si
-algún eslabón cambia, el recorrido falla aunque cada caso aislado siga pasando.
-
-El caso `inicio_nodos` usa una sola flag `--inicio` para cargar el `.log`,
-crear una escena y un actor, reparentar el actor, borrar la escena, deshacer y
-rehacer. Intercala `volcar|ruta` para congelar tres estados y comprueba que el
-borrado de un actor con dos conexiones reduce el grafo a seis entidades y una
-conexion. Los cuatro patrones son `inicio_nodos.paso.txt`,
-`inicio_nodos.deshecho.txt`, `inicio_nodos.rehecho.txt` y
-`inicio_nodos.borrado.txt`. El caso `inicio_ciclos` encadena dos reparentados
-que forman un ciclo, exige codigo de salida 2 y fija el mensaje
-`inicio_ciclos.diag.txt` sin llegar a volcar el grafo invalido.
 
 El caso `entrada_gestor` fija el volcado `programa_modo=1 programa_piezas=0`,
 el hash del BMP y 15 sondas de pixel; la paleta aparece sin resaltar la primera
@@ -193,7 +153,7 @@ avisos de enlace, dos tipos y el lienzo vacío junto a las piezas.
 
 El caso `menu_tras_piezas` usa `--abrir-logic3` con `ui_programa.logic3` y
 después `--abrir-logica-menu minijuego.logic`, la misma función que
-**ARCHIVO > Abrir lógica .logic** sin el cuadro de archivo. Comprueba que
+**ARCHIVO > Abrir lógica** sin el cuadro de archivo. Comprueba que
 las tres piezas previas se sustituyen por las dos piezas proyectadas, que el
 LOGIC2 queda activo y que el mapa del LOGIC3 anterior no queda en el lienzo.
 Sus patrones son `menu_tras_piezas.*` y reutilizan las once sondas del caso

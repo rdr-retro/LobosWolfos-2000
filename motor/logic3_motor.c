@@ -178,6 +178,7 @@ typedef struct {
     int bloque_control[MOTOR_L3_CONTROLES_MAX];
     int indice_control[MOTOR_L3_CONTROLES_MAX];
     int num_bloques_control;
+    int pieza_actual;
 
     /* objeto en curso: sus trajes, variables y eventos cuelgan de el */
     int objeto;
@@ -235,6 +236,7 @@ static void sistema_preparar_bloque(L3Lector *l) {
     l->control_actual = 0;
     l->accion_actual = -1;
     l->regla_actual = -1;
+    l->pieza_actual = -1;
 
     if (strcmp(l->bloque_tipo, "sistema.opciones") == 0) {
         s->opciones.presente = 1;
@@ -253,11 +255,40 @@ static void sistema_preparar_bloque(L3Lector *l) {
             l->regla_actual = s->num_reglas++;
             memset(&s->reglas[l->regla_actual], 0, sizeof(MotorL3Regla));
         }
+    } else if (strcmp(l->bloque_tipo, "sistema.pieza") == 0) {
+        MotorL3 *p = l->proy;
+        if (p->num_piezas < MOTOR_L3_PIEZAS_MAX) {
+            MotorL3Pieza *pieza = &p->piezas[p->num_piezas];
+            memset(pieza, 0, sizeof(*pieza));
+            pieza->id = l->bloque_id;
+            strncpy(pieza->tipo, l->bloque_tipo, sizeof(pieza->tipo) - 1);
+            l->pieza_actual = p->num_piezas++;
+        }
     }
 }
 
 static void sistema_campo(L3Lector *l, const char *clave, const char *valor) {
     MotorL3Sistema *s = &l->proy->sistema;
+
+    if (strcmp(l->bloque_tipo, "sistema.pieza") == 0 &&
+        l->pieza_actual >= 0 && l->pieza_actual < l->proy->num_piezas) {
+        MotorL3Pieza *p = &l->proy->piezas[l->pieza_actual];
+        if (strcmp(clave, "pieza") == 0)
+            motor_copiar(p->tipo, sizeof(p->tipo), valor);
+        else if (strcmp(clave, "id") == 0)
+            p->id = motor_entero(valor);
+        else if (strcmp(clave, "enlace") == 0)
+            p->enlace = motor_entero(valor);
+        else if (strcmp(clave, "xy") == 0)
+            sscanf(valor, "%d,%d", &p->x, &p->y);
+        else if (strcmp(clave, "nombre") == 0)
+            motor_copiar(p->nombre, sizeof(p->nombre), valor);
+        else if (strcmp(clave, "valor") == 0)
+            motor_copiar(p->valor, sizeof(p->valor), valor);
+        else if (strcmp(clave, "valor2") == 0)
+            motor_copiar(p->valor2, sizeof(p->valor2), valor);
+        return;
+    }
 
     if (strcmp(l->bloque_tipo, "sistema.opciones") == 0) {
         s->opciones.presente = 1;
@@ -320,6 +351,234 @@ static void sistema_campo(L3Lector *l, const char *clave, const char *valor) {
             motor_copiar(r->funcion, sizeof(r->funcion), valor);
         else if (strcmp(clave, "tag") == 0)
             motor_copiar(r->etiqueta, sizeof(r->etiqueta), valor);
+    }
+}
+
+/* La vista Programa guarda primero piezas visuales para no romper LOGIC3.
+ * En el runtime las piezas basicas Actor + Teclado se convierten en un
+ * control jugable. Si el editor ya genero bloques canonicos, se conservan. */
+static int pieza_es(const MotorL3Pieza *p, const char *tipo) {
+    return p && tipo && strcmp(p->tipo, tipo) == 0;
+}
+
+static int objeto_tiene_id(const MotorL3 *p, int id) {
+    int i;
+    for (i = 0; i < p->num_objetos; i++)
+        if (p->objetos[i].id == id) return 1;
+    return 0;
+}
+
+static MotorL3Objeto *objeto_por_id(MotorL3 *p, int id) {
+    int i;
+    for (i = 0; i < p->num_objetos; i++)
+        if (p->objetos[i].id == id) return &p->objetos[i];
+    return NULL;
+}
+
+static int pieza_actor_runtime_id(int pieza_id) {
+    return 100000 + pieza_id;
+}
+
+static int control_ya_registrado(const MotorL3 *p, int jugador, int actor) {
+    int i;
+    for (i = 0; i < p->sistema.num_controles; i++) {
+        const MotorL3Control *c = &p->sistema.controles[i];
+        if (c->jugador == jugador && c->actor == actor) return 1;
+    }
+    return 0;
+}
+
+/* Un recurso se puede enlazar desde su salida al destino (la forma natural
+ * de usar la paleta), pero también aceptamos el enlace inverso para que los
+ * proyectos antiguos no queden rotos. */
+static int actor_de_recurso(const MotorL3 *p, const MotorL3Pieza *recurso) {
+    int i;
+    if (!p || !recurso) return 0;
+    for (i = 0; i < p->num_piezas; i++) {
+        const MotorL3Pieza *actor = &p->piezas[i];
+        if (pieza_es(actor, "sistema.actor") &&
+            recurso->enlace == actor->id)
+            return actor->id;
+    }
+    for (i = 0; i < p->num_piezas; i++) {
+        const MotorL3Pieza *actor = &p->piezas[i];
+        if (pieza_es(actor, "sistema.actor") &&
+            actor->enlace == recurso->id)
+            return actor->id;
+    }
+    return 0;
+}
+
+static void sistema_derivar_recursos(MotorL3 *p) {
+    int i, j;
+    if (!p) return;
+
+    for (i = 0; i < p->num_piezas; i++) {
+        MotorL3Pieza *camara = &p->piezas[i];
+        if (!pieza_es(camara, "sistema.camara")) continue;
+        p->camara.zoom = atoi(camara->valor);
+        if (p->camara.zoom != 2 && p->camara.zoom != 4)
+            p->camara.zoom = 1;
+        p->camara.definida = 1;
+        for (j = 0; j < p->num_piezas; j++) {
+            if (pieza_es(&p->piezas[j], "sistema.actor") &&
+                p->piezas[j].id == camara->enlace) {
+                p->camara.objetivo = pieza_actor_runtime_id(
+                    p->piezas[j].id);
+                break;
+            }
+        }
+    }
+
+    /* Un escenario visual sin recurso de mapa es válido: permite probar
+     * primero la lógica y añadir el mapa después desde la misma paleta. */
+    for (i = 0; i < p->num_piezas; i++) {
+        MotorL3Pieza *escena = &p->piezas[i];
+        if (!pieza_es(escena, "sistema.escena")) continue;
+        if (!p->mapa[0] && escena->valor[0] &&
+            strcmp(escena->valor, "mapa.mav") != 0)
+            motor_copiar(p->mapa, sizeof(p->mapa), escena->valor);
+        for (j = 0; j < p->num_piezas; j++) {
+            MotorL3Pieza *recurso = &p->piezas[j];
+            if (!pieza_es(recurso, "sistema.recurso.mapa") ||
+                !recurso->valor[0]) continue;
+            if (recurso->enlace == escena->id || escena->enlace == recurso->id) {
+                motor_copiar(p->mapa, sizeof(p->mapa), recurso->valor);
+                break;
+            }
+        }
+    }
+
+    /* Traje e Imagen son dos formas de aportar la apariencia de un actor.
+     * Se convierten al mismo traje runtime para que el render del motor no
+     * tenga que conocer la procedencia de la pieza. */
+    for (i = 0; i < p->num_piezas; i++) {
+        MotorL3Pieza *pieza = &p->piezas[i];
+        MotorL3Objeto *objeto;
+        MotorL3Traje *traje;
+        int actor_id;
+        char imagen[MOTOR_L3_RUTA_MAX];
+        if (!pieza_es(pieza, "sistema.traje") &&
+            !pieza_es(pieza, "sistema.recurso.imagen")) continue;
+        actor_id = actor_de_recurso(p, pieza);
+        if (!actor_id || !pieza->valor[0]) continue;
+        objeto = objeto_por_id(p, pieza_actor_runtime_id(actor_id));
+        if (!objeto || objeto->num_trajes >= MOTOR_L3_TRAJES_MAX) continue;
+        traje = &objeto->trajes[objeto->num_trajes++];
+        memset(traje, 0, sizeof(*traje));
+        traje->indice = objeto->num_trajes - 1;
+        /* Las imagenes que salen de MODO > Pintar se guardan en `tiles`.
+         * Un traje nativo sigue usando `trajes`; una pieza Imagen puede
+         * indicar otra carpeta en valor2 y, si solo da un nombre, usa tiles. */
+        imagen[0] = 0;
+        if (pieza_es(pieza, "sistema.recurso.imagen") &&
+            !strchr(pieza->valor, '\\') && !strchr(pieza->valor, '/') &&
+            pieza->valor2[0] && strcmp(pieza->valor2, "0") != 0) {
+            _snprintf(imagen, sizeof(imagen), "%s\\%s",
+                      pieza->valor2, pieza->valor);
+            imagen[sizeof(imagen) - 1] = 0;
+        } else if (pieza_es(pieza, "sistema.recurso.imagen") &&
+                   !strchr(pieza->valor, '\\') &&
+                   !strchr(pieza->valor, '/')) {
+            _snprintf(imagen, sizeof(imagen), "tiles\\%s", pieza->valor);
+            imagen[sizeof(imagen) - 1] = 0;
+        } else {
+            motor_copiar(imagen, sizeof(imagen), pieza->valor);
+        }
+        motor_copiar(traje->imagen, sizeof(traje->imagen), imagen);
+        traje->cuadros = 1;
+        traje->velocidad = 1;
+    }
+}
+
+static void sistema_derivar_piezas(MotorL3 *p) {
+    int i, j;
+    if (!p || p->num_piezas <= 0) return;
+    if (p->escena_inicial <= 0) p->escena_inicial = 1;
+
+    /* Actor visual sin objeto LOGIC3: se crea una entidad rectangular
+     * jugable; cuando el proyecto tenga objeto real, este no se duplica. */
+    for (i = 0; i < p->num_piezas; i++) {
+        MotorL3Pieza *pieza = &p->piezas[i];
+        MotorL3Objeto *o;
+        int rid;
+        if (!pieza_es(pieza, "sistema.actor")) continue;
+        rid = pieza_actor_runtime_id(pieza->id);
+        if (objeto_tiene_id(p, rid) || p->num_objetos >= MOTOR_L3_OBJETOS_MAX)
+            continue;
+        o = &p->objetos[p->num_objetos++];
+        memset(o, 0, sizeof(*o));
+        o->id = rid;
+        strncpy(o->nombre, pieza->valor[0] ? pieza->valor : pieza->nombre,
+                sizeof(o->nombre) - 1);
+        o->escena = p->escena_inicial ? p->escena_inicial : 1;
+        o->x = 16;
+        o->y = 16;
+        o->w = 24;
+        o->h = 24;
+        o->visible = 1;
+    }
+
+    sistema_derivar_recursos(p);
+
+    /* Cada pieza de teclado representa un perfil de control. La relacion
+     * Actor -> Teclado se guarda en el enlace de la pieza Actor. */
+    for (i = 0; i < p->num_piezas; i++) {
+        MotorL3Pieza *control_pieza = &p->piezas[i];
+        MotorL3Control *c;
+        int jugador, actor = 0;
+        const char *dispositivo = NULL;
+        if (pieza_es(control_pieza, "sistema.teclado")) dispositivo = "teclado";
+        else if (pieza_es(control_pieza, "sistema.raton")) dispositivo = "raton";
+        else if (pieza_es(control_pieza, "sistema.mando")) dispositivo = "mando";
+        else if (strncmp(control_pieza->tipo, "sistema.jugador", 15) == 0)
+            dispositivo = control_pieza->valor2[0] ? control_pieza->valor2 : "teclado";
+        else continue;
+        jugador = atoi(control_pieza->valor);
+        if (jugador < 1 || jugador > MOTOR_L3_CONTROLES_MAX)
+            jugador = 1;
+        for (j = 0; j < p->num_piezas; j++) {
+            MotorL3Pieza *actor_pieza = &p->piezas[j];
+            if (pieza_es(actor_pieza, "sistema.actor") &&
+                actor_pieza->enlace == control_pieza->id) {
+                actor = pieza_actor_runtime_id(actor_pieza->id);
+                break;
+            }
+        }
+        if (!actor && control_pieza->enlace > 0) {
+            for (j = 0; j < p->num_piezas; j++) {
+                if (pieza_es(&p->piezas[j], "sistema.actor") &&
+                    p->piezas[j].id == control_pieza->enlace) {
+                    actor = pieza_actor_runtime_id(p->piezas[j].id);
+                    break;
+                }
+            }
+        }
+        if (!actor || control_ya_registrado(p, jugador, actor) ||
+            p->sistema.num_controles >= MOTOR_L3_CONTROLES_MAX)
+            continue;
+        c = &p->sistema.controles[p->sistema.num_controles++];
+        memset(c, 0, sizeof(*c));
+        c->jugador = jugador;
+        c->actor = actor;
+        strncpy(c->dispositivo, dispositivo, sizeof(c->dispositivo) - 1);
+        strncpy(c->esquema, "plataformas", sizeof(c->esquema) - 1);
+        c->activo = 1;
+        for (j = 0; j < p->num_piezas; j++) {
+            MotorL3Pieza *accion = &p->piezas[j];
+            MotorL3Accion *a;
+            if (!pieza_es(accion, "sistema.accion.movimiento") ||
+                (control_pieza->enlace != accion->id &&
+                 accion->enlace != control_pieza->id) ||
+                c->num_acciones >= MOTOR_L3_ACCIONES_MAX)
+                continue;
+            a = &c->acciones[c->num_acciones++];
+            memset(a, 0, sizeof(*a));
+            motor_copiar(a->entrada, sizeof(a->entrada), accion->valor);
+            motor_copiar(a->funcion, sizeof(a->funcion), accion->valor);
+            if (strcmp(accion->valor2, "pulsar") == 0) a->flanco = 1;
+            else if (strcmp(accion->valor2, "soltar") == 0) a->flanco = 2;
+        }
     }
 }
 
@@ -484,6 +743,8 @@ static int agregar_objeto(MotorL3 *p, const char *salida,
             o->visible = entero(salida, tokens, i + 1) ? 1 : 0;
         else if (es(salida, tokens, i, "capa"))
             o->capa = entero(salida, tokens, i + 1);
+        else if (es(salida, tokens, i, "padre"))
+            o->padre = entero(salida, tokens, i + 1);
     }
     if (o->w <= 0) o->w = 16;
     if (o->h <= 0) o->h = 16;
@@ -681,6 +942,103 @@ static void agregar_camara(MotorL3 *p, const char *salida,
     if (p->camara.alto < 0) p->camara.alto = 0;
 }
 
+typedef struct {
+    int origen;
+    int destino;
+    int linea;
+} EnlaceMontajeMotor;
+
+static int ruta_es_log_motor(const char *ruta) {
+    const char *p = ruta ? strrchr(ruta, '.') : NULL;
+    return p && (strcmp(p, ".log") == 0 || strcmp(p, ".LOG") == 0);
+}
+
+static int indice_pieza_motor(const MotorL3 *p, int id) {
+    int i;
+    if (!p || id <= 0) return -1;
+    for (i = 0; i < p->num_piezas; i++)
+        if (p->piezas[i].id == id) return i;
+    return -1;
+}
+
+/* Lee la forma textual que usa el editor: un nodo es una pieza y `enlace`
+ * es el valor de compatibilidad para proyectos antiguos. Las conexiones
+ * explicitas se aplican al final, cuando ya se han leido todos los nodos. */
+static int nodo_montaje_motor(MotorL3 *p, const char *salida,
+                              const L3Tok *tokens, int nt, int linea) {
+    int id, indice, i, x = 0, y = 0, enlace = 0;
+    int tiene_x = 0, tiene_y = 0;
+    const char *tipo = NULL;
+    MotorL3Pieza *pieza;
+    if (nt < 4 || (id = entero(salida, tokens, 1)) <= 0)
+        return fallo(linea, "nodo sin id valido");
+    for (i = 2; i + 1 < nt; i += 2) {
+        const char *clave = texto(salida, tokens, i);
+        const char *valor = texto(salida, tokens, i + 1);
+        if (strcmp(clave, "tipo") == 0) tipo = valor;
+        else if (strcmp(clave, "x") == 0) {
+            x = motor_entero(valor); tiene_x = 1;
+        } else if (strcmp(clave, "y") == 0) {
+            y = motor_entero(valor); tiene_y = 1;
+        } else if (strcmp(clave, "xy") == 0) {
+            if (sscanf(valor, "%d,%d", &x, &y) != 2)
+                return fallo(linea, "xy de nodo invalido");
+            tiene_x = tiene_y = 1;
+        } else if (strcmp(clave, "enlace") == 0) {
+            enlace = motor_entero(valor);
+        }
+    }
+    if (!tipo || !tipo[0]) return fallo(linea, "nodo sin tipo");
+    indice = indice_pieza_motor(p, id);
+    if (indice < 0) {
+        if (p->num_piezas >= MOTOR_L3_PIEZAS_MAX)
+            return fallo(linea, "demasiados nodos de montaje");
+        indice = p->num_piezas++;
+        memset(&p->piezas[indice], 0, sizeof(p->piezas[indice]));
+        p->piezas[indice].id = id;
+    }
+    pieza = &p->piezas[indice];
+    motor_copiar(pieza->tipo, sizeof(pieza->tipo), tipo);
+    for (i = 2; i + 1 < nt; i += 2) {
+        const char *clave = texto(salida, tokens, i);
+        const char *valor = texto(salida, tokens, i + 1);
+        if (strcmp(clave, "nombre") == 0)
+            motor_copiar(pieza->nombre, sizeof(pieza->nombre), valor);
+        else if (strcmp(clave, "valor") == 0)
+            motor_copiar(pieza->valor, sizeof(pieza->valor), valor);
+        else if (strcmp(clave, "valor2") == 0)
+            motor_copiar(pieza->valor2, sizeof(pieza->valor2), valor);
+        else if (strcmp(clave, "enlace") == 0)
+            pieza->enlace = enlace;
+    }
+    if (tiene_x) pieza->x = x;
+    if (tiene_y) pieza->y = y;
+    if (!pieza->nombre[0]) motor_copiar(pieza->nombre, sizeof(pieza->nombre), tipo);
+    return 1;
+}
+
+static int conecta_montaje_motor(const char *salida, const L3Tok *tokens,
+                                 int nt, int linea,
+                                 EnlaceMontajeMotor *enlace) {
+    int origen, destino = 0, i;
+    if (nt < 3 || (origen = entero(salida, tokens, 1)) <= 0)
+        return fallo(linea, "conecta sin nodo origen valido");
+    for (i = 2; i < nt; i++) {
+        const char *valor = texto(salida, tokens, i);
+        char *fin = NULL;
+        long n = strtol(valor, &fin, 10);
+        if (fin != valor && *fin == 0 && n > 0) {
+            destino = (int)n;
+            break;
+        }
+    }
+    if (destino <= 0) return fallo(linea, "conecta sin nodo destino valido");
+    enlace->origen = origen;
+    enlace->destino = destino;
+    enlace->linea = linea;
+    return 1;
+}
+
 int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
     char *datos;
     int largo = 0, linea = 0;
@@ -688,6 +1046,8 @@ int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
     L3Lector l;
     char salida[MOTOR_L3_CODIGO_MAX * 4 + 32768];
     L3Tok tokens[L3_TOKENS_MAX];
+    EnlaceMontajeMotor enlaces[MOTOR_L3_PIEZAS_MAX];
+    int num_enlaces = 0;
 
     if (error && tam_error > 0) error[0] = 0;
     if (!ruta || !p) return fallo_en(error, tam_error, 0, "ruta vacia");
@@ -764,6 +1124,29 @@ int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
         /* --- camara opcional (fase 30) --- */
         if (es(salida, tokens, 0, "camara")) {
             agregar_camara(p, salida, tokens, nt);
+            goto siguiente;
+        }
+        if (es(salida, tokens, 0, "montaje")) {
+            if (ruta_es_log_motor(ruta)) p->num_piezas = 0;
+            goto siguiente;
+        }
+        if (es(salida, tokens, 0, "fin_montaje"))
+            goto siguiente;
+        if (es(salida, tokens, 0, "nodo")) {
+            if (!nodo_montaje_motor(p, salida, tokens, nt, linea)) {
+                free(datos);
+                return fallo_en(error, tam_error, 0, g_error);
+            }
+            goto siguiente;
+        }
+        if (es(salida, tokens, 0, "conecta")) {
+            if (num_enlaces >= MOTOR_L3_PIEZAS_MAX ||
+                !conecta_montaje_motor(salida, tokens, nt, linea,
+                                       &enlaces[num_enlaces])) {
+                free(datos);
+                return fallo_en(error, tam_error, 0, g_error);
+            }
+            num_enlaces++;
             goto siguiente;
         }
         /* --- escenas: la primera es la que arranca --- */
@@ -903,6 +1286,20 @@ int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
     if (p->velocidad < 1 || p->velocidad > 10) p->velocidad = 4;
     if (!p->camara.definida || p->camara.zoom < 1) p->camara.zoom = 1;
 
+    {
+        int i;
+        for (i = 0; i < num_enlaces; i++) {
+            int origen = indice_pieza_motor(p, enlaces[i].origen);
+            int destino = indice_pieza_motor(p, enlaces[i].destino);
+            if (origen < 0 || destino < 0) {
+                return fallo_en(error, tam_error, enlaces[i].linea,
+                                "conecta referencia un nodo inexistente");
+            }
+            p->piezas[origen].enlace = enlaces[i].destino;
+        }
+    }
+
+    sistema_derivar_piezas(p);
     ordenar_scripts(p);
     return 1;
 }

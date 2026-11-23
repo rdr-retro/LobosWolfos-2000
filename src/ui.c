@@ -8,7 +8,7 @@
 static const char *MENU_ETIQUETAS[MENU_TOTAL] = {
     "ARCHIVO", "EXPORTAR", "MODO", "EDITAR",
     "SELECCIONAR", "CAPA", "COLORES", "AJUSTES DEL PROYECTO",
-    "COMPILE", "AYUDA", "INFO"
+    "JUEGO", "AYUDA", "INFO"
 };
 
 #define MENU_MARGEN 4
@@ -778,24 +778,25 @@ static const char *SELECCIONAR_TEXTO[3] = {
 static const char *SELECCIONAR_ATAJO[3] = {
     "Ctrl+A", "May\u00fas+Ctrl+A", "Ctrl+I"
 };
-static const char *COMPILE_TEXTO[2] = {
-    "Compilar para BIOS", "Compilar para Windows"
+static const char *JUEGO_TEXTO[3] = {
+    "Probar juego", "Compilar para Windows", "Compilar para BIOS"
 };
 
 #define MENU_ARCHIVO_ANCHO  210
-#define MENU_ARCHIVO_ALTO   198
-#define MENU_ARCHIVO_MAPA   262
 #define MENU_FILA_ALTO      30
 #define MENU_ARCHIVO_PASO   32
 
 int menu_num_filas(int menu) {
     switch (menu) {
-        case 0: return g.vista == VISTA_MAPA ? 8 : 6;
+        case 0:
+            if (g.vista == VISTA_MAPA) return 8;
+            if (g.vista != VISTA_PINTAR) return 6;
+            return 6;
         case 1: return 2;
         case 2: return 7;
         case 3: return 5;
         case 4: return 3;
-        case 8: return 2;
+        case 8: return 3;
         case 9: return 2;
         default: return 0;
     }
@@ -809,7 +810,7 @@ Zona menu_panel_zona(int menu) {
     switch (menu) {
         case 0:
             return zona_hacer(etiqueta.x, zona_abajo(etiqueta), MENU_ARCHIVO_ANCHO,
-                              g.vista == VISTA_MAPA ? MENU_ARCHIVO_MAPA : MENU_ARCHIVO_ALTO);
+                              6 + MENU_ARCHIVO_PASO * menu_num_filas(0));
         case 1:
             interior = texto_menu_ancho("Exportar a PNG");
             if (texto_menu_ancho("Exportar a BMP") > interior)
@@ -853,15 +854,16 @@ Zona menu_panel_zona(int menu) {
             return zona_hacer(etiqueta.x, zona_abajo(etiqueta), ancho,
                               3 + MENU_FILA_ALTO * 3 + 3);
         case 8:
-            interior = texto_menu_ancho(COMPILE_TEXTO[0]);
-            if (texto_menu_ancho(COMPILE_TEXTO[1]) > interior)
-                interior = texto_menu_ancho(COMPILE_TEXTO[1]);
+            interior = texto_menu_ancho(JUEGO_TEXTO[0]);
+            for (i = 1; i < 3; i++)
+                if (texto_menu_ancho(JUEGO_TEXTO[i]) > interior)
+                    interior = texto_menu_ancho(JUEGO_TEXTO[i]);
             ancho = interior + 8 + 8;
             interior = g.ancho - etiqueta.x - 2;
             if (interior < 80) interior = 80;
             if (ancho > interior) ancho = interior;
             return zona_hacer(etiqueta.x, zona_abajo(etiqueta), ancho,
-                              3 + MENU_FILA_ALTO * 2 + 3);
+                              3 + MENU_FILA_ALTO * 3 + 3);
         case 9:
             interior = texto_menu_ancho("Crear juego de ejemplo");
             if (texto_menu_ancho("Guia paso a paso") > interior)
@@ -1551,19 +1553,28 @@ void ui_dibujar_menu_desplegable(void) {
                             sobrescribir[sizeof(sobrescribir) - 1] = 0;
                             texto = sobrescribir;
                             break;
-                        case 2: texto = "Abrir"; break;
-                        case 3: texto = "Borrar todo"; break;
-                        case 4: texto = "Abrir lógica .logic"; break;
-                        case 5: texto = "Guardar logica .logic"; break;
+                        case 2: texto = "Abrir imagen"; break;
+                        case 3: texto = "Borrar mapa"; break;
+                        case 4: texto = "Abrir lógica"; break;
+                        case 5: texto = logic3_activo() ? "Guardar LOGIC3" : "Guardar lógica"; break;
                         case 6: texto = "Abrir proyecto .wolfo"; break;
                         default: texto = "Guardar proyecto .wolfo"; break;
                     }
+                } else if (g.vista != VISTA_PINTAR) {
+                    switch (i) {
+                        case 0: texto = "Abrir lógica"; break;
+                        case 1: texto = logic3_activo() ? "Guardar LOGIC3" : "Guardar lógica"; break;
+                        case 2: texto = "Guardar montaje .log"; break;
+                        case 3: texto = "Abrir proyecto .wolfo"; break;
+                        case 4: texto = "Guardar proyecto .wolfo"; break;
+                        default: texto = "Volver a pintar"; break;
+                    }
                 } else {
                     switch (i) {
-                        case 0: texto = "Abrir"; break;
-                        case 1: texto = "Borrar todo"; break;
-                        case 2: texto = "Abrir lógica .logic"; break;
-                        case 3: texto = "Guardar logica .logic"; break;
+                        case 0: texto = "Abrir imagen"; break;
+                        case 1: texto = "Borrar lienzo"; break;
+                        case 2: texto = "Abrir lógica"; break;
+                        case 3: texto = logic3_activo() ? "Guardar LOGIC3" : "Guardar lógica"; break;
                         case 4: texto = "Abrir proyecto .wolfo"; break;
                         default: texto = "Guardar proyecto .wolfo"; break;
                     }
@@ -1604,7 +1615,7 @@ void ui_dibujar_menu_desplegable(void) {
                                   activo, 0x00909090u);
                 break;
             case 8:
-                dibujar_fila_menu(z, COMPILE_TEXTO[i], NULL, hover, activo,
+                dibujar_fila_menu(z, JUEGO_TEXTO[i], NULL, hover, activo,
                                   0x00909090u);
                 break;
             case 9:
@@ -3546,7 +3557,7 @@ static const GuiaPaso GUIA_TEXTO_V_PASOS[GUIA_PASOS] = {
     {
         "6. COMPARTE TU JUEGO",
         {
-            "Abre COMPILE > COMPILAR PARA WINDOWS para crear game.exe.",
+            "Abre JUEGO > COMPILAR PARA WINDOWS para crear game.exe.",
             "El juego lleva dentro tu mapa, tus tiles y tus ajustes.",
             "Tambien puedes guardar todo con ARCHIVO > GUARDAR PROYECTO.",
             "Si prefieres empezar con algo hecho, pulsa CREAR EJEMPLO."
@@ -3827,7 +3838,7 @@ static const TutorialPaso TUTORIAL_TEXTOS[TUTORIAL_PASOS] = {
             "La guia antigua sigue en AYUDA > GUIA PASO A PASO.",
             "En el lienzo de bloques puedes ver que hace cada bloque.",
             "Pulsa el boton de ayuda de un bloque para leer su explicacion.",
-            "Cuando termines, compila con COMPILE > COMPILAR PARA WINDOWS."
+            "Cuando termines, compila con JUEGO > COMPILAR PARA WINDOWS."
         },
         "Consejo: este tutorial no cambia la guia ni sus capturas antiguas."
     }
@@ -5250,6 +5261,23 @@ void ui_dibujar(void) {
     /* Vista Estudio: columnas fijas, escenario e inspector. */
     if (g.vista == VISTA_ESTUDIO) {
         ui_dibujar_estudio();
+        ui_dibujar_pestanas();
+        ui_dibujar_barra_menus();
+        ui_dibujar_menu_desplegable();
+        ui_dibujar_estado();
+        ui_dibujar_confirmaciones();
+        ui_dibujar_ajustes();
+        ui_dibujar_guia();
+        ui_dibujar_juego_nuevo();
+        ui_dibujar_tutorial();
+        ui_dibujar_ayuda();
+        return;
+    }
+
+    /* Vista Inicio: el ProjectModel es la unica fuente de verdad de arbol,
+     * lienzo e inspector. El gestor visual antiguo permanece en MODULOS. */
+    if (g.vista == VISTA_INICIO) {
+        inicio_dibujar();
         ui_dibujar_pestanas();
         ui_dibujar_barra_menus();
         ui_dibujar_menu_desplegable();

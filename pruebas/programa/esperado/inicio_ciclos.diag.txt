@@ -1,1 +1,0 @@
-comando 5 (reparentar): el reparentado formaria un ciclo

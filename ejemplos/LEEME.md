@@ -32,8 +32,8 @@ en piezas reales: `Mapa` con `mapa.mav` y `Funcion` con `Laberinto simple`. Se
 pueden seleccionar, arrastrar y enlazar como cualquier otra pieza de la paleta;
 no crean actor, jugador ni movimiento automatico y no se escriben en el
 `.logic`. El boton **COMPAT.** muestra los mismos elementos en el lienzo
-clásico. Si ya estabas en el gestor con otro proyecto, **ARCHIVO > Abrir lógica
-.logic** sustituye las piezas anteriores por estas sin llevarte a Pintar.
+clásico. Si ya estabas en el gestor con otro proyecto, **ARCHIVO > Abrir lógica**
+sustituye las piezas anteriores por estas sin llevarte a Pintar.
 
 El caso `pruebas\conformidad\ejemplo_minijuego.args` congela la carga del
 ejemplo y ocho fotogramas bajando; el hash del BMP comprueba que el mapa y el
@@ -57,6 +57,30 @@ LobosWolfos2000.exe --ayuda-bloque codigo.lobo
 El generador escribe siempre `logic\primer_juego.logic3` y deja el proyecto
 abierto en el gestor. `AYUDA > CREAR JUEGO DE EJEMPLO` y `--ejemplo` siguen
 creando el proyecto clasico de LOGIC2; no se han tocado.
+
+## Montaje editable por IA
+
+`juego_ia.log` es una plantilla LOGIC3 deliberadamente legible. La sección
+`montaje` define las piezas de la paleta con líneas `nodo` y sus uniones con
+`conecta origen -> destino`. Una IA puede editar tipos, posiciones, valores y
+enlaces directamente; después se abre desde **ARCHIVO > Abrir lógica** o con
+`--abrir-logic3 ejemplos\juego_ia.log`. El editor reconstruye los bloques
+`sistema.pieza` y al guardar vuelve a calcular el CRC.
+
+La cadena mínima para un jugador es:
+
+```text
+Actor -> Teclado -> Movimiento
+```
+
+Los ids son locales al montaje. `valor` y `valor2` contienen los parámetros de
+la pieza: por ejemplo, el teclado usa `valor "1"` para el jugador y movimiento
+usa `valor "derecha"` para la acción.
+
+La plantilla también incluye `sistema.recurso.imagen`: `valor "jugador.png"`,
+`valor2 "tiles"` y `conecta 5 -> 2`. Ese PNG se pinta desde el editor y queda
+como textura real del actor; si se omite el recurso, el motor solo muestra el
+rectángulo provisional de depuración.
 
 ## Plantillas incluidas
 

@@ -725,6 +725,49 @@ El botón **TEXTO** del panel izquierdo activa la misma herramienta de texto que
 el modo pintar (arrastra una caja y escribe). Al elegir **Editor de menus** de
 nuevo se vuelve a Pintar; la pestaña de esta vista se llama `Menus`.
 
+El flujo recomendado para construir un juego es: **MODO > Gestor de lógica**,
+abrir el grupo **Escenario** y colocar `Escenario`, `Actor`, `Teclado` y
+`Movimiento` en el lienzo. Enlaza `Actor -> Teclado -> Movimiento`; después
+usa **ARCHIVO > Guardar lógica** (aparece como **Guardar LOGIC3** cuando
+corresponde) para guardar el proyecto y **JUEGO > Probar
+juego** para ejecutarlo. Para añadir contenido, coloca `Mapa` y enlázalo al
+`Escenario`, o coloca `Imagen`/`Traje` y enlázalo al `Actor`; `Cámara` puede
+enlazarse al actor que debe seguir. El mapa es opcional mientras se prueba la
+lógica: el actor sigue siendo visible y jugable sobre el fondo del proyecto.
+**ARCHIVO > Guardar proyecto .wolfo** guarda el conjunto completo.
+
+Para que una IA pueda crear o modificar el montaje sin usar la interfaz,
+guarda también **ARCHIVO > Guardar montaje .log**. El `.log` es texto UTF-8 y
+mantiene una sección `montaje` explícita: cada `nodo` es una pieza de la
+paleta y cada `conecta origen -> destino` une dos nodos. Por ejemplo:
+
+```text
+montaje
+  nodo 2 tipo "sistema.actor" nombre "Jugador" x 360 y 80 enlace 3 valor "Jugador" valor2 "lobo"
+  nodo 3 tipo "sistema.teclado" nombre "Teclado" x 360 y 190 enlace 4 valor "1" valor2 "teclado"
+  nodo 4 tipo "sistema.accion.movimiento" nombre "Mover" x 360 y 300 enlace 0 valor "derecha" valor2 "mantener"
+  conecta 2 -> 3
+  conecta 3 -> 4
+fin_montaje
+```
+
+Se puede abrir el archivo editado desde **ARCHIVO > Abrir lógica**. Al cargarlo,
+el editor convierte los nodos en sus bloques `sistema.pieza`, aplica las
+conexiones y regenera el `CRC32` al guardar. Si una IA deja un CRC antiguo en
+un `.log`, el editor lo acepta y lo recalcula; un `.logic3` normal conserva la
+validación estricta. Hay una plantilla mínima en `ejemplos\juego_ia.log`.
+Los tipos principales son `sistema.escena`, `sistema.recurso.mapa`,
+`sistema.actor`, `sistema.teclado`, `sistema.accion.movimiento`,
+`sistema.recurso.imagen`, `sistema.traje` y `sistema.camara`; los parámetros de cada
+pieza viajan en `valor` y `valor2`.
+
+Las texturas del jugador no se generan dentro del motor: se pintan en **MODO
+> Pintar**, se guardan como PNG en `tiles` y se conectan al actor con una pieza
+`sistema.recurso.imagen`. En ese caso `valor` es el nombre del PNG y `valor2`
+es `tiles`; por ejemplo `jugador.png` se convierte en un traje renderizable.
+Un `sistema.traje` mantiene la alternativa de cargar directamente desde
+`trajes`.
+
 El panel izquierdo muestra la lista de elementos del lienzo (`Elemento 1`,
 `Elemento 2`…) y ocupa todo el panel. Los elementos unidos entre sí por el
 efecto imán aparecen indentados bajo el elemento del grupo al que pertenecen;
@@ -736,7 +779,7 @@ imagen del documento activo: **Exportar a PNG** y **Exportar a BMP**. Guardan
 en la carpeta `tiles` junto al ejecutable (o en `titles` si se lanzan desde el
 editor de menús), igual que **Abrir imagen**.
 
-El menú **AYUDA**, entre **COMPILE** e **INFO**, es la puerta de entrada para
+El menú **AYUDA**, entre **JUEGO** e **INFO**, es la puerta de entrada para
 quien empieza. **Crear juego de ejemplo** deja el editor con un primer juego
 funcionando sin salir del programa: genera tres tiles de 32x32 (árbol, agua y
 roca), un mapa `maps\primer_juego.mav` con un claro vacío rodeado de paredes
@@ -747,7 +790,7 @@ zona del editor y cómo llegar a ese primer juego; se avanza con
 **SIGUIENTE**/`→` y se retrocede con **ANTERIOR**/`←`, `Escape` o la X la
 cierran y en el último paso **SIGUIENTE** pasa a **CREAR EJEMPLO**.
 
-La opción **Guardar logica .logic** del menú **ARCHIVO** exporta la lógica a
+La opción **Guardar lógica** del menú **ARCHIVO** exporta la lógica a
 un archivo de texto con su desplazamiento y cada elemento (posición, tamaño,
 identificador, estado plegado, mapa asociado y función). La opción **Abrir
 lógica .logic**, justo encima, carga uno de esos archivos de vuelta: la
@@ -762,8 +805,8 @@ los valores por defecto (640x480, 60 FPS, velocidad 3 y fondo negro).
 
 El ejemplo `ejemplos\minijuego.logic` muestra ese formato clásico con un
 minijuego jugable: baja por el pasillo del mapa y corre hasta la salida, con
-colisiones y reinicio con `Espacio`. Se abre con **ARCHIVO > Abrir lógica
-.logic** o con `--abrir-logica ejemplos\minijuego.logic`, y el motor lo corre
+colisiones y reinicio con `Espacio`. Se abre con **ARCHIVO > Abrir lógica** o
+con `--abrir-logica ejemplos\minijuego.logic`, y el motor lo corre
 con `motor\game.exe --logica ejemplos\minijuego.logic`. Al cargarlo en el
 gestor, el lienzo del constructor convierte sus dos elementos en piezas reales:
 `Mapa` con `mapa.mav` y `Función` con `Laberinto simple`. Se pueden seleccionar,
@@ -822,8 +865,8 @@ y un resumen; un clic abre y cierra su editor, y un clic derecho lo borra
 código se valida al escribir con el mismo parser del motor: los errores
 («linea N: motivo») se pintan en la franja bajo el editor. Arrastrado al
 lienzo, el botón inserta un elemento que ejecuta su código cada fotograma.
-La opción **Guardar logica .logic** también guarda la función de cada
-elemento, y **Abrir lógica .logic** la recupera al cargar.
+La opción **Guardar lógica** también guarda la función de cada
+elemento, y **Abrir lógica** la recupera al cargar.
 
 Los rectángulos del lienzo que ejecutan código se ordenan **de arriba a
 abajo**: el primero por altura corre primero, como las líneas de un
@@ -869,7 +912,7 @@ carpeta `tiles_dir` junto al `.mav`, después junto al propio `.mav` y por
 `hueco`, `trigger`, `one_way`, `dano`, `tag`); los tiles `hueco` no se dibujan
 en la rejilla ni en la miniatura del selector de items.
 
-El menú **COMPILE** de la barra de menús, entre **AJUSTES DEL PROYECTO** y
+El menú **JUEGO** de la barra de menús, entre **AJUSTES DEL PROYECTO** y
 **AYUDA**, ofrece **Compilar para BIOS** y **Compilar para Windows**. Ambos toman
 el proyecto activo — la lógica del gestor, los mapas que usan sus elementos y
 los tiles de esos mapas — y lo incrustan entero como archivos virtuales (blob
@@ -877,7 +920,7 @@ los tiles de esos mapas — y lo incrustan entero como archivos virtuales (blob
 proyecto se compila igual y el juego arranca con la ventana en el color de
 fondo del proyecto (negro por defecto).
 
-Entre **COLORES** y **COMPILE** está el botón **AJUSTES DEL PROYECTO**, que
+Entre **COLORES** y **JUEGO** está el botón **AJUSTES DEL PROYECTO**, que
 abre las propiedades del proyecto en una ventana flotante (como CAPA y
 COLORES no tiene desplegable). Se puede editar el **nombre del proyecto**,
 elegir la **resolución** entre las relaciones de aspecto 4:3 y 16:9 (640x480,
@@ -911,7 +954,7 @@ con `vm.lbin` para no alterar las trazas de la fase 42.
 
 En el extremo derecho de la barra de menús hay tres botones: **play**,
 **pausa** y **stop**. Sirven para jugar el proyecto activo en una ventana
-aparte sin pasar por COMPILE ni escribir ningún `.exe`, cómodo para probar
+aparte sin pasar por JUEGO ni escribir ningún `.exe`, cómodo para probar
 cambios sin llenar el disco.
 
 - **play** abre la vista previa con el mapa, los tiles y el código
@@ -933,9 +976,7 @@ el editor sigue respondiendo mientras la ventana está abierta.
 
 Para comparar la vista previa con el ejecutable compilado hay una captura
 determinista sin ventana: `--captura-juego ruta --fotogramas N` guarda un BMP
-que coincide píxel a píxel con `game.exe --captura` cuando ambos abren el
-mismo LOGIC3 con los mismos fotogramas. El caso `preview_captura` verifica
-esa igualdad con el LOGIC3 generado desde el `.log` de ejemplo.
+que coincide píxel a píxel con `game.exe --captura` para el mismo proyecto.
 
 Para flashear la imagen a un pendrive (desde una consola con permisos de
 administrador):
@@ -1005,52 +1046,10 @@ procesado en `src\nucleo.c`.
 | `Enter` | Confirmar la acción en curso |
 | `Supr` | Borrar la selección |
 
-## Contrato del ProjectModel
-
-`pruebas/modelo/juego_ia.log` es el fixture de esta entrega: un `.log` de
-ejemplo con cabecera LOGIC3 y una sección `montaje` de cinco nodos y tres
-`conecta`. El contrato que fijan las pruebas es:
-
-1. `src/proyecto_modelo.h` expone entidades con ID estable, tipo semántico,
-   nombre, propiedades, referencias por ID, estado de UI, origen con archivo y
-   línea, y conexiones con puertos. Los IDs no se reciclan y las vistas guardan
-   IDs, nunca punteros.
-2. `--leer-modelo "entrada.log|volcado.txt|diagnostico.txt|recursos.txt"`
-   convierte ese fixture sin tocar los lectores de LOGIC3 ni crear actor,
-   jugador o movimiento en el juego.
-3. `pm_validar_recursos()` exige que cada recurso tenga archivo y que cada
-   actor reciba uno por conexión. La orden
-   `--diagnostico-json "entrada.log|salida.json"` emite lo mismo como JSON con
-   `version`, `proyecto`, `estado`, `total` y `errores[]`; cada error trae
-   `codigo`, `archivo`, `linea`, `id_entidad`, `nombre`, `sugerencia` y,
-   cuando aplica, `ruta`. Así una IA sabe qué archivo abrir y qué corregir.
-4. `--gestor-modelo "entrada.log"` proyecta el grafo en piezas reales del
-   lienzo y en el inspector sin escribir LOGIC3.
-5. `--generar-logic3 "entrada.log|salida.logic3"` delega en
-   `logic3_guardar()`, así que el formato y el CRC no cambian. El caso
-   `modelo_logic3` exige la misma traza y el mismo BMP que el `.log`.
-6. La orden `--captura-juego ruta --fotogramas N` de la vista previa y la
-   orden `--captura ruta --fotogramas N` de `game.exe` producen el mismo BMP
-   para el LOGIC3 generado; el caso `preview_captura` lo comprueba.
-7. `src/inicio.c` expone el servicio de la futura vista Inicio. `pm_borrar()`
-   quita una entidad y sus conexiones, `pm_reparentar()` guarda el padre en la
-   referencia `padre` y rechaza ciclos, y cada cambio guarda un snapshot antes
-   de aplicarse, así que `deshacer` y `rehacer` cubren crear, borrar y
-   reparentar con el mismo historial. La flag
-   `--inicio "cargar|ruta;crear|kind|nombre|padre;borrar|id;reparentar|id|padre;deshacer;rehacer;volcar|ruta"`
-   encadena órdenes y permite volcar estados intermedios. No dibuja, no toca
-   menús y no escribe LOGIC3.
-
-Las comprobaciones están en `pruebas/programa.ps1` y sus patrones en
-`pruebas/programa/esperado/`. El caso `recorrido_autoria` encadena la lectura,
-la validación, el guardado y la ejecución para detectar cambios que los casos
-aislados no verían. Ninguno de estos flags modifica el archivo de entrada ni
-desplaza los índices de menú (`ARCHIVO=1`, `MODO=2`, `AYUDA=9`).
-
 ## Estructura
 
 - `src/` — código fuente C y recursos de la interfaz. `src/compilar.c` es el
-  menú COMPILE (compilar el proyecto para Windows y para BIOS) y el paquete
+  menú JUEGO (probar y compilar el proyecto para Windows y para BIOS) y el paquete
   `.wolfo`,
   `src/juego_ventana.c` la vista previa de los botones play/pausa/stop,
   `src/ajustes.c` las propiedades del proyecto, `src/logic3.c` el modelo, el
@@ -1069,29 +1068,36 @@ desplaza los índices de menú (`ARCHIVO=1`, `MODO=2`, `AYUDA=9`).
   `--leer-modelo "entrada.log|volcado.txt|diagnostico.txt|recursos.txt"`
   expone la conversion y la validacion en las pruebas; el ultimo campo es
   opcional, no abre ventanas ni modifica archivos de juego.
-  `pm_validar_recursos_json()` reutiliza esa misma comprobacion y devuelve un
-  JSON de una linea con `estado`, `total` y un `errores` con codigo, archivo,
-  linea, id, nombre y sugerencia de cada fallo; `--diagnostico-json
-  "entrada.log|salida.json"` lo escribe para que una IA pueda leerlo sin
-  interpretar texto libre.
+  `--modelo-logic3 "entrada.log|salida.logic3|diagnostico.txt"` usa el mismo
+  lector y convierte el montaje a LOGIC3 mediante el escritor canonico, sin
+  abrir ventanas ni modificar el `.log` original. El diagnostico es opcional.
+  El lector también acepta `LOG 2`, cuyo montaje declara `escena`, `nodo` con
+  `padre`, `recurso`, `script` y `asociar script ... evento ...`; esa forma es
+  la base del gestor de escenas y scripts, no un lienzo de bloques. Cuando el
+  `LOG 2` contiene escenas, nodos o scripts, `--modelo-logic3` genera escenas
+  y objetos LOGIC3 reales, registra los eventos y copia los scripts `.lobo`
+  externos en bloques ejecutables. Los montajes antiguos sin esas entidades
+  siguen usando `sistema.pieza` solo como compatibilidad. El campo `padre` se
+  conserva en el objeto LOGIC3, se valida contra ciclos y el motor calcula la
+  posicion global de cada hijo desde su posicion local.
+  Un nodo `camera2d` convierte a su padre en objetivo de seguimiento y admite
+  `zoom 1`, `zoom 2` o `zoom 4`.
   `programa_proyectar_modelo()` muestra ese mismo grafo en el Gestor de
   logica: cada entidad se convierte en una pieza real del lienzo, cada
   `conecta` pasa a ser el `enlace` de la pieza de origen y el inspector
   añade el resumen `grafo: N entidades, C conexiones` con su origen. El flag
   `--gestor-modelo "entrada.log"` abre esa vista sin escribir LOGIC3 y sin
-  crear actor, jugador ni movimiento.
-  `src/inicio.c` y `src/inicio.h` añaden `pm_borrar()`, `pm_reparentar()`,
-  `pm_padre()` y `pm_copiar()` al modelo, y mantienen el servicio Inicio con
-  16 snapshots para deshacer y rehacer. La vista visual se enganchara después
-  a `inicio_servicio()`; por ahora solo existe la via CLI.
-  `src/modelo_logic3.c` y `src/modelo_logic3.h` cierran el ciclo: convierten
-  el modelo en bloques `sistema.pieza` y delegan en `logic3_guardar()`, asi
-  que el formato y el CRC siguen siendo los del escritor canonico. La
-  cabecera sale de la entidad de proyecto y las conexiones sobrescriben el
-  campo `enlace` de la pieza de origen. El flag
-  `--generar-logic3 "entrada.log|salida.logic3"` expone esa conversion sin
-  abrir ventanas; el caso `modelo_logic3` comprueba que la traza del motor
-  con el archivo generado es identica a la del `.log` original.
+  crear actor, jugador ni movimiento. `src/inicio.c` añade la vista Inicio:
+  árbol jerárquico, lienzo de nodos e inspector comparten el mismo
+  `ProjectModel`; `--inicio-modelo entrada.log --captura salida.bmp
+  --volcar-inicio salida.txt` permite probarla sin ventanas y seleccionar
+  nodos con `--clics`. El inspector edita ese mismo modelo al pulsar una fila
+  y confirmar con Enter; para automatización se puede usar
+  `--inicio-editar "12:x=96"` o el gesto `--clics` + `--inicio-teclas`.
+  `--guardar-modelo salida.log` escribe un LOG 2 determinista, que vuelve a
+  pasar por el lector, el adaptador LOGIC3 y el runtime sin perder padres,
+  cámaras ni asociaciones. Esta vista es la base para que los `.log` monten
+  el juego sin depender de piezas visuales.
 - `motor/` — motor egine: núcleo en ensamblador 32 bits (`nucleo32.s`),
   interfaz común (`motor.h`), carga del proyecto (`activo.c`) y `juego.c`
   (`game.exe`).

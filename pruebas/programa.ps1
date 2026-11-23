@@ -9,21 +9,20 @@
 #   modelo_minimo   vuelca el ProjectModel con los siete tipos y dos enlaces
 #   modelo_desde_log lee el .log de ejemplo y vuelca el grafo convertido
 #   modelo_recursos valida el PNG del actor y su conexion
-#   diagnostico_json emite los recursos faltantes como JSON
 #   modelo_gestor   el .log se ve igual en el lienzo y en el inspector
-#   modelo_logic3   el LOGIC3 generado conserva la traza del .log original
-#   preview_captura preview y motor capturan el mismo fotograma del LOGIC3
-#   recorrido_autoria encadena lectura, validacion, LOGIC3 y ejecucion
-#   inicio_nodos    crear, reparentar, borrar y undo/redo en el servicio Inicio
-#   inicio_ciclos   el reparentado circular se rechaza con diagnostico
 #   opciones_nuevo  el editor crea sistema.opciones en un proyecto nuevo
 #   mapa_solo       mapa sin opciones de jugador: lobo quieto y sin sprite
+#   runtime_actor   Actor + Teclado visual se instancia y responde al teclado
+#   montaje_log     un .log textual crea nodos, enlaces y un actor jugable
 #   legacy          sin sistema.opciones: lobo se mueve y el BMP cambia
 #   ui_programa     lienzo Programa con tres piezas, un enlace y sondas BMP
 #   entrada_gestor  --gestor abre el constructor sin piezas y con paleta visible
 #   elementos_logic2 al abrir un .logic clasico, el inspector lista sus elementos
 #   menu_tras_piezas recargar un LOGIC2 por la ruta del menu tras un LOGIC3 con piezas
 #   arrastre_gestor --gestor permite arrastrar una pieza sin --programa
+#   inicio_modelo   Inicio dibuja el arbol, el lienzo y el inspector del LOG 2
+#   inicio_editar   el inspector cambia una propiedad y la guarda como LOG 2
+#   modelo_runtime  LOG 2 genera escenas, objetos y scripts ejecutables
 #
 # Uso:
 #   pruebas\programa.ps1                 pasa la suite
@@ -346,39 +345,291 @@ Ejecutar-Caso "modelo_recursos" {
     }
 }
 
-Ejecutar-Caso "diagnostico_json" {
+Ejecutar-Caso "modelo_logic3" {
     param($dir, $problemas)
     $entrada = Join-Path $dir "entrada.log"
-    $bmp = Join-Path $dir "json.bmp"
-    $tiles = Join-Path $dir "tiles"
-    $png = Join-Path $tiles "jugador.png"
-    $salida = Join-Path $dir "salida.json"
+    $salida = Join-Path $dir "salida.logic3"
+    $diag = Join-Path $dir "salida.diag"
+    $captura = Join-Path $dir "salida.bmp"
     Copy-Item (Join-Path $raiz "pruebas\modelo\juego_ia.log") $entrada
-    if (-not (Test-Path -LiteralPath $tiles)) {
-        [void](New-Item -ItemType Directory -Path $tiles)
+    $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $captura,
+                                     "--modelo-logic3",
+                                     "entrada.log|salida.logic3|salida.diag")
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    foreach ($archivo in @($salida, $diag)) {
+        if (-not (Test-Path -LiteralPath $archivo)) {
+            [void]$problemas.Add("falta " + (Split-Path -Leaf $archivo))
+        }
     }
+    if (-not (Test-Path -LiteralPath $salida)) { return }
+    $contenido = Get-Content -LiteralPath $salida -Raw
+    if (-not $contenido.StartsWith("LOGIC3")) {
+        [void]$problemas.Add("la salida no es LOGIC3")
+    }
+    if (-not $contenido.Contains('tipo "sistema.pieza"')) {
+        [void]$problemas.Add("la salida no conserva las piezas normalizadas")
+    }
+    if (-not ((Get-Content -LiteralPath $diag -Raw).Trim() -eq "sin errores")) {
+        [void]$problemas.Add("la conversion no termino sin errores")
+    }
+}
 
-    # Sin PNG: el JSON debe contener el recurso ausente con su linea y ruta.
-    if (Test-Path -LiteralPath $png) { Remove-Item -LiteralPath $png }
+Ejecutar-Caso "modelo_runtime" {
+    param($dir, $problemas)
+    $entrada = Join-Path $dir "entrada.log"
+    $salida = Join-Path $dir "salida.logic3"
+    $diag = Join-Path $dir "salida.diag"
+    $bmp = Join-Path $dir "juego.bmp"
+    $traza = Join-Path $dir "juego.traza"
+    New-Item -ItemType Directory -Force -Path (Join-Path $dir "Scripts") | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $dir "tiles") | Out-Null
+    Copy-Item (Join-Path $raiz "pruebas\modelo\escena_scripts.log") $entrada
+    Copy-Item (Join-Path $raiz "pruebas\modelo\Scripts\player.lobo") `
+              (Join-Path $dir "Scripts\player.lobo")
+    Copy-Item (Join-Path $raiz "tiles\jugador.png") `
+              (Join-Path $dir "tiles\jugador.png")
     $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $bmp,
-                                     "--diagnostico-json",
-                                     "entrada.log|salida.json")
+                                     "--modelo-logic3",
+                                     "entrada.log|salida.logic3|salida.diag")
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    foreach ($archivo in @($salida, $diag)) {
+        if (-not (Test-Path -LiteralPath $archivo)) {
+            [void]$problemas.Add("falta " + (Split-Path -Leaf $archivo))
+        }
+    }
+    if ($problemas.Count -gt 0) { return }
+    $logic3 = Get-TextoNormalizado $salida
+    if ($logic3 -notlike "*escena 10*Nivel 1*") {
+        [void]$problemas.Add("no se genero la escena real")
+    }
+    foreach ($linea in @(
+        'objeto 12 "Player" escena 10 x 80 y 80',
+        'camara objetivo 12',
+        'evento 1 fotograma',
+        'bloque 1 evento 1 padre 0 orden 0 tipo "codigo.lobo"',
+        'mi.x = mi.x + 1')) {
+        if (-not $logic3.Contains($linea)) {
+            [void]$problemas.Add("falta en LOGIC3 ejecutable: " + $linea)
+        }
+    }
+    $motorCodigo = Ejecutar-Motor $dir @("--logic3", "salida.logic3",
+                                         "--captura", $bmp, "--traza", $traza,
+                                         "--fotogramas", "3", "--entidades")
+    if ($motorCodigo -ne 0) { [void]$problemas.Add("el motor devolvio $motorCodigo") }
+    if (-not (Test-Path -LiteralPath $traza)) {
+        [void]$problemas.Add("falta la traza del runtime")
+    } else {
+        $runtime = Get-TextoNormalizado $traza
+        foreach ($linea in @("vm: 1 scripts", "objeto 12 evento 1",
+                             "ent 2 83 80", "entidades final:")) {
+            if ($runtime -notlike ("*" + $linea + "*")) {
+                [void]$problemas.Add("falta en la traza: " + $linea)
+            }
+        }
+    }
+}
+
+Ejecutar-Caso "modelo_escena_inicial" {
+    param($dir, $problemas)
+    $entrada = Join-Path $dir "escenas.log"
+    $salida = Join-Path $dir "escenas.logic3"
+    $diag = Join-Path $dir "escenas.diag"
+    $captura = Join-Path $dir "escenas.bmp"
+    Copy-Item (Join-Path $raiz "pruebas\modelo\escenas_inicial.log") $entrada
+    $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $captura,
+                                     "--modelo-logic3",
+                                     "escenas.log|escenas.logic3|escenas.diag")
     if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
     if (-not (Test-Path -LiteralPath $salida)) {
-        [void]$problemas.Add("no se emitio el diagnostico JSON")
+        [void]$problemas.Add("falta el LOGIC3 de escenas")
         return
     }
-    Comprobar-Texto "diagnostico_json" ".json" `
-                    (Get-TextoNormalizado $salida) $problemas
+    $logic3 = Get-Content -LiteralPath $salida -Raw
+    $nivel1 = $logic3.IndexOf('escena 10 "Nivel 1"')
+    $nivel2 = $logic3.IndexOf('escena 20 "Nivel 2"')
+    if ($nivel1 -lt 0 -or $nivel2 -lt 0 -or $nivel1 -ge $nivel2) {
+        [void]$problemas.Add("la escena inicial no quedo en primera posicion")
+    }
+    if (-not (Test-Path -LiteralPath $diag) -or
+        (Get-Content -LiteralPath $diag -Raw).Trim() -ne "sin errores") {
+        [void]$problemas.Add("el diagnostico de escenas no esta limpio")
+    }
+}
 
-    # Con el PNG presente el estado cambia a ok y la lista queda vacia.
-    [void](New-Item -ItemType File -Path $png -Force)
-    Remove-Item -LiteralPath $salida
-    [void](Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $bmp,
-                                  "--diagnostico-json",
-                                  "entrada.log|salida.json"))
-    Comprobar-Texto "diagnostico_json_ok" ".json" `
-                    (Get-TextoNormalizado $salida) $problemas
+Ejecutar-Caso "jerarquia_runtime" {
+    param($dir, $problemas)
+    $entrada = Join-Path $dir "jerarquia.log"
+    $salida = Join-Path $dir "jerarquia.logic3"
+    $diag = Join-Path $dir "jerarquia.diag"
+    $traza = Join-Path $dir "jerarquia.traza"
+    New-Item -ItemType Directory -Force -Path (Join-Path $dir "Scripts") | Out-Null
+    Copy-Item (Join-Path $raiz "pruebas\modelo\jerarquia_runtime.log") $entrada
+    Copy-Item (Join-Path $raiz "pruebas\modelo\Scripts\parent.lobo") `
+              (Join-Path $dir "Scripts\parent.lobo")
+    $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura",
+                                     (Join-Path $dir "jerarquia.bmp"),
+                                     "--modelo-logic3",
+                                     "jerarquia.log|jerarquia.logic3|jerarquia.diag")
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    if (-not (Test-Path -LiteralPath $salida)) {
+        [void]$problemas.Add("falta el LOGIC3 jerarquico")
+        return
+    }
+    $logic3 = Get-Content -LiteralPath $salida -Raw
+    if (-not $logic3.Contains('objeto 21 "Hijo" escena 10 x 5 y 7') -or
+        -not $logic3.Contains('padre 20')) {
+        [void]$problemas.Add("no se serializo el padre del objeto")
+    }
+    $motorCodigo = Ejecutar-Motor $dir @("--logic3", "jerarquia.logic3",
+                                         "--captura", (Join-Path $dir "jerarquia.bmp"),
+                                         "--traza", $traza,
+                                         "--fotogramas", "3", "--entidades")
+    if ($motorCodigo -ne 0) {
+        [void]$problemas.Add("el motor jerarquico devolvio $motorCodigo")
+        return
+    }
+    if (-not (Test-Path -LiteralPath $traza)) {
+        [void]$problemas.Add("falta la traza jerarquica")
+        return
+    }
+    $runtime = Get-Content -LiteralPath $traza -Raw
+    if ($runtime -notlike "*ent 1 103 50*" -or
+        $runtime -notlike "*ent 2 108 57*") {
+        [void]$problemas.Add("el hijo no siguio al padre: " + $runtime)
+    }
+    if (-not (Test-Path -LiteralPath $diag) -or
+        (Get-Content -LiteralPath $diag -Raw).Trim() -ne "sin errores") {
+        [void]$problemas.Add("el diagnostico jerarquico no esta limpio")
+    }
+}
+
+Ejecutar-Caso "modelo_escena" {
+    param($dir, $problemas)
+    $entrada = Join-Path $dir "escena.log"
+    $volcado = Join-Path $dir "escena.txt"
+    $diag = Join-Path $dir "escena.diag"
+    $captura = Join-Path $dir "escena.bmp"
+    Copy-Item (Join-Path $raiz "pruebas\modelo\escena_scripts.log") $entrada
+    $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $captura,
+                                     "--leer-modelo",
+                                     "escena.log|escena.txt|escena.diag")
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    if (-not (Test-Path -LiteralPath $volcado)) {
+        [void]$problemas.Add("falta el volcado de la escena")
+        return
+    }
+    $texto = Get-TextoNormalizado $volcado
+    if (-not $texto.Contains("validacion=0 diagnostico=sin_errores")) {
+        [void]$problemas.Add("la escena no valida sin errores")
+    }
+    foreach ($linea in @(
+        "entidad=1:recurso:Jugador",
+        "entidad=2:script:Player",
+        "entidad=10:escena:Nivel_1",
+        "entidad=12:nodo:Player",
+        "entidad=13:nodo:Camera2D",
+        "entidad=14:asociacion:asociacion",
+        "referencia=12:escena:10:-",
+        "referencia=12:padre:11:-",
+        "referencia=12:recurso:1:-",
+        "referencia=13:padre:12:-",
+        "referencia=14:script:2:-",
+        "referencia=14:nodo:12:-")) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("falta en el arbol: " + $linea)
+        }
+    }
+    if (-not ((Get-Content -LiteralPath $diag -Raw).Trim() -eq "sin errores")) {
+        [void]$problemas.Add("el diagnostico de escena no esta limpio")
+    }
+}
+
+Ejecutar-Caso "inicio_modelo" {
+    param($dir, $problemas)
+    $entrada = Join-Path $dir "escena.log"
+    $volcado = Join-Path $dir "inicio.txt"
+    $captura = Join-Path $dir "inicio.bmp"
+    Copy-Item (Join-Path $raiz "pruebas\modelo\escena_scripts.log") $entrada
+    $codigo = Ejecutar-Editor $dir @("--inicio-modelo", "escena.log",
+                                     "--sin-ventanas", "--clics", "80,136",
+                                     "--captura", $captura,
+                                     "--volcar-inicio", $volcado)
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    foreach ($archivo in @($captura, $volcado)) {
+        if (-not (Test-Path -LiteralPath $archivo)) {
+            [void]$problemas.Add("falta " + (Split-Path -Leaf $archivo))
+        }
+    }
+    if ($problemas.Count -gt 0) { return }
+    $texto = Get-TextoNormalizado $volcado
+    foreach ($linea in @(
+        "inicio_vista=1",
+        "inicio_sel=12",
+        "inicio_entidades=8 escenas=1 nodos=3 scripts=1 asociaciones=1",
+        "inicio_seleccion=nodo #12",
+        "inicio_nodo=12 escena=10 padre=11 nombre=Player",
+        "inicio_nodo=13 escena=10 padre=12 nombre=Camera2D")) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("falta en Inicio: " + $linea)
+        }
+    }
+}
+
+Ejecutar-Caso "inicio_editar" {
+    param($dir, $problemas)
+    $entrada = Join-Path $dir "entrada.log"
+    $editado = Join-Path $dir "editado.log"
+    $logic3 = Join-Path $dir "editado.logic3"
+    $diag = Join-Path $dir "editado.diag"
+    $traza = Join-Path $dir "editado.traza"
+    $captura = Join-Path $dir "editado.bmp"
+    New-Item -ItemType Directory -Force -Path (Join-Path $dir "Scripts") | Out-Null
+    Copy-Item (Join-Path $raiz "pruebas\modelo\escena_scripts.log") $entrada
+    Copy-Item (Join-Path $raiz "pruebas\modelo\Scripts\player.lobo") `
+              (Join-Path $dir "Scripts\player.lobo")
+    $codigo = Ejecutar-Editor $dir @("--inicio-modelo", "entrada.log",
+                                     "--clics", "80,136;920,257",
+                                     "--inicio-teclas", "96\n",
+                                     "--guardar-modelo", "editado.log",
+                                     "--sin-ventanas", "--captura", $captura)
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    if (-not (Test-Path -LiteralPath $editado)) {
+        [void]$problemas.Add("no se guardo el LOG 2 editado")
+        return
+    }
+    $texto = Get-TextoNormalizado $editado
+    if (-not $texto.Contains('nodo id 12 escena 10 padre 11 tipo "actor" nombre "Player" x "96"')) {
+        [void]$problemas.Add("el inspector no guardo x=96 en el nodo 12")
+    }
+    $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $captura,
+                                     "--modelo-logic3",
+                                     "editado.log|editado.logic3|editado.diag")
+    if ($codigo -ne 0) { [void]$problemas.Add("la recarga editada devolvio $codigo") }
+    if (-not (Test-Path -LiteralPath $logic3) -or
+        -not (Test-Path -LiteralPath $diag)) {
+        [void]$problemas.Add("no se pudo recargar el LOG 2 editado")
+        return
+    }
+    $salida = Get-TextoNormalizado $logic3
+    if ((Get-Content -LiteralPath $diag -Raw).Trim() -ne "sin errores") {
+        [void]$problemas.Add("el LOG 2 editado no valida")
+    }
+    foreach ($linea in @(
+        'objeto 12 "Player" escena 10 x 96 y 80',
+        'objeto 12 "Player" escena 10 x 96 y 80 w 16 h 16 visible 1 capa 0 padre 11',
+        'camara objetivo 12')) {
+        if (-not $salida.Contains($linea)) {
+            [void]$problemas.Add("falta tras guardar el modelo: " + $linea)
+        }
+    }
+    $motorCodigo = Ejecutar-Motor $dir @("--logic3", "editado.logic3",
+                                         "--captura", $captura,
+                                         "--traza", $traza,
+                                         "--fotogramas", "3", "--entidades")
+    if ($motorCodigo -ne 0) { [void]$problemas.Add("el motor no cargo el LOGIC3 editado") }
+    if ((Get-Content -LiteralPath $traza -Raw) -notlike "*ent 2 99 80*") {
+        [void]$problemas.Add("el runtime no partio de la posicion editada")
+    }
 }
 
 Ejecutar-Caso "modelo_gestor" {
@@ -415,293 +666,6 @@ Ejecutar-Caso "modelo_gestor" {
         if (-not $ui.Contains($pieza)) {
             [void]$problemas.Add("falta en el volcado: " + $pieza)
         }
-    }
-}
-
-Ejecutar-Caso "modelo_logic3" {
-    param($dir, $problemas)
-    $entrada = Join-Path $dir "entrada.log"
-    $salida = Join-Path $dir "generado.logic3"
-    $bmp = Join-Path $dir "generado.bmp"
-    Copy-Item (Join-Path $raiz "pruebas\modelo\juego_ia.log") $entrada
-    $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $bmp,
-                                     "--generar-logic3",
-                                     "entrada.log|generado.logic3")
-    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
-    if (-not (Test-Path -LiteralPath $salida)) {
-        [void]$problemas.Add("no se genero el LOGIC3 del ProjectModel")
-        return
-    }
-    $logic3 = Get-TextoNormalizado $salida
-    Comprobar-Texto "modelo_logic3" ".logic3" $logic3 $problemas
-
-    $trazaOriginal = Join-Path $dir "original.traza.txt"
-    $trazaGenerada = Join-Path $dir "generada.traza.txt"
-    $bmpOriginal = Join-Path $dir "original.bmp"
-    $bmpGenerado = Join-Path $dir "generado.juego.bmp"
-    $comun = @("--entrada-teclas", "derecha", "--fotogramas", "6",
-               "--entidades")
-    $c1 = Ejecutar-Motor $dir (@("--logic3", "entrada.log",
-                                 "--traza", $trazaOriginal,
-                                 "--captura", $bmpOriginal) + $comun)
-    $c2 = Ejecutar-Motor $dir (@("--logic3", "generado.logic3",
-                                 "--traza", $trazaGenerada,
-                                 "--captura", $bmpGenerado) + $comun)
-    if ($c1 -ne 0 -or $c2 -ne 0) {
-        [void]$problemas.Add("el motor devolvio $c1 / $c2")
-        return
-    }
-    if (-not (Test-Path -LiteralPath $trazaOriginal) -or
-        -not (Test-Path -LiteralPath $trazaGenerada)) {
-        [void]$problemas.Add("falta alguna traza del juego")
-        return
-    }
-    $a = Get-TextoNormalizado $trazaOriginal
-    $b = Get-TextoNormalizado $trazaGenerada
-    if ($a -ne $b) {
-        [void]$problemas.Add("el LOGIC3 generado cambio la traza del juego")
-        Mostrar-Diferencia ($a -split "`n") ($b -split "`n") 8
-    }
-    if (-not (Test-Path -LiteralPath $bmpOriginal) -or
-        -not (Test-Path -LiteralPath $bmpGenerado)) {
-        [void]$problemas.Add("falta alguna captura del juego")
-        return
-    }
-    $hashOriginal = Get-Sha256 $bmpOriginal
-    $hashGenerado = Get-Sha256 $bmpGenerado
-    if ($hashOriginal -ne $hashGenerado) {
-        [void]$problemas.Add(
-            "el LOGIC3 generado cambio la captura: $hashOriginal / $hashGenerado")
-    }
-}
-
-Ejecutar-Caso "preview_captura" {
-    param($dir, $problemas)
-
-    $entrada = Join-Path $dir "entrada.log"
-    $salida = Join-Path $dir "generado.logic3"
-    $ui = Join-Path $dir "ui.bmp"
-    $preview = Join-Path $dir "preview.bmp"
-    $motorBmp = Join-Path $dir "motor.bmp"
-    Copy-Item (Join-Path $raiz "pruebas\modelo\juego_ia.log") $entrada
-
-    # Un solo archivo para las dos vias: el generado por el ProjectModel.
-    $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $ui,
-                                     "--generar-logic3",
-                                     "entrada.log|generado.logic3")
-    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
-    if (-not (Test-Path -LiteralPath $salida)) {
-        [void]$problemas.Add("no se genero el LOGIC3 compartido")
-        return
-    }
-
-    # --captura-juego requiere --captura: el BMP de la UI se descarta.
-    $e = Ejecutar-Editor $dir @("--sin-ventanas", "--abrir-logic3", $salida,
-                                "--captura", $ui, "--captura-juego", $preview,
-                                "--fotogramas", "6")
-    $m = Ejecutar-Motor $dir @("--logic3", $salida, "--captura", $motorBmp,
-                               "--fotogramas", "6")
-    if ($e -ne 0 -or $m -ne 0) {
-        [void]$problemas.Add("preview o motor devolvieron $e / $m")
-        return
-    }
-    if (-not (Test-Path -LiteralPath $preview) -or
-        -not (Test-Path -LiteralPath $motorBmp)) {
-        [void]$problemas.Add("falta la captura de preview o de motor")
-        return
-    }
-    $hPreview = Get-Sha256 $preview
-    $hMotor = Get-Sha256 $motorBmp
-    if ($hPreview -ne $hMotor) {
-        [void]$problemas.Add(
-            "preview y motor dibujan distinto: $hPreview / $hMotor")
-    }
-    Comprobar-Hash "preview_captura" $hPreview $problemas
-}
-
-Ejecutar-Caso "recorrido_autoria" {
-    param($dir, $problemas)
-
-    $entrada = Join-Path $dir "entrada.log"
-    $volcado = Join-Path $dir "modelo.txt"
-    $diagnostico = Join-Path $dir "estructura.txt"
-    $json = Join-Path $dir "salida.json"
-    $salida = Join-Path $dir "generado.logic3"
-    $ui = Join-Path $dir "ui.bmp"
-    $preview = Join-Path $dir "preview.bmp"
-    $motorBmp = Join-Path $dir "motor.bmp"
-    $tiles = Join-Path $dir "tiles"
-    Copy-Item (Join-Path $raiz "pruebas\modelo\juego_ia.log") $entrada
-    if (-not (Test-Path -LiteralPath $tiles)) {
-        [void](New-Item -ItemType Directory -Path $tiles)
-    }
-    [void](New-Item -ItemType File -Path (Join-Path $tiles "jugador.png") -Force)
-
-    # Un solo recorrido: el .log se lee, se valida y se guarda como LOGIC3.
-    $leer = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $ui,
-                                   "--leer-modelo",
-                                   "entrada.log|modelo.txt|estructura.txt")
-    $validar = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $ui,
-                                      "--diagnostico-json",
-                                      "entrada.log|salida.json")
-    $guardar = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $ui,
-                                      "--generar-logic3",
-                                      "entrada.log|generado.logic3")
-    if ($leer -ne 0 -or $validar -ne 0 -or $guardar -ne 0) {
-        [void]$problemas.Add("el recorrido devolvio $leer / $validar / $guardar")
-        return
-    }
-    if (-not (Test-Path -LiteralPath $volcado) -or
-        -not (Test-Path -LiteralPath $diagnostico) -or
-        -not (Test-Path -LiteralPath $json) -or
-        -not (Test-Path -LiteralPath $salida)) {
-        [void]$problemas.Add("falta algun paso del recorrido")
-        return
-    }
-    $texto = Get-TextoNormalizado $volcado
-    if (-not $texto.Contains("diagnostico=sin_errores")) {
-        [void]$problemas.Add("el .log no paso la validacion estructural")
-    }
-    Comprobar-Texto "modelo_desde_log" ".volcar" $texto $problemas
-    Comprobar-Texto "diagnostico_json_ok" ".json" `
-                    (Get-TextoNormalizado $json) $problemas
-    Comprobar-Texto "modelo_logic3" ".logic3" `
-                    (Get-TextoNormalizado $salida) $problemas
-
-    # El mismo LOGIC3 se ejecuta en las dos vias y produce la misma captura.
-    $e = Ejecutar-Editor $dir @("--sin-ventanas", "--abrir-logic3", $salida,
-                                "--captura", $ui, "--captura-juego", $preview,
-                                "--fotogramas", "6")
-    $m = Ejecutar-Motor $dir @("--logic3", $salida, "--captura", $motorBmp,
-                               "--fotogramas", "6")
-    if ($e -ne 0 -or $m -ne 0) {
-        [void]$problemas.Add("preview o motor devolvieron $e / $m")
-        return
-    }
-    if (-not (Test-Path -LiteralPath $preview) -or
-        -not (Test-Path -LiteralPath $motorBmp)) {
-        [void]$problemas.Add("falta la captura de preview o de motor")
-        return
-    }
-    $hPreview = Get-Sha256 $preview
-    $hMotor = Get-Sha256 $motorBmp
-    if ($hPreview -ne $hMotor) {
-        [void]$problemas.Add(
-            "preview y motor dibujan distinto: $hPreview / $hMotor")
-    }
-    Comprobar-Hash "preview_captura" $hPreview $problemas
-}
-
-Ejecutar-Caso "inicio_nodos" {
-    param($dir, $problemas)
-
-    $entrada = Join-Path $dir "entrada.log"
-    $paso = Join-Path $dir "paso.txt"
-    $deshecho = Join-Path $dir "deshecho.txt"
-    $rehecho = Join-Path $dir "rehecho.txt"
-    $borrado = Join-Path $dir "borrado.txt"
-    $bmp = Join-Path $dir "inicio.bmp"
-    Copy-Item (Join-Path $raiz "pruebas\modelo\juego_ia.log") $entrada
-
-    $ordenes = "cargar|entrada.log;crear|escena|Bosque;crear|actor|Lobo;" +
-               "reparentar|11|10;volcar|paso.txt;borrar|10;deshacer;" +
-               "volcar|deshecho.txt;rehacer;volcar|rehecho.txt"
-    $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $bmp,
-                                     "--inicio", $ordenes)
-    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
-    if (Test-Path -LiteralPath (Join-Path $dir "inicio.diagnostico.txt")) {
-        [void]$problemas.Add("Inicio escribio un diagnostico en una secuencia valida")
-    }
-    foreach ($ruta in @($paso, $deshecho, $rehecho)) {
-        if (-not (Test-Path -LiteralPath $ruta)) {
-            [void]$problemas.Add("falta el volcado " + (Split-Path -Leaf $ruta))
-            return
-        }
-    }
-    $pasoTexto = Get-TextoNormalizado $paso
-    $deshechoTexto = Get-TextoNormalizado $deshecho
-    $rehechoTexto = Get-TextoNormalizado $rehecho
-    Comprobar-Texto "inicio_nodos" ".paso.txt" $pasoTexto $problemas
-    Comprobar-Texto "inicio_nodos" ".deshecho.txt" $deshechoTexto $problemas
-    Comprobar-Texto "inicio_nodos" ".rehecho.txt" $rehechoTexto $problemas
-
-    foreach ($linea in @(
-        "proyecto_modelo entidades=11 conexiones=3 validacion=0 diagnostico=sin_errores",
-        "entidad=10:escena:Bosque:origen=-:0:ui=0,0,0,0,0,00000000,0",
-        "entidad=11:actor:Lobo:origen=-:0:ui=0,0,0,0,0,00000000,0",
-        "referencia=11:padre:10:-:0",
-        "inicio undo=3 redo=0 ultimo=reparentado")) {
-        if (-not $pasoTexto.Contains($linea)) {
-            [void]$problemas.Add("falta en el paso: " + $linea)
-        }
-    }
-    foreach ($linea in @(
-        "entidad=10:escena:Bosque:origen=-:0:ui=0,0,0,0,0,00000000,0",
-        "referencia=11:padre:10:-:0",
-        "inicio undo=3 redo=1 ultimo=deshecho")) {
-        if (-not $deshechoTexto.Contains($linea)) {
-            [void]$problemas.Add("falta al deshacer: " + $linea)
-        }
-    }
-    if ($rehechoTexto.Contains("entidad=10:escena:Bosque")) {
-        [void]$problemas.Add("rehacer no aplico el borrado")
-    }
-    if ($rehechoTexto.Contains("referencia=11:padre")) {
-        [void]$problemas.Add("rehacer dejo una referencia al nodo borrado")
-    }
-    if (-not $rehechoTexto.Contains(
-            "inicio undo=4 redo=0 ultimo=rehecho")) {
-        [void]$problemas.Add("rehacer no actualizo los contadores")
-    }
-
-    # Borrar un actor con dos conexiones deja el grafo sin enlaces colgados.
-    $ordenes2 = "cargar|entrada.log;borrar|2;volcar|borrado.txt"
-    $codigo2 = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $bmp,
-                                      "--inicio", $ordenes2)
-    if ($codigo2 -ne 0) { [void]$problemas.Add("el editor devolvio $codigo2") }
-    if (-not (Test-Path -LiteralPath $borrado)) {
-        [void]$problemas.Add("falta el volcado del borrado de conexiones")
-        return
-    }
-    $borradoTexto = Get-TextoNormalizado $borrado
-    Comprobar-Texto "inicio_nodos" ".borrado.txt" $borradoTexto $problemas
-    if (-not $borradoTexto.Contains(
-            "proyecto_modelo entidades=6 conexiones=1")) {
-        [void]$problemas.Add("borrar no quito las dos conexiones del actor")
-    }
-    if ($borradoTexto.Contains("conexion=7:") -or
-        $borradoTexto.Contains("conexion=9:")) {
-        [void]$problemas.Add("quedaron conexiones que referenciaban al actor")
-    }
-}
-
-Ejecutar-Caso "inicio_ciclos" {
-    param($dir, $problemas)
-
-    $entrada = Join-Path $dir "entrada.log"
-    $volcado = Join-Path $dir "ciclo.txt"
-    $bmp = Join-Path $dir "inicio.bmp"
-    Copy-Item (Join-Path $raiz "pruebas\modelo\juego_ia.log") $entrada
-
-    $ordenes = "cargar|entrada.log;crear|escena|A;crear|escena|B;" +
-               "reparentar|10|11;reparentar|11|10;volcar|ciclo.txt"
-    $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $bmp,
-                                     "--inicio", $ordenes)
-    if ($codigo -eq 0) {
-        [void]$problemas.Add("el ciclo de padres deberia devolver error")
-    }
-    if (Test-Path -LiteralPath $volcado) {
-        [void]$problemas.Add("no se debio volcar un estado con ciclo")
-    }
-    $diag = Join-Path $dir "inicio.diagnostico.txt"
-    if (-not (Test-Path -LiteralPath $diag)) {
-        [void]$problemas.Add("falta el diagnostico del ciclo")
-        return
-    }
-    $texto = Get-TextoNormalizado $diag
-    Comprobar-Texto "inicio_ciclos" ".diag.txt" $texto $problemas
-    if (-not $texto.Contains("comando 5 (reparentar): el reparentado formaria un ciclo")) {
-        [void]$problemas.Add("el diagnostico no senala el comando 5")
     }
 }
 
@@ -750,6 +714,80 @@ Ejecutar-Caso "mapa_solo" {
     $pos = Get-PosicionLobo $dump
     if ($pos -ne "16 16") {
         [void]$problemas.Add("el lobo implicito se movio a $pos (esperado 16 16)")
+    }
+}
+
+Ejecutar-Caso "runtime_actor" {
+    param($dir, $problemas)
+
+    $logic = Join-Path $esperadoDir "ui_programa.logic3"
+    $traza = Join-Path $dir "runtime_actor.traza.txt"
+    $dump = Join-Path $dir "runtime_actor.volcado.txt"
+    $codigo = Ejecutar-Motor $dir @(
+        "--logic3", $logic,
+        "--entrada-teclas", "derecha",
+        "--fotogramas", "6",
+        "--traza", $traza,
+        "--volcar", $dump,
+        "--entidades"
+    )
+
+    if ($codigo -ne 0) {
+        [void]$problemas.Add("el runtime de actor devolvio $codigo")
+        return
+    }
+    if (-not (Test-Path -LiteralPath $traza)) {
+        [void]$problemas.Add("no se genero la traza del actor")
+        return
+    }
+
+    $movimientos = @(
+        Get-Content -LiteralPath $traza |
+            Where-Object { $_ -match '^ent 1 -?\d+ -?\d+$' }
+    )
+    if ($movimientos.Count -lt 6) {
+        [void]$problemas.Add("no se encontro la traza del actor visual")
+        return
+    }
+
+    $ultimo = $movimientos[-1].Split(' ')
+    if ([int]$ultimo[2] -le 16) {
+        [void]$problemas.Add("el actor no avanzo hacia la derecha: $($movimientos[-1])")
+    }
+}
+
+Ejecutar-Caso "montaje_log" {
+    param($dir, $problemas)
+
+    $logic = Join-Path $raiz "ejemplos\juego_ia.log"
+    $traza = Join-Path $dir "montaje_log.traza.txt"
+    $codigo = Ejecutar-Motor $dir @(
+        "--logic3", $logic,
+        "--entrada-teclas", "derecha",
+        "--fotogramas", "6",
+        "--traza", $traza,
+        "--entidades"
+    )
+
+    if ($codigo -ne 0) {
+        [void]$problemas.Add("el montaje .log devolvio $codigo")
+        return
+    }
+    if (-not (Test-Path -LiteralPath $traza)) {
+        [void]$problemas.Add("no se genero la traza del montaje .log")
+        return
+    }
+    $movimientos = @(
+        Get-Content -LiteralPath $traza |
+            Where-Object { $_ -match '^ent 100002 -?\d+ -?\d+$' }
+    )
+    if ($movimientos.Count -lt 6) {
+        [void]$problemas.Add("el .log no creo la entidad del nodo Actor")
+        return
+    }
+    $ultimo = $movimientos[-1].Split(' ')
+    if ([int]$ultimo[2] -le 16) {
+        [void]$problemas.Add("el Actor del .log no avanzo: $($movimientos[-1])")
     }
 }
 

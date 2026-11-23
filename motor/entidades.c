@@ -56,7 +56,8 @@ void entidades_vaciar(void) {
 }
 
 int entidades_tipo_agregar(int id_objeto, const char *nombre, int escena,
-                           int x, int y, int w, int h, int visible, int capa) {
+                           int padre, int x, int y, int w, int h,
+                           int visible, int capa) {
     int i;
     EntidadTipo *t;
 
@@ -72,6 +73,7 @@ int entidades_tipo_agregar(int id_objeto, const char *nombre, int escena,
     t->id = id_objeto;
     copiar_nombre(t->nombre, nombre, ENTIDAD_NOMBRE_MAX);
     t->escena = escena;
+    t->padre = padre > 0 ? padre : 0;
     t->x = x;
     t->y = y;
     t->w = w > 0 ? w : 16;
@@ -156,9 +158,10 @@ static int hueco_libre(void) {
     return -1;
 }
 
-int entidad_crear(int tipo, int x, int y) {
+int entidad_crear_hijo(int tipo, int x, int y, int padre) {
     EntidadTipo *t;
     Entidad *e;
+    Entidad *padre_entidad = NULL;
     int i, slot;
 
     if (!tipo_valido(tipo)) return -1;
@@ -180,8 +183,16 @@ int entidad_crear(int tipo, int x, int y) {
     e->id = g_siguiente_id++;
     e->tipo = tipo;
     e->escena = t->escena;
-    e->x = x;
-    e->y = y;
+    if (padre > 0) {
+        padre_entidad = entidad_buscar(padre);
+        if (!padre_entidad || padre_entidad->escena != e->escena)
+            padre_entidad = NULL;
+    }
+    e->padre = padre_entidad ? padre_entidad->id : 0;
+    e->local_x = x;
+    e->local_y = y;
+    e->x = padre_entidad ? padre_entidad->x + x : x;
+    e->y = padre_entidad ? padre_entidad->y + y : y;
     e->w = t->w;
     e->h = t->h;
     e->visible = t->visible;
@@ -196,13 +207,18 @@ int entidad_crear(int tipo, int x, int y) {
     return e->id;
 }
 
+int entidad_crear(int tipo, int x, int y) {
+    return entidad_crear_hijo(tipo, x, y, 0);
+}
+
 int entidades_clonar(int id) {
     Entidad *origen = entidad_buscar(id);
     Entidad *copia;
     int nuevo, i;
 
     if (!origen) return -1;
-    nuevo = entidad_crear(origen->tipo, origen->x, origen->y);
+    nuevo = entidad_crear_hijo(origen->tipo, origen->local_x, origen->local_y,
+                               origen->padre);
     if (nuevo < 0) return -1;
     copia = entidad_buscar(nuevo);
     if (!copia) return -1;
@@ -259,9 +275,20 @@ int entidad_por_tag(const char *tag) {
 
 int entidad_mover(int id, int x, int y) {
     Entidad *e = entidad_buscar(id);
+    Entidad *padre;
     if (!e) return -1;
+    padre = e->padre > 0 ? entidad_buscar(e->padre) : NULL;
+    if (padre && padre->escena == e->escena) {
+        e->local_x = x - padre->x;
+        e->local_y = y - padre->y;
+    } else {
+        e->padre = 0;
+        e->local_x = x;
+        e->local_y = y;
+    }
     e->x = x;
     e->y = y;
+    entidades_recalcular_jerarquia();
     return 1;
 }
 
@@ -269,7 +296,45 @@ int entidad_cambiar_escena(int id, int escena) {
     Entidad *e = entidad_buscar(id);
     if (!e) return -1;
     e->escena = escena;
+    e->padre = 0;
+    e->local_x = e->x;
+    e->local_y = e->y;
     return 1;
+}
+
+static void recalcular_entidad(Entidad *e, int profundidad) {
+    Entidad *padre;
+    if (!e || !e->usada || profundidad > ENTIDADES_MAX) return;
+    if (e->padre <= 0) return;
+    padre = entidad_buscar(e->padre);
+    if (!padre || padre == e || padre->escena != e->escena) {
+        e->padre = 0;
+        e->local_x = e->x;
+        e->local_y = e->y;
+        return;
+    }
+    recalcular_entidad(padre, profundidad + 1);
+    e->x = padre->x + e->local_x;
+    e->y = padre->y + e->local_y;
+}
+
+void entidades_recalcular_jerarquia(void) {
+    int i;
+    for (i = 0; i < ENTIDADES_MAX; i++)
+        if (g_entidades[i].usada)
+            recalcular_entidad(&g_entidades[i], 0);
+}
+
+int entidad_de_objeto_escena(int id_objeto, int escena) {
+    int tipo = entidades_tipo_por_objeto(id_objeto);
+    int i;
+    if (tipo < 0) return 0;
+    for (i = 0; i < ENTIDADES_MAX; i++) {
+        Entidad *e = &g_entidades[i];
+        if (e->usada && e->tipo == tipo && e->escena == escena)
+            return e->id;
+    }
+    return 0;
 }
 
 Entidad *entidad_indice(int i) {
@@ -326,8 +391,8 @@ int entidades_escribir_campo(int id, int campo, int valor) {
     Entidad *e = entidad_buscar(id);
     if (!e) return 0;
     switch (campo) {
-    case ENTIDAD_CAMPO_X: e->x = valor; return 1;
-    case ENTIDAD_CAMPO_Y: e->y = valor; return 1;
+    case ENTIDAD_CAMPO_X: return entidad_mover(id, valor, e->y);
+    case ENTIDAD_CAMPO_Y: return entidad_mover(id, e->x, valor);
     case ENTIDAD_CAMPO_VIDA: e->vida = valor; return 1;
     case ENTIDAD_CAMPO_VISIBLE: e->visible = valor ? 1 : 0; return 1;
     case ENTIDAD_CAMPO_TRAJE: e->traje = valor < 0 ? 0 : valor; return 1;

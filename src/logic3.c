@@ -40,6 +40,15 @@ typedef struct {
     int linea;
 } IdLinea3;
 
+/* El formato .log añade una seccion humana para describir como se monta
+ * el juego. Las piezas antiguas siguen viviendo en bloques LOGIC3 para que
+ * el editor y las versiones anteriores puedan abrir el mismo archivo. */
+typedef struct {
+    int origen;
+    int destino;
+    int linea;
+} EnlaceMontaje3;
+
 /* Modelo LOGIC3 activo del editor. La vista clasica vive en `g`. */
 static Proyecto3 g3;
 static int g3_activo = 0;
@@ -117,6 +126,14 @@ static int a_u32(const char *texto, unsigned int *valor) {
     if (fin == texto || *fin != 0) return 0;
     *valor = (unsigned int)n;
     return 1;
+}
+
+static int ruta_es_log(const char *ruta) {
+    const char *p;
+    if (!ruta) return 0;
+    p = strrchr(ruta, '.');
+    if (!p) return 0;
+    return strcmp(p, ".log") == 0 || strcmp(p, ".LOG") == 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -626,6 +643,194 @@ static int parsear_campo(Bloque3 *b, Linea3 *l, int linea,
     return 1;
 }
 
+static const char *campo_montaje3(const Bloque3 *b, const char *clave) {
+    int i;
+    if (!b || !clave) return NULL;
+    for (i = 0; i < b->num_campos; i++)
+        if (strcmp(b->campos[i].clave, clave) == 0)
+            return b->campos[i].valor;
+    return NULL;
+}
+
+static Bloque3 *pieza_montaje3(Proyecto3 *p, int id) {
+    int i;
+    if (!p || id <= 0) return NULL;
+    for (i = 0; i < p->num_bloques; i++) {
+        Bloque3 *b = &p->bloques[i];
+        const char *valor;
+        if (strcmp(b->tipo, "sistema.pieza") != 0) continue;
+        valor = campo_montaje3(b, "id");
+        if (valor && atoi(valor) == id) return b;
+    }
+    return NULL;
+}
+
+static int poner_campo_montaje3(Bloque3 *b, const char *clave,
+                                const char *valor) {
+    int i;
+    if (!b || !clave || !valor) return 0;
+    for (i = 0; i < b->num_campos; i++) {
+        if (strcmp(b->campos[i].clave, clave) != 0) continue;
+        copiar_texto(b->campos[i].valor, L3_TEXTO_MAX, valor);
+        return 1;
+    }
+    if (b->num_campos >= L3_CAMPOS_MAX) return 0;
+    copiar_texto(b->campos[b->num_campos].clave, L3_NOMBRE_MAX, clave);
+    copiar_texto(b->campos[b->num_campos].valor, L3_TEXTO_MAX, valor);
+    b->campos[b->num_campos].linea = b->linea;
+    b->num_campos++;
+    return 1;
+}
+
+static int crear_pieza_montaje3(Proyecto3 *p, int id, const char *tipo,
+                                int linea, Bloque3 **salida,
+                                char *error, int tam_error) {
+    Bloque3 *b = pieza_montaje3(p, id);
+    char numero[32];
+    if (b) {
+        if (salida) *salida = b;
+        return 1;
+    }
+    if (!logic3_bloque_nuevo(p, 1, 0, p->num_bloques, "sistema.pieza", &b))
+        return fallo3(error, tam_error, linea, "no hay espacio para otro nodo");
+    b->linea = linea;
+    if (!poner_campo_montaje3(b, "ui", "1") ||
+        !poner_campo_montaje3(b, "pieza", tipo) ||
+        !poner_campo_montaje3(b, "id", "0") ||
+        !poner_campo_montaje3(b, "xy", "0,0") ||
+        !poner_campo_montaje3(b, "nombre", tipo) ||
+        !poner_campo_montaje3(b, "enlace", "0") ||
+        !poner_campo_montaje3(b, "valor", "") ||
+        !poner_campo_montaje3(b, "valor2", ""))
+        return fallo3(error, tam_error, linea, "el nodo tiene demasiados campos");
+    snprintf(numero, sizeof(numero), "%d", id);
+    if (!poner_campo_montaje3(b, "id", numero))
+        return fallo3(error, tam_error, linea, "id de nodo invalido");
+    if (salida) *salida = b;
+    return 1;
+}
+
+/* Sintaxis recomendada:
+ * nodo 2 tipo "sistema.actor" nombre "Jugador" x 80 y 60 enlace 3
+ *      valor "Jugador" valor2 "lobo"
+ * Se aceptan tambien xy "80,60" y nodos con campos opcionales omitidos. */
+static int parsear_nodo_montaje3(Proyecto3 *p, Linea3 *l, int linea,
+                                 char *error, int tam_error) {
+    Bloque3 *b;
+    const char *tipo = NULL;
+    int id, i;
+    int x = 0, y = 0, enlace = 0;
+    int tiene_x = 0, tiene_y = 0, tiene_enlace = 0;
+    char xy[L3_TEXTO_MAX];
+    if (l->n < 4 || !a_entero(l->tok[1], &id) || id <= 0)
+        return fallo3(error, tam_error, linea, "nodo sin id valido");
+    xy[0] = 0;
+    for (i = 2; i + 1 < l->n; i += 2) {
+        const char *clave = l->tok[i];
+        const char *valor = l->tok[i + 1];
+        int n;
+        if (strcmp(clave, "tipo") == 0) tipo = valor;
+        else if (strcmp(clave, "x") == 0) {
+            if (!a_entero(valor, &x))
+                return fallo3(error, tam_error, linea, "x de nodo invalida");
+            tiene_x = 1;
+        } else if (strcmp(clave, "y") == 0) {
+            if (!a_entero(valor, &y))
+                return fallo3(error, tam_error, linea, "y de nodo invalida");
+            tiene_y = 1;
+        } else if (strcmp(clave, "xy") == 0) {
+            copiar_texto(xy, sizeof(xy), valor);
+            if (sscanf(xy, "%d,%d", &x, &y) != 2)
+                return fallo3(error, tam_error, linea, "xy de nodo invalido");
+            tiene_x = tiene_y = 1;
+        } else if (strcmp(clave, "enlace") == 0) {
+            if (!a_entero(valor, &enlace) || enlace < 0)
+                return fallo3(error, tam_error, linea, "enlace de nodo invalido");
+            tiene_enlace = 1;
+        } else if (strcmp(clave, "ui") == 0) {
+            if (!a_entero(valor, &n))
+                return fallo3(error, tam_error, linea, "ui de nodo invalida");
+        }
+    }
+    if (!tipo || !tipo[0])
+        return fallo3(error, tam_error, linea, "nodo sin tipo");
+    b = pieza_montaje3(p, id);
+    if (!b && !crear_pieza_montaje3(p, id, tipo, linea, &b, error, tam_error))
+        return 0;
+    b->linea = linea;
+    if (!poner_campo_montaje3(b, "pieza", tipo))
+        return fallo3(error, tam_error, linea, "no se pudo guardar el tipo del nodo");
+    if (tiene_x || tiene_y) {
+        snprintf(xy, sizeof(xy), "%d,%d", x, y);
+        if (!poner_campo_montaje3(b, "xy", xy))
+            return fallo3(error, tam_error, linea, "no se pudo guardar la posicion del nodo");
+    }
+    for (i = 2; i + 1 < l->n; i += 2) {
+        const char *clave = l->tok[i];
+        const char *valor = l->tok[i + 1];
+        if (strcmp(clave, "tipo") == 0 || strcmp(clave, "x") == 0 ||
+            strcmp(clave, "y") == 0 || strcmp(clave, "xy") == 0 ||
+            strcmp(clave, "ui") == 0) continue;
+        if (strcmp(clave, "enlace") == 0 && !tiene_enlace) continue;
+        if (strcmp(clave, "nombre") == 0 || strcmp(clave, "valor") == 0 ||
+            strcmp(clave, "valor2") == 0 || strcmp(clave, "enlace") == 0) {
+            if (!poner_campo_montaje3(b, clave, valor))
+                return fallo3(error, tam_error, linea, "nodo con demasiados campos");
+        }
+    }
+    return 1;
+}
+
+static int parsear_conecta_montaje3(Linea3 *l, int linea,
+                                    EnlaceMontaje3 *enlace,
+                                    char *error, int tam_error) {
+    int origen, destino = 0, i;
+    if (l->n < 3 || !a_entero(l->tok[1], &origen) || origen <= 0)
+        return fallo3(error, tam_error, linea, "conecta sin nodo origen valido");
+    for (i = 2; i < l->n; i++) {
+        if (a_entero(l->tok[i], &destino) && destino > 0) break;
+    }
+    if (destino <= 0)
+        return fallo3(error, tam_error, linea, "conecta sin nodo destino valido");
+    enlace->origen = origen;
+    enlace->destino = destino;
+    enlace->linea = linea;
+    return 1;
+}
+
+static int aplicar_enlaces_montaje3(Proyecto3 *p, const EnlaceMontaje3 *enlaces,
+                                    int num, char *error, int tam_error) {
+    int i;
+    for (i = 0; i < num; i++) {
+        Bloque3 *origen = pieza_montaje3(p, enlaces[i].origen);
+        Bloque3 *destino = pieza_montaje3(p, enlaces[i].destino);
+        char numero[32];
+        if (!origen || !destino)
+            return fallo3(error, tam_error, enlaces[i].linea,
+                          "conecta referencia un nodo inexistente");
+        snprintf(numero, sizeof(numero), "%d", enlaces[i].destino);
+        if (!poner_campo_montaje3(origen, "enlace", numero))
+            return fallo3(error, tam_error, enlaces[i].linea,
+                          "no se pudo guardar el enlace");
+    }
+    return 1;
+}
+
+/* En un .log la seccion textual es la fuente de verdad. El escritor deja
+ * tambien los bloques canonicos para compatibilidad, pero se descartan al
+ * entrar en `montaje` para que borrar un nodo del texto tambien lo borre del
+ * proyecto cargado. */
+static void reiniciar_piezas_montaje3(Proyecto3 *p) {
+    int i, n = 0;
+    if (!p) return;
+    for (i = 0; i < p->num_bloques; i++) {
+        if (strcmp(p->bloques[i].tipo, "sistema.pieza") == 0) continue;
+        if (n != i) p->bloques[n] = p->bloques[i];
+        n++;
+    }
+    p->num_bloques = n;
+}
+
 int logic3_cargar(Proyecto3 *p, const char *ruta, char *error, int tam_error) {
     Proyecto3 tmp;
     char *datos;
@@ -635,6 +840,9 @@ int logic3_cargar(Proyecto3 *p, const char *ruta, char *error, int tam_error) {
     int fin_offset = 0, crc_estado = 0, crc_linea = 0;
     unsigned int crc = 0, crc_real = 0;
     int hay_crc = 0;
+    int es_log = ruta_es_log(ruta);
+    EnlaceMontaje3 enlaces[128];
+    int num_enlaces = 0;
     int i;
 
     if (error && tam_error > 0) error[0] = 0;
@@ -786,6 +994,36 @@ int logic3_cargar(Proyecto3 *p, const char *ruta, char *error, int tam_error) {
                     i++;
                 }
             }
+            continue;
+        }
+
+        /* Montaje textual de la paleta. Los registros se convierten al
+         * bloque sistema.pieza canonico para que el resto del editor no
+         * tenga que conocer una segunda representacion. */
+        if (strcmp(tok[0], "montaje") == 0) {
+            if (es_log) reiniciar_piezas_montaje3(&tmp);
+            continue;
+        }
+        if (strcmp(tok[0], "fin_montaje") == 0) {
+            continue;
+        }
+        if (strcmp(tok[0], "nodo") == 0) {
+            if (!parsear_nodo_montaje3(&tmp, &l, num_linea,
+                                       error, tam_error))
+                goto error_lectura;
+            continue;
+        }
+        if (strcmp(tok[0], "conecta") == 0) {
+            if (num_enlaces >= (int)(sizeof(enlaces) / sizeof(enlaces[0]))) {
+                fallo3(error, tam_error, num_linea,
+                       "demasiados enlaces de montaje");
+                goto error_lectura;
+            }
+            if (!parsear_conecta_montaje3(&l, num_linea,
+                                          &enlaces[num_enlaces],
+                                          error, tam_error))
+                goto error_lectura;
+            num_enlaces++;
             continue;
         }
 
@@ -981,6 +1219,8 @@ int logic3_cargar(Proyecto3 *p, const char *ruta, char *error, int tam_error) {
                 } else if (strcmp(tok[i], "capa") == 0) {
                     o->capa = valor;
                     tiene_capa = 1;
+                } else if (strcmp(tok[i], "padre") == 0) {
+                    o->padre = valor;
                 } else {
                     fallo3(error, tam_error, num_linea, "campo de objeto desconocido: %s", tok[i]);
                     goto error_lectura;
@@ -1245,11 +1485,16 @@ int logic3_cargar(Proyecto3 *p, const char *ruta, char *error, int tam_error) {
         fallo3(error, tam_error, num_linea + 1, "falta FIN");
         goto error_lectura;
     }
+    if (!aplicar_enlaces_montaje3(&tmp, enlaces, num_enlaces,
+                                  error, tam_error))
+        goto error_lectura;
     if (crc_estado == 2) {
         fallo3(error, tam_error, crc_linea, "CRC32 invalido");
         goto error_lectura;
     }
-    if (hay_crc && crc_real != crc) {
+    /* Un .logic3 canonico es estricto. Un .log puede ser editado por una
+     * IA sin recalcular el CRC antiguo: al volver a guardarlo se regenera. */
+    if (hay_crc && crc_real != crc && !es_log) {
         fallo3(error, tam_error, crc_linea,
                "CRC32 no coincide (archivo %08X, cabecera %08X)",
                (unsigned int)crc_real, crc);
@@ -1524,6 +1769,34 @@ int logic3_validar(const Proyecto3 *p, char *error, int tam_error) {
             FALLO_VALIDAR(o->linea,
                           "objeto %d referencia una escena inexistente: %d",
                           o->id, o->escena);
+        if (o->padre < 0 || o->padre == o->id)
+            FALLO_VALIDAR(o->linea, "padre invalido en objeto %d", o->id);
+        if (o->padre > 0) {
+            const Objeto3 *padre = buscar_objeto(p, o->padre);
+            int actual = o->padre;
+            int pasos = 0;
+            if (!padre)
+                FALLO_VALIDAR(o->linea,
+                              "objeto %d referencia un padre inexistente: %d",
+                              o->id, o->padre);
+            if (padre->escena != o->escena)
+                FALLO_VALIDAR(o->linea,
+                              "objeto %d tiene un padre de otra escena: %d",
+                              o->id, o->padre);
+            while (actual > 0 && pasos++ <= p->num_objetos) {
+                const Objeto3 *ascendiente = buscar_objeto(p, actual);
+                if (!ascendiente) break;
+                if (ascendiente->id == o->id)
+                    FALLO_VALIDAR(o->linea,
+                                  "la jerarquia de objeto %d contiene un ciclo",
+                                  o->id);
+                actual = ascendiente->padre;
+            }
+            if (pasos > p->num_objetos)
+                FALLO_VALIDAR(o->linea,
+                              "la jerarquia de objeto %d es demasiado profunda",
+                              o->id);
+        }
         if (o->w <= 0 || o->h <= 0)
             FALLO_VALIDAR(o->linea, "tamano de objeto invalido");
         if (o->visible != 0 && o->visible != 1)
@@ -1750,7 +2023,77 @@ static const char *valor_canonico(int tipo, const char *valor,
     return dst;
 }
 
-static int serializar_logic3(const Proyecto3 *p, Buffer3 *b) {
+static void escribir_montaje3(const Proyecto3 *p, Buffer3 *b) {
+    int i, id, enlace, x, y;
+    int hay_piezas = 0;
+    if (!p || !b) return;
+    for (i = 0; i < p->num_bloques; i++) {
+        const Bloque3 *bl = &p->bloques[i];
+        const char *tipo;
+        if (strcmp(bl->tipo, "sistema.pieza") != 0) continue;
+        tipo = campo_montaje3(bl, "pieza");
+        if (tipo && tipo[0]) { hay_piezas = 1; break; }
+    }
+    if (!hay_piezas) return;
+    buf_printf(b, "montaje\n");
+    for (i = 0; i < p->num_bloques; i++) {
+        const Bloque3 *bl = &p->bloques[i];
+        const char *tipo;
+        const char *nombre;
+        const char *xy;
+        const char *valor;
+        const char *valor2;
+        const char *campo_id;
+        const char *campo_enlace;
+        if (strcmp(bl->tipo, "sistema.pieza") != 0) continue;
+        tipo = campo_montaje3(bl, "pieza");
+        if (!tipo || !tipo[0]) continue;
+        campo_id = campo_montaje3(bl, "id");
+        id = campo_id ? atoi(campo_id) : bl->id;
+        if (id <= 0) id = bl->id;
+        x = y = 0;
+        xy = campo_montaje3(bl, "xy");
+        if (xy) sscanf(xy, "%d,%d", &x, &y);
+        campo_enlace = campo_montaje3(bl, "enlace");
+        enlace = campo_enlace ? atoi(campo_enlace) : 0;
+        nombre = campo_montaje3(bl, "nombre");
+        valor = campo_montaje3(bl, "valor");
+        valor2 = campo_montaje3(bl, "valor2");
+        if (!nombre) nombre = tipo;
+        if (!valor) valor = "";
+        if (!valor2) valor2 = "";
+        buf_printf(b, "  nodo %d tipo ", id);
+        buf_texto(b, tipo);
+        buf_printf(b, " nombre ");
+        buf_texto(b, nombre);
+        buf_printf(b, " x %d y %d enlace %d valor ", x, y, enlace);
+        buf_texto(b, valor);
+        buf_printf(b, " valor2 ");
+        buf_texto(b, valor2);
+        buf_printf(b, "\n");
+    }
+    for (i = 0; i < p->num_bloques; i++) {
+        const Bloque3 *bl = &p->bloques[i];
+        const char *tipo;
+        const char *campo_id;
+        const char *campo_enlace;
+        id = 0;
+        enlace = 0;
+        if (strcmp(bl->tipo, "sistema.pieza") != 0) continue;
+        tipo = campo_montaje3(bl, "pieza");
+        campo_id = campo_montaje3(bl, "id");
+        campo_enlace = campo_montaje3(bl, "enlace");
+        if (!tipo || !tipo[0]) continue;
+        if (campo_id) id = atoi(campo_id);
+        if (campo_enlace) enlace = atoi(campo_enlace);
+        if (id > 0 && enlace > 0)
+            buf_printf(b, "  conecta %d -> %d\n", id, enlace);
+    }
+    buf_printf(b, "fin_montaje\n");
+}
+
+static int serializar_logic3(const Proyecto3 *p, Buffer3 *b,
+                             const char *ruta) {
     int i, j;
     if (!p || !b) return 0;
     buf_printf(b, "LOGIC3\n");
@@ -1814,8 +2157,10 @@ static int serializar_logic3(const Proyecto3 *p, Buffer3 *b) {
         Objeto3 *o = &p->objetos[i];
         buf_printf(b, "objeto %d ", o->id);
         buf_texto(b, o->nombre);
-        buf_printf(b, " escena %d x %d y %d w %d h %d visible %d capa %d\n",
+        buf_printf(b, " escena %d x %d y %d w %d h %d visible %d capa %d",
                    o->escena, o->x, o->y, o->w, o->h, o->visible ? 1 : 0, o->capa);
+        if (o->padre > 0) buf_printf(b, " padre %d", o->padre);
+        buf_printf(b, "\n");
         for (j = 0; j < o->num_trajes; j++) {
             const Traje3 *t = &o->trajes[j];
             buf_printf(b, "  traje %d ", t->indice);
@@ -1850,6 +2195,7 @@ static int serializar_logic3(const Proyecto3 *p, Buffer3 *b) {
         for (j = 0; j < fn->num_eventos; j++) escribir_evento(b, &fn->eventos[j]);
     }
     for (i = 0; i < p->num_bloques; i++) escribir_bloque(b, &p->bloques[i]);
+    if (ruta_es_log(ruta)) escribir_montaje3(p, b);
     buf_printf(b, "FIN\n");
     if (!b->error)
         buf_printf(b, "CRC32 %08X\n", logic3_crc32(b->datos, b->largo));
@@ -1866,7 +2212,7 @@ int logic3_guardar(const Proyecto3 *p, const char *ruta, char *error, int tam_er
     if (!buf_reservar(&b, 4096)) {
         return fallo3(error, tam_error, 0, "sin memoria para escribir");
     }
-    if (!serializar_logic3(p, &b)) {
+    if (!serializar_logic3(p, &b, ruta)) {
         free(b.datos);
         return fallo3(error, tam_error, 0, "no se pudo serializar el proyecto");
     }
@@ -2343,7 +2689,7 @@ int logic3_serializar_activo(char **datos, int *largo) {
     sincronizar_actual();
     memset(&b, 0, sizeof(b));
     if (!logic3_validar(&g3, g3_error, sizeof(g3_error))) return 0;
-    if (!buf_reservar(&b, 4096) || !serializar_logic3(&g3, &b)) {
+    if (!buf_reservar(&b, 4096) || !serializar_logic3(&g3, &b, NULL)) {
         free(b.datos);
         copiar_texto(g3_error, sizeof(g3_error), "sin memoria para serializar el proyecto");
         return 0;

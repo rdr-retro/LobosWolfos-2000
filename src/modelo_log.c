@@ -138,6 +138,257 @@ static int ml_buscar_nodo(const NodoLog *nod, int num, int id) {
     return 0;
 }
 
+/* ------------------------------------------------------------------------- */
+/* LOG 2: montaje de escenas, nodos jerarquicos y scripts externos.          */
+/* ------------------------------------------------------------------------- */
+
+static int ml_v2_valor(char tok[][ML_TOKEN_MAX], int n, const char *clave,
+                       char *salida, size_t tam) {
+    int i;
+    if (!salida || tam == 0) return 0;
+    salida[0] = '\0';
+    for (i = 1; i + 1 < n; i += 2) {
+        if (strcmp(tok[i], clave) != 0) continue;
+        ml_copiar(salida, tam, tok[i + 1]);
+        return 1;
+    }
+    return 0;
+}
+
+static int ml_v2_entero(char tok[][ML_TOKEN_MAX], int n, const char *clave,
+                        int *salida, int obligatorio) {
+    char texto[ML_TOKEN_MAX];
+    if (!ml_v2_valor(tok, n, clave, texto, sizeof(texto))) {
+        if (salida) *salida = 0;
+        return obligatorio ? 0 : 1;
+    }
+    return ml_entero(texto, salida);
+}
+
+static int ml_v2_anadir_propiedades(EntidadModelo *e, char tok[][ML_TOKEN_MAX],
+                                    int n, int linea) {
+    int i;
+    for (i = 1; i + 1 < n; i += 2) {
+        /* id y nombre ya viven en los campos estructurales de la entidad.
+         * Duplicarlos como propiedades ensucia el inspector y permite que
+         * una edicion aparente cambiar una cosa distinta de la que serializa
+         * el LOG 2. El resto de claves conserva el orden del archivo. */
+        if (strcmp(tok[i], "id") == 0 || strcmp(tok[i], "nombre") == 0)
+            continue;
+        if (!pm_propiedad(e, tok[i], tok[i + 1], linea)) return 0;
+    }
+    return 1;
+}
+
+static ProjectModel *ml_leer_v2(const char *ruta, char *diagnostico,
+                                size_t longitud) {
+    FILE *f;
+    char linea[ML_LINEA_MAX];
+    char tok[ML_TOKENS_MAX][ML_TOKEN_MAX];
+    char nombre_proyecto[PM_NOMBRE_MAX] = "Proyecto";
+    char nombre[PM_NOMBRE_MAX];
+    char color[PM_TEXTO_MAX] = "";
+    char ruta_recurso[PM_RUTA_MAX];
+    char tipo[PM_TEXTO_MAX];
+    char evento[PM_TEXTO_MAX];
+    int ancho = 0, alto = 0, fps = 0;
+    int linea_proyecto = 0, num_linea = 0, n;
+    int id, escena, padre, recurso, script, objetivo;
+    int inicial = 0;
+    ProjectModel *m = NULL;
+    EntidadModelo *e;
+    char validacion[PM_ERROR_MAX];
+
+    f = fopen(ruta, "r");
+    if (!f) {
+        ml_fallo(diagnostico, longitud, 0, "no se pudo abrir el .log");
+        return NULL;
+    }
+    m = pm_crear();
+    if (!m) {
+        fclose(f);
+        ml_fallo(diagnostico, longitud, 0, "sin memoria para el modelo");
+        return NULL;
+    }
+
+    while (fgets(linea, sizeof(linea), f)) {
+        num_linea++;
+        n = ml_tokenizar(linea, tok, ML_TOKENS_MAX);
+        if (n <= 0) continue;
+        if (n < 0) {
+            ml_fallo(diagnostico, longitud, num_linea, "demasiados campos");
+            goto error;
+        }
+        if (tok[0][0] == '#') continue;
+        if (strcmp(tok[0], "LOG") == 0) {
+            if (n < 2 || strcmp(tok[1], "2") != 0) {
+                ml_fallo(diagnostico, longitud, num_linea,
+                         "version LOG no soportada");
+                goto error;
+            }
+            continue;
+        }
+        if (strcmp(tok[0], "FIN") == 0) break;
+
+        if (strcmp(tok[0], "proyecto") == 0) {
+            if (linea_proyecto || !ml_v2_valor(tok, n, "nombre",
+                                               nombre_proyecto,
+                                               sizeof(nombre_proyecto))) {
+                ml_fallo(diagnostico, longitud, num_linea,
+                         "proyecto incompleto o duplicado");
+                goto error;
+            }
+            (void)ml_v2_entero(tok, n, "ancho", &ancho, 0);
+            (void)ml_v2_entero(tok, n, "alto", &alto, 0);
+            (void)ml_v2_entero(tok, n, "fps", &fps, 0);
+            (void)ml_v2_valor(tok, n, "fondo", color, sizeof(color));
+            linea_proyecto = num_linea;
+            continue;
+        }
+
+        if (strcmp(tok[0], "recurso") == 0) {
+            nombre[0] = '\0';
+            if (!ml_v2_entero(tok, n, "id", &id, 1) ||
+                !ml_v2_valor(tok, n, "ruta", ruta_recurso,
+                             sizeof(ruta_recurso))) {
+                ml_fallo(diagnostico, longitud, num_linea,
+                         "recurso sin id o ruta");
+                goto error;
+            }
+            if (!ml_v2_valor(tok, n, "tipo", tipo, sizeof(tipo)))
+                ml_copiar(tipo, sizeof(tipo), "recurso");
+            if (!ml_v2_valor(tok, n, "nombre", nombre, sizeof(nombre)))
+                ml_copiar(nombre, sizeof(nombre), ruta_recurso);
+            if (!pm_anadir_con_id(m, id, PM_KIND_RECURSO, nombre)) goto error;
+            e = pm_entidad(m, id);
+            pm_origen(e, ruta, num_linea);
+            if (!pm_propiedad(e, "tipo", tipo, num_linea) ||
+                !pm_propiedad(e, "ruta", ruta_recurso, num_linea) ||
+                !ml_v2_anadir_propiedades(e, tok, n, num_linea)) goto error;
+            continue;
+        }
+
+        if (strcmp(tok[0], "script") == 0) {
+            nombre[0] = '\0';
+            if (!ml_v2_entero(tok, n, "id", &id, 1) ||
+                !ml_v2_valor(tok, n, "ruta", ruta_recurso,
+                             sizeof(ruta_recurso))) {
+                ml_fallo(diagnostico, longitud, num_linea,
+                         "script sin id o ruta");
+                goto error;
+            }
+            if (!ml_v2_valor(tok, n, "nombre", nombre, sizeof(nombre)))
+                ml_copiar(nombre, sizeof(nombre), ruta_recurso);
+            if (!pm_anadir_con_id(m, id, PM_KIND_SCRIPT, nombre)) goto error;
+            e = pm_entidad(m, id);
+            pm_origen(e, ruta, num_linea);
+            if (!pm_propiedad(e, "ruta", ruta_recurso, num_linea) ||
+                !ml_v2_anadir_propiedades(e, tok, n, num_linea)) goto error;
+            continue;
+        }
+
+        if (strcmp(tok[0], "escena") == 0) {
+            nombre[0] = '\0';
+            if (!ml_v2_entero(tok, n, "id", &id, 1) ||
+                !ml_v2_valor(tok, n, "nombre", nombre, sizeof(nombre))) {
+                ml_fallo(diagnostico, longitud, num_linea,
+                         "escena sin id o nombre");
+                goto error;
+            }
+            if (!pm_anadir_con_id(m, id, PM_KIND_ESCENA, nombre)) goto error;
+            e = pm_entidad(m, id);
+            pm_origen(e, ruta, num_linea);
+            (void)ml_v2_entero(tok, n, "inicial", &inicial, 0);
+            if (!ml_v2_anadir_propiedades(e, tok, n, num_linea)) goto error;
+            continue;
+        }
+
+        if (strcmp(tok[0], "nodo") == 0) {
+            nombre[0] = '\0';
+            if (!ml_v2_entero(tok, n, "id", &id, 1) ||
+                !ml_v2_entero(tok, n, "escena", &escena, 1) ||
+                !ml_v2_entero(tok, n, "padre", &padre, 1) ||
+                !ml_v2_valor(tok, n, "tipo", tipo, sizeof(tipo)) ||
+                !ml_v2_valor(tok, n, "nombre", nombre, sizeof(nombre))) {
+                ml_fallo(diagnostico, longitud, num_linea,
+                         "nodo sin escena, padre, tipo o nombre");
+                goto error;
+            }
+            if (!pm_anadir_con_id(m, id, PM_KIND_NODO, nombre)) goto error;
+            e = pm_entidad(m, id);
+            pm_origen(e, ruta, num_linea);
+            if (!ml_v2_anadir_propiedades(e, tok, n, num_linea) ||
+                !pm_referencia(e, "escena", escena, NULL, num_linea)) goto error;
+            if (padre > 0 &&
+                !pm_referencia(e, "padre", padre, NULL, num_linea)) goto error;
+            if (ml_v2_entero(tok, n, "recurso", &recurso, 0) && recurso > 0 &&
+                !pm_referencia(e, "recurso", recurso, NULL, num_linea)) goto error;
+            continue;
+        }
+
+        if (strcmp(tok[0], "asociar") == 0) {
+            char objetivo_clave[PM_NOMBRE_MAX];
+            int binding_id;
+            if (n < 7 || strcmp(tok[1], "script") != 0 ||
+                !ml_entero(tok[2], &script) || script <= 0 ||
+                (strcmp(tok[3], "nodo") != 0 && strcmp(tok[3], "escena") != 0) ||
+                !ml_entero(tok[4], &objetivo) || objetivo <= 0 ||
+                strcmp(tok[5], "evento") != 0) {
+                ml_fallo(diagnostico, longitud, num_linea,
+                         "asociacion de script incompleta");
+                goto error;
+            }
+            ml_copiar(objetivo_clave, sizeof(objetivo_clave), tok[3]);
+            ml_copiar(evento, sizeof(evento), tok[6]);
+            binding_id = pm_anadir(m, PM_KIND_BINDING, "asociacion");
+            if (!binding_id) goto error;
+            e = pm_entidad(m, binding_id);
+            pm_origen(e, ruta, num_linea);
+            if (!pm_propiedad(e, "evento", evento, num_linea) ||
+                !pm_propiedad(e, "objetivo_tipo", objetivo_clave, num_linea) ||
+                !pm_referencia(e, "script", script, NULL, num_linea) ||
+                !pm_referencia(e, objetivo_clave, objetivo, NULL, num_linea))
+                goto error;
+            continue;
+        }
+
+        ml_fallo(diagnostico, longitud, num_linea, "sentencia LOG desconocida");
+        goto error;
+    }
+
+    if (!linea_proyecto) {
+        ml_fallo(diagnostico, longitud, num_linea, "falta la cabecera proyecto");
+        goto error;
+    }
+    id = pm_anadir(m, PM_KIND_PROYECTO, nombre_proyecto);
+    if (!id) goto error;
+    e = pm_entidad(m, id);
+    pm_origen(e, ruta, linea_proyecto);
+    {
+        char numero[32];
+        snprintf(numero, sizeof(numero), "%d", ancho);
+        pm_propiedad(e, "ancho", numero, linea_proyecto);
+        snprintf(numero, sizeof(numero), "%d", alto);
+        pm_propiedad(e, "alto", numero, linea_proyecto);
+        snprintf(numero, sizeof(numero), "%d", fps);
+        pm_propiedad(e, "fps", numero, linea_proyecto);
+        pm_propiedad(e, "fondo", color, linea_proyecto);
+    }
+    fclose(f);
+    if (pm_validar(m, validacion, sizeof(validacion))) {
+        ml_copiar(diagnostico, longitud, validacion);
+        pm_destruir(m);
+        return NULL;
+    }
+    ml_copiar(diagnostico, longitud, validacion);
+    return m;
+
+error:
+    fclose(f);
+    if (m) pm_destruir(m);
+    return NULL;
+}
+
 ProjectModel *ml_leer(const char *ruta, char *diagnostico, size_t longitud) {
     FILE *f;
     char linea[ML_LINEA_MAX];
@@ -160,6 +411,19 @@ ProjectModel *ml_leer(const char *ruta, char *diagnostico, size_t longitud) {
     if (!ruta || !ruta[0]) {
         ml_fallo(diagnostico, longitud, 0, "falta la ruta del .log");
         return NULL;
+    }
+    {
+        FILE *version_f = fopen(ruta, "r");
+        char version_linea[ML_LINEA_MAX];
+        int version = 0;
+        if (version_f) {
+            if (fgets(version_linea, sizeof(version_linea), version_f) &&
+                sscanf(version_linea, "LOG %d", &version) == 1 && version == 2) {
+                fclose(version_f);
+                return ml_leer_v2(ruta, diagnostico, longitud);
+            }
+            fclose(version_f);
+        }
     }
     f = fopen(ruta, "r");
     if (!f) {
