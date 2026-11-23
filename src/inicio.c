@@ -25,6 +25,9 @@
  * comparte snapshots con --inicio. Estas dos funciones se definen mas abajo. */
 static void ultimo_fijar(Inicio *in, const char *texto);
 static void guardar_pasado(Inicio *in);
+static void inicio_accion_fallo(const char *texto);
+static void inicio_dibujar_rejilla(Zona z);
+static void inicio_dibujar_botones(Zona z);
 
 typedef struct InicioFila {
     int id;
@@ -45,6 +48,26 @@ static char g_inicio_borrador[PM_TEXTO_MAX];
 static char g_inicio_edit_error[PM_ERROR_MAX];
 static int g_inicio_reparentar_origen = -1;
 
+/* Fase 6: editor de texto, asociacion en dos pasos y evento elegible. */
+static char g_inicio_codigo[FUNCIONES_CODIGO_MAX + 1];
+static int g_inicio_editor;
+static int g_inicio_editor_id;
+static int g_inicio_cursor;
+static int g_inicio_editor_scroll = 1;
+static int g_inicio_codigo_modificado;
+static int g_inicio_error_linea;
+static char g_inicio_codigo_error[PM_ERROR_MAX];
+static int g_inicio_asociar_origen = -1;
+static int g_inicio_asociar_destino = -1;
+static int g_inicio_evento_indice;
+
+#define INICIO_ACCION_ANCHO  92
+#define INICIO_ACCION_ALTO   22
+#define INICIO_ACCION_HUECO  6
+#define INICIO_ACCION_Y      420
+#define INICIO_EDITOR_TEXTO_X 52
+#define INICIO_EDITOR_ALTO   16
+
 /* Orden de los botones de la barra del lienzo. El texto es corto para que
  * los siete quepan en el ancho minimo del panel central. */
 static const char *const g_inicio_botones[INICIO_BOTONES] = {
@@ -53,6 +76,14 @@ static const char *const g_inicio_botones[INICIO_BOTONES] = {
 enum {
     INICIO_B_ESCENA = 0, INICIO_B_NODO, INICIO_B_BORRAR,
     INICIO_B_PADRE, INICIO_B_RAIZ, INICIO_B_DESH, INICIO_B_REH
+};
+/* Acciones del inspector de scripts. No son una barra nueva: viven debajo
+ * de las propiedades y dejan intactos los siete botones del lienzo. */
+enum {
+    INICIO_A_ABRIR = 1, INICIO_A_GUARDAR, INICIO_A_COMPILAR,
+    INICIO_A_ASOCIAR, INICIO_A_EVENTO, INICIO_A_NUEVO,
+    INICIO_A_SCRIPT, INICIO_A_OBJETO, INICIO_A_BORRAR_ASOC,
+    INICIO_A_CANCELAR
 };
 
 static Zona inicio_cuerpo(void) {
@@ -217,9 +248,28 @@ static int inicio_entero_exacto(const char *texto, int *salida) {
     return 1;
 }
 
+/* Eventos que el puente LOG 2 -> LOGIC3 sabe convertir. No se inventan
+ * nombres nuevos: un evento no soportado no llegaria al runtime. */
+static const char *const g_inicio_eventos[] = {
+    "fotograma", "inicio", "tecla", "recibir", "tocar", "cada", "clonar",
+    "escena", "escena_entrar", "tecla_pulsar", "soltar_tecla"
+};
+
+static int inicio_evento_valido(const char *evento) {
+    size_t i;
+    if (!evento || !evento[0]) return 0;
+    for (i = 0; i < sizeof(g_inicio_eventos) / sizeof(g_inicio_eventos[0]); i++)
+        if (strcmp(evento, g_inicio_eventos[i]) == 0) return 1;
+    return 0;
+}
+
 static int inicio_propiedad_conocida(const EntidadModelo *e, const char *campo) {
     if (!e || !campo || !campo[0]) return 0;
     if (strcmp(campo, "nombre") == 0) return 0;
+    if (e->kind == PM_KIND_SCRIPT)
+        return strcmp(campo, "ruta") == 0;
+    if (e->kind == PM_KIND_BINDING)
+        return strcmp(campo, "evento") == 0;
     if (e->kind == PM_KIND_NODO) {
         return strcmp(campo, "x") == 0 || strcmp(campo, "y") == 0 ||
                strcmp(campo, "w") == 0 || strcmp(campo, "h") == 0 ||
@@ -241,6 +291,12 @@ static int inicio_valor_propiedad_valido(const EntidadModelo *e,
     int n;
     int entero = 0;
     if (!e || !campo || !valor) return 0;
+    if (strcmp(campo, "evento") == 0) return inicio_evento_valido(valor);
+    if (strcmp(campo, "ruta") == 0) {
+        if (!valor[0]) return 0;
+        if (valor[0] == '/' || valor[0] == '\\' || valor[1] == ':') return 0;
+        return strstr(valor, "..") == NULL;
+    }
     if (strcmp(campo, "x") == 0 || strcmp(campo, "y") == 0 ||
         strcmp(campo, "w") == 0 || strcmp(campo, "h") == 0 ||
         strcmp(campo, "visible") == 0 || strcmp(campo, "capa") == 0 ||
@@ -498,6 +554,257 @@ static void inicio_texto_recortado(int x, int y, const char *texto,
         }
     }
     fuente_dibujar(x, y, corto, color);
+}
+
+/* --- Editor de texto de scripts (fase 6) -------------------------------- */
+
+static int inicio_codigo_lineas(void) {
+    int i, lineas = 1;
+    for (i = 0; g_inicio_codigo[i]; i++)
+        if (g_inicio_codigo[i] == '\n') lineas++;
+    return lineas;
+}
+
+static int inicio_codigo_columna(int byte, int *linea) {
+    int i, col = 0, fila = 1;
+    if (byte < 0) byte = 0;
+    if (byte > (int)strlen(g_inicio_codigo)) byte = (int)strlen(g_inicio_codigo);
+    for (i = 0; i < byte; i++) {
+        if (g_inicio_codigo[i] == '\n') { fila++; col = 0; }
+        else col++;
+    }
+    if (linea) *linea = fila;
+    return col;
+}
+
+static void inicio_codigo_ir(int fila, int col) {
+    int byte = 0, actual = 1;
+    if (fila < 1) fila = 1;
+    if (col < 0) col = 0;
+    while (g_inicio_codigo[byte] && actual < fila) {
+        if (g_inicio_codigo[byte] == '\n') actual++;
+        byte++;
+    }
+    while (g_inicio_codigo[byte] && g_inicio_codigo[byte] != '\n' && col > 0) {
+        byte++;
+        col--;
+    }
+    g_inicio_cursor = byte;
+}
+
+static int inicio_codigo_linea_texto(int fila, char *dst, size_t tam,
+                                     int *inicio_byte, int *fin_byte) {
+    int i = 0, actual = 1, n;
+    if (!dst || tam == 0) return 0;
+    dst[0] = 0;
+    while (g_inicio_codigo[i] && actual < fila) {
+        if (g_inicio_codigo[i] == '\n') actual++;
+        i++;
+    }
+    if (actual != fila) return 0;
+    if (inicio_byte) *inicio_byte = i;
+    n = 0;
+    while (g_inicio_codigo[i] && g_inicio_codigo[i] != '\n' && i < 100000) {
+        if (n + 1 < (int)tam) dst[n++] = g_inicio_codigo[i];
+        i++;
+    }
+    dst[n] = 0;
+    if (fin_byte) *fin_byte = i;
+    return 1;
+}
+
+static void inicio_editor_scroll_ver(int fila) {
+    int total = inicio_codigo_lineas();
+    if (fila < g_inicio_editor_scroll) g_inicio_editor_scroll = fila;
+    if (total > 32 && fila > g_inicio_editor_scroll + 31)
+        g_inicio_editor_scroll = fila - 31;
+    if (g_inicio_editor_scroll < 1) g_inicio_editor_scroll = 1;
+    if (g_inicio_editor_scroll > total) g_inicio_editor_scroll = total;
+}
+
+static void inicio_editor_ver_cursor(void) {
+    int fila = 1;
+    inicio_codigo_columna(g_inicio_cursor, &fila);
+    inicio_editor_scroll_ver(fila);
+}
+
+static void inicio_editor_insertar(const char *texto) {
+    int i, len, n;
+    if (!texto || !g_inicio_editor) return;
+    len = (int)strlen(g_inicio_codigo);
+    n = (int)strlen(texto);
+    if (len + n + 1 > (int)sizeof(g_inicio_codigo)) {
+        app_estado("el script supera el limite de codigo");
+        return;
+    }
+    if (g_inicio_cursor < 0) g_inicio_cursor = 0;
+    if (g_inicio_cursor > len) g_inicio_cursor = len;
+    for (i = len; i >= g_inicio_cursor; i--)
+        g_inicio_codigo[i + n] = g_inicio_codigo[i];
+    memcpy(g_inicio_codigo + g_inicio_cursor, texto, (size_t)n);
+    g_inicio_cursor += n;
+    g_inicio_codigo_modificado = 1;
+    g_inicio_error_linea = 0;
+    g_inicio_codigo_error[0] = 0;
+    inicio_editor_ver_cursor();
+    app_invalidar();
+}
+
+static void inicio_editor_retroceder(void) {
+    int len, fila;
+    if (!g_inicio_editor || g_inicio_cursor <= 0) return;
+    len = (int)strlen(g_inicio_codigo);
+    if (g_inicio_cursor > len) g_inicio_cursor = len;
+    for (--g_inicio_cursor; g_inicio_cursor < len; g_inicio_cursor++)
+        g_inicio_codigo[g_inicio_cursor] = g_inicio_codigo[g_inicio_cursor + 1];
+    g_inicio_codigo[g_inicio_cursor] = 0; /* el bucle ya desplazo el cero */
+    g_inicio_codigo_modificado = 1;
+    fila = 1;
+    inicio_codigo_columna(g_inicio_cursor, &fila);
+    inicio_editor_scroll_ver(fila);
+    app_invalidar();
+}
+
+static int inicio_editor_abrir(int id) {
+    Inicio *in = inicio_servicio();
+    const EntidadModelo *e = pm_entidad_const(&in->modelo, id);
+    char diagnostico[PM_ERROR_MAX];
+    if (!e || e->kind != PM_KIND_SCRIPT) {
+        inicio_accion_fallo("selecciona un script para abrir su codigo");
+        return 0;
+    }
+    diagnostico[0] = 0;
+    if (!inicio_script_leer(in, id, g_inicio_codigo, sizeof(g_inicio_codigo),
+                            diagnostico, sizeof(diagnostico))) {
+        inicio_accion_fallo(diagnostico[0] ? diagnostico : "no se pudo leer el script");
+        return 0;
+    }
+    g_inicio_editor = 1;
+    g_inicio_editor_id = id;
+    g_inicio_cursor = (int)strlen(g_inicio_codigo);
+    g_inicio_editor_scroll = 1;
+    g_inicio_codigo_modificado = 0;
+    g_inicio_error_linea = 0;
+    g_inicio_codigo_error[0] = 0;
+    g_inicio_seleccion = id;
+    inicio_editor_ver_cursor();
+    app_estado("script #%d abierto en el editor", id);
+    app_invalidar();
+    return 1;
+}
+
+static void inicio_editor_cerrar(void) {
+    g_inicio_editor = 0;
+    g_inicio_editor_id = 0;
+    app_estado("editor de script cerrado");
+    app_invalidar();
+}
+
+static void inicio_editor_guardar(void) {
+    Inicio *in = inicio_servicio();
+    char diagnostico[PM_ERROR_MAX];
+    diagnostico[0] = 0;
+    if (!inicio_script_escribir(in, g_inicio_editor_id, g_inicio_codigo,
+                                diagnostico, sizeof(diagnostico))) {
+        inicio_accion_fallo(diagnostico[0] ? diagnostico : "no se pudo guardar");
+        return;
+    }
+    g_inicio_codigo_modificado = 0;
+    app_estado("script #%d guardado", g_inicio_editor_id);
+    app_invalidar();
+}
+
+static void inicio_editor_compilar(void) {
+    Inicio *in = inicio_servicio();
+    char diagnostico[PM_ERROR_MAX];
+    diagnostico[0] = 0;
+    if (g_inicio_codigo_modificado) inicio_editor_guardar();
+    if (!inicio_script_compilar(in, g_inicio_editor_id, diagnostico,
+                                sizeof(diagnostico))) {
+        app_estado("script con errores: %s", diagnostico);
+        return;
+    }
+    app_estado("script compilado: %s", in->ultimo);
+    app_invalidar();
+}
+
+static void inicio_editor_clic(int x, int y) {
+    Zona z = inicio_lienzo();
+    char texto[256];
+    int base = z.y + 74;
+    int fila, col, ini = 0;
+    if (!g_inicio_editor || !zona_contiene(z, x, y) || y < base) return;
+    fila = g_inicio_editor_scroll + (y - base) / INICIO_EDITOR_ALTO;
+    if (!inicio_codigo_linea_texto(fila, texto, sizeof(texto), &ini, NULL)) return;
+    col = (x - (z.x + INICIO_EDITOR_TEXTO_X)) / 7;
+    if (col < 0) col = 0;
+    if (col > (int)strlen(texto)) col = (int)strlen(texto);
+    inicio_codigo_ir(fila, col);
+    (void)ini;
+    app_invalidar();
+}
+
+static void inicio_dibujar_editor(Zona z) {
+    Inicio *in = inicio_servicio();
+    const EntidadModelo *e = inicio_entidad(g_inicio_editor_id);
+    const EntidadModelo *script = pm_entidad_const(&in->modelo, g_inicio_editor_id);
+    char titulo[PM_NOMBRE_MAX + PM_RUTA_MAX + 32];
+    char texto[256];
+    char numero[16];
+    int y, fila, col, maximo, ini = 0;
+    inicio_dibujar_rejilla(z);
+    dibujar_rect(z.x, z.y, zona_derecha(z), z.y + 34, INICIO_PANEL_2);
+    _snprintf(titulo, sizeof(titulo), "CODIGO  %s #%d%s",
+              e ? e->nombre : "script", g_inicio_editor_id,
+              g_inicio_codigo_modificado ? "  *" : "");
+    titulo[sizeof(titulo) - 1] = 0;
+    fuente_dibujar(z.x + INICIO_MARGEN, z.y + 11, titulo, INICIO_TEXTO);
+    inicio_dibujar_botones(z);
+    if (script) inicio_texto_recortado(z.x + INICIO_MARGEN, z.y + 40,
+                                       inicio_prop(script, "ruta"),
+                                       INICIO_MUTED, z.ancho - 28);
+    fuente_dibujar(z.x + zona_derecha(z) / 2 - 150, z.y + 40,
+                   "Ctrl+G guardar  F7 compilar  Esc cerrar", INICIO_MUTED);
+    y = z.y + 58;
+    if (g_inicio_error_linea > 0 || g_inicio_codigo_error[0]) {
+        _snprintf(texto, sizeof(texto), "ERROR linea %d: %s",
+                  g_inicio_error_linea, g_inicio_codigo_error);
+        texto[sizeof(texto) - 1] = 0;
+        inicio_texto_recortado(z.x + INICIO_MARGEN, y, texto, 0x00FF9A8Au,
+                               z.ancho - 28);
+        y += INICIO_EDITOR_ALTO;
+    }
+    maximo = (zona_abajo(z) - y - 8) / INICIO_EDITOR_ALTO;
+    if (maximo < 1) maximo = 1;
+    if (maximo > 32) maximo = 32;
+    inicio_codigo_columna(g_inicio_cursor, &fila);
+    if (fila < g_inicio_editor_scroll) g_inicio_editor_scroll = fila;
+    if (fila >= g_inicio_editor_scroll + maximo)
+        g_inicio_editor_scroll = fila - maximo + 1;
+    for (fila = g_inicio_editor_scroll;
+         fila < g_inicio_editor_scroll + maximo; fila++) {
+        int yy = y + (fila - g_inicio_editor_scroll) * INICIO_EDITOR_ALTO;
+        int resaltar = fila == g_inicio_error_linea;
+        _snprintf(numero, sizeof(numero), "%3d", fila);
+        fuente_dibujar(z.x + INICIO_MARGEN, yy, numero,
+                       resaltar ? 0x00FF9A8Au : INICIO_MUTED);
+        if (!inicio_codigo_linea_texto(fila, texto, sizeof(texto), &ini, NULL)) break;
+        if (resaltar)
+            dibujar_rect(z.x + INICIO_EDITOR_TEXTO_X - 2, yy - 1,
+                         zona_derecha(z) - 6, yy + INICIO_EDITOR_ALTO - 2,
+                         0x003A2020u);
+        inicio_texto_recortado(z.x + INICIO_EDITOR_TEXTO_X, yy, texto,
+                               resaltar ? 0x00FFB0A0u : INICIO_TEXTO,
+                               zona_derecha(z) - z.x - INICIO_EDITOR_TEXTO_X - 8);
+    }
+    fila = 1;
+    col = inicio_codigo_columna(g_inicio_cursor, &fila);
+    if (fila >= g_inicio_editor_scroll && fila < g_inicio_editor_scroll + maximo) {
+        int yy = y + (fila - g_inicio_editor_scroll) * INICIO_EDITOR_ALTO;
+        dibujar_rect(z.x + INICIO_EDITOR_TEXTO_X + col * 7, yy + 2,
+                     z.x + INICIO_EDITOR_TEXTO_X + col * 7 + 1, yy + 13,
+                     INICIO_ACCENTO);
+    }
 }
 
 static void inicio_etiqueta_entidad(char *dst, int tam,
@@ -772,7 +1079,12 @@ static void inicio_dibujar_nodo(const EntidadModelo *e, Zona lienzo) {
 
 static void inicio_dibujar_lienzo(void) {
     Zona z = inicio_lienzo();
-    int escena = inicio_escena_actual();
+    int escena;
+    if (g_inicio_editor) {
+        inicio_dibujar_editor(z);
+        return;
+    }
+    escena = inicio_escena_actual();
     int i;
     const EntidadModelo *e;
     const EntidadModelo *esc = inicio_entidad(escena);
@@ -796,6 +1108,311 @@ static void inicio_dibujar_lienzo(void) {
     for (i = 0; i < g_inicio_modelo->num_entidades; i++) {
         e = &g_inicio_modelo->entidades[i];
         if (inicio_es_nodo_de(e, escena)) inicio_dibujar_nodo(e, z);
+    }
+}
+
+/* --- Acciones y asociaciones del inspector ------------------------------ */
+
+static Zona inicio_accion_zona(int indice) {
+    Zona p = inicio_inspector();
+    int col = indice % 3;
+    int fila = indice / 3;
+    return zona_hacer(p.x + INICIO_MARGEN - 3 + col * (INICIO_ACCION_ANCHO +
+                      INICIO_ACCION_HUECO),
+                      p.y + INICIO_ACCION_Y + fila * (INICIO_ACCION_ALTO + 6),
+                      INICIO_ACCION_ANCHO, INICIO_ACCION_ALTO);
+}
+
+static int inicio_acciones_actuales(int acciones[6], const char *rotulos[6]) {
+    const EntidadModelo *e = inicio_entidad(g_inicio_seleccion);
+    int n = 0;
+    if (g_inicio_asociar_origen > 0 || g_inicio_asociar_destino > 0) {
+        acciones[n] = INICIO_A_CANCELAR; rotulos[n++] = "CANCELAR";
+        acciones[n] = INICIO_A_EVENTO;   rotulos[n++] = "EVENTO";
+        return n;
+    }
+    if (!e) {
+        acciones[n] = INICIO_A_NUEVO; rotulos[n++] = "+SCRIPT";
+        return n;
+    }
+    if (e->kind == PM_KIND_SCRIPT) {
+        acciones[n] = INICIO_A_ABRIR;    rotulos[n++] = "ABRIR";
+        acciones[n] = INICIO_A_GUARDAR;  rotulos[n++] = "GUARDAR";
+        acciones[n] = INICIO_A_COMPILAR; rotulos[n++] = "COMPILAR";
+        acciones[n] = INICIO_A_ASOCIAR;  rotulos[n++] = "ASOCIAR";
+        acciones[n] = INICIO_A_EVENTO;   rotulos[n++] = "EVENTO";
+        acciones[n] = INICIO_A_NUEVO;    rotulos[n++] = "+SCRIPT";
+        return n;
+    }
+    if (e->kind == PM_KIND_BINDING) {
+        acciones[n] = INICIO_A_SCRIPT;      rotulos[n++] = "SCRIPT";
+        acciones[n] = INICIO_A_OBJETO;      rotulos[n++] = "OBJETO";
+        acciones[n] = INICIO_A_EVENTO;      rotulos[n++] = "EVENTO";
+        acciones[n] = INICIO_A_BORRAR_ASOC; rotulos[n++] = "BORRAR";
+        acciones[n] = INICIO_A_NUEVO;       rotulos[n++] = "+SCRIPT";
+        return n;
+    }
+    if (e->kind == PM_KIND_NODO || e->kind == PM_KIND_ESCENA) {
+        acciones[n] = INICIO_A_ASOCIAR; rotulos[n++] = "ASOCIAR";
+        acciones[n] = INICIO_A_NUEVO;   rotulos[n++] = "+SCRIPT";
+    }
+    return n;
+}
+
+static int inicio_destino_de(const EntidadModelo *b) {
+    int id = inicio_ref(b, "nodo");
+    return id ? id : inicio_ref(b, "escena");
+}
+
+static int inicio_binding_de(int id, const EntidadModelo *b) {
+    if (!b || b->kind != PM_KIND_BINDING) return 0;
+    return inicio_ref(b, "script") == id || inicio_ref(b, "nodo") == id ||
+           inicio_ref(b, "escena") == id;
+}
+
+static void inicio_dibujar_asociaciones(int *cursor_y) {
+    Zona p = inicio_inspector();
+    const EntidadModelo *e = inicio_entidad(g_inicio_seleccion);
+    char linea[PM_RUTA_MAX + PM_NOMBRE_MAX + 48];
+    int y = p.y + 322, i, n = 0;
+    if (!e || !g_inicio_modelo) return;
+    dibujar_linea(p.x + INICIO_MARGEN, y, zona_derecha(p) - INICIO_MARGEN,
+                  y, INICIO_LINEA);
+    y += 8;
+    fuente_dibujar(p.x + INICIO_MARGEN, y, "ASOCIACIONES", INICIO_ACCENTO);
+    y += 16;
+    for (i = 0; i < g_inicio_modelo->num_entidades && n < 3; i++) {
+        const EntidadModelo *b = &g_inicio_modelo->entidades[i];
+        int script, destino;
+        if (!inicio_binding_de(g_inicio_seleccion, b)) continue;
+        script = inicio_ref(b, "script");
+        destino = inicio_destino_de(b);
+        _snprintf(linea, sizeof(linea), "#%d  script #%d -> #%d  %s",
+                  b->id, script, destino, inicio_prop(b, "evento"));
+        linea[sizeof(linea) - 1] = 0;
+        fuente_dibujar(p.x + INICIO_MARGEN, y, linea,
+                       g_inicio_seleccion == b->id ? INICIO_ACCENTO : INICIO_TEXTO);
+        y += 16;
+        n++;
+    }
+    if (!n) fuente_dibujar(p.x + INICIO_MARGEN, y, "ninguna", INICIO_MUTED);
+    if (cursor_y) *cursor_y = y;
+}
+
+static int inicio_asociacion_en(int x, int y) {
+    Zona p = inicio_inspector();
+    int yy = p.y + 322 + 8 + 16, i, n = 0;
+    if (!zona_contiene(p, x, y) || !g_inicio_modelo) return -1;
+    for (i = 0; i < g_inicio_modelo->num_entidades && n < 3; i++) {
+        const EntidadModelo *b = &g_inicio_modelo->entidades[i];
+        if (!inicio_binding_de(g_inicio_seleccion, b)) continue;
+        if (y >= yy - 2 && y < yy + 15) return b->id;
+        yy += 16;
+        n++;
+    }
+    return -1;
+}
+
+static void inicio_dibujar_acciones(void) {
+    Zona p = inicio_inspector();
+    int acciones[6], n, i;
+    const char *rotulos[6];
+    n = inicio_acciones_actuales(acciones, rotulos);
+    dibujar_linea(p.x + INICIO_MARGEN, p.y + INICIO_ACCION_Y - 12,
+                  zona_derecha(p) - INICIO_MARGEN,
+                  p.y + INICIO_ACCION_Y - 12, INICIO_LINEA);
+    if (g_inicio_asociar_origen > 0 || g_inicio_asociar_destino > 0) {
+        char texto[PM_NOMBRE_MAX + 32];
+        _snprintf(texto, sizeof(texto), "Elige destino  evento=%s",
+                  g_inicio_eventos[g_inicio_evento_indice]);
+        texto[sizeof(texto) - 1] = 0;
+        inicio_texto_recortado(p.x + INICIO_MARGEN, p.y + INICIO_ACCION_Y - 28,
+                               texto, INICIO_ACCENTO, p.ancho - 28);
+    }
+    for (i = 0; i < n; i++) {
+        Zona b = inicio_accion_zona(i);
+        int sobre = zona_contiene(b, g.raton_x, g.raton_y);
+        dibujar_rect_z(b, sobre ? INICIO_SELECCION : INICIO_PANEL_2);
+        dibujar_marco_z(b, INICIO_LINEA);
+        fuente_dibujar(b.x + 6, b.y + 5, rotulos[i],
+                       sobre ? TEXTO_CLARO : INICIO_TEXTO);
+    }
+}
+
+static int inicio_accion_en(int x, int y) {
+    int acciones[6], n, i;
+    const char *rotulos[6];
+    n = inicio_acciones_actuales(acciones, rotulos);
+    for (i = 0; i < n; i++)
+        if (zona_contiene(inicio_accion_zona(i), x, y)) return acciones[i];
+    return -1;
+}
+
+static void inicio_asociar_cancelar(void) {
+    g_inicio_asociar_origen = -1;
+    g_inicio_asociar_destino = -1;
+    app_estado("asociacion cancelada");
+    app_invalidar();
+}
+
+static void inicio_asociar_iniciar(void) {
+    const EntidadModelo *e = inicio_entidad(g_inicio_seleccion);
+    if (!e) {
+        inicio_accion_fallo("selecciona un script, nodo o escena");
+        return;
+    }
+    g_inicio_asociar_origen = -1;
+    g_inicio_asociar_destino = -1;
+    if (e->kind == PM_KIND_SCRIPT) g_inicio_asociar_origen = e->id;
+    else if (e->kind == PM_KIND_NODO || e->kind == PM_KIND_ESCENA)
+        g_inicio_asociar_destino = e->id;
+    else {
+        inicio_accion_fallo("esa entidad no se puede asociar");
+        return;
+    }
+    app_estado("elige el otro extremo de la asociacion");
+    app_invalidar();
+}
+
+static int inicio_asociar_resolver(int id) {
+    Inicio *in = inicio_servicio();
+    const EntidadModelo *e = inicio_entidad(id);
+    char diagnostico[PM_ERROR_MAX];
+    int script, destino, es_escena, nuevo;
+    if (!e || (g_inicio_asociar_origen <= 0 && g_inicio_asociar_destino <= 0))
+        return 0;
+    script = g_inicio_asociar_origen;
+    destino = g_inicio_asociar_destino;
+    if (e->kind == PM_KIND_SCRIPT) script = e->id;
+    else if (e->kind == PM_KIND_NODO || e->kind == PM_KIND_ESCENA)
+        destino = e->id;
+    else return 0;
+    if (script <= 0 || destino <= 0 || script == destino) {
+        if (g_inicio_asociar_origen > 0) g_inicio_asociar_origen = script;
+        else g_inicio_asociar_destino = destino;
+        app_estado("falta el otro extremo de la asociacion");
+        app_invalidar();
+        return 0;
+    }
+    es_escena = inicio_entidad(destino) &&
+                inicio_entidad(destino)->kind == PM_KIND_ESCENA;
+    diagnostico[0] = 0;
+    if (!inicio_asociar(in, script, destino, es_escena,
+                        g_inicio_eventos[g_inicio_evento_indice],
+                        diagnostico, sizeof(diagnostico))) {
+        inicio_accion_fallo(diagnostico[0] ? diagnostico : "no se pudo asociar");
+        return 0;
+    }
+    g_inicio_asociar_origen = -1;
+    g_inicio_asociar_destino = -1;
+    nuevo = in->modelo.siguiente_id - 1;
+    g_inicio_seleccion = nuevo;
+    app_estado("asociacion #%d creada", nuevo);
+    app_invalidar();
+    return 1;
+}
+
+static void inicio_accion_script_nuevo(void) {
+    Inicio *in = inicio_servicio();
+    char nombre[PM_NOMBRE_MAX], ruta[PM_RUTA_MAX], diagnostico[PM_ERROR_MAX];
+    int n, i, libre, id;
+    if (!g_inicio_modelo) {
+        inicio_accion_fallo("carga un .log antes de crear scripts");
+        return;
+    }
+    for (n = 1; n < 999; n++) {
+        _snprintf(nombre, sizeof(nombre), "Script %d", n);
+        nombre[sizeof(nombre) - 1] = 0;
+        _snprintf(ruta, sizeof(ruta), "Scripts/script%d.lobo", n);
+        ruta[sizeof(ruta) - 1] = 0;
+        libre = 1;
+        for (i = 0; i < g_inicio_modelo->num_entidades; i++)
+            if (strcmp(g_inicio_modelo->entidades[i].nombre, nombre) == 0)
+                libre = 0;
+        if (libre) break;
+    }
+    if (n >= 999) {
+        inicio_accion_fallo("no queda un nombre libre para el script");
+        return;
+    }
+    diagnostico[0] = 0;
+    if (!inicio_script_crear(in, nombre, ruta, diagnostico,
+                             sizeof(diagnostico))) {
+        inicio_accion_fallo(diagnostico[0] ? diagnostico : "no se pudo crear el script");
+        return;
+    }
+    id = in->modelo.siguiente_id - 1;
+    g_inicio_seleccion = id;
+    g_inicio_asociar_origen = -1;
+    g_inicio_asociar_destino = -1;
+    inicio_editor_abrir(id);
+}
+
+static void inicio_accion_evento(void) {
+    Inicio *in = inicio_servicio();
+    const EntidadModelo *e = inicio_entidad(g_inicio_seleccion);
+    char diagnostico[PM_ERROR_MAX];
+    int actual = 0, i;
+    if (e && e->kind == PM_KIND_BINDING) {
+        const char *valor = inicio_prop(e, "evento");
+        for (i = 0; i < (int)(sizeof(g_inicio_eventos) / sizeof(g_inicio_eventos[0])); i++)
+            if (strcmp(valor, g_inicio_eventos[i]) == 0) actual = i;
+        actual = (actual + 1) % (int)(sizeof(g_inicio_eventos) / sizeof(g_inicio_eventos[0]));
+        diagnostico[0] = 0;
+        if (!inicio_modelo_editar(e->id, "evento", g_inicio_eventos[actual],
+                                  diagnostico, sizeof(diagnostico))) {
+            inicio_accion_fallo(diagnostico[0] ? diagnostico : "evento no valido");
+            return;
+        }
+        app_estado("evento: %s", g_inicio_eventos[actual]);
+    } else {
+        g_inicio_evento_indice++;
+        if (g_inicio_evento_indice >=
+            (int)(sizeof(g_inicio_eventos) / sizeof(g_inicio_eventos[0])))
+            g_inicio_evento_indice = 0;
+        app_estado("evento para la proxima asociacion: %s",
+                   g_inicio_eventos[g_inicio_evento_indice]);
+    }
+    (void)in;
+    app_invalidar();
+}
+
+static void inicio_accion_ejecutar(int accion) {
+    Inicio *in = inicio_servicio();
+    const EntidadModelo *e = inicio_entidad(g_inicio_seleccion);
+    char diagnostico[PM_ERROR_MAX];
+    int id;
+    switch (accion) {
+    case INICIO_A_ABRIR:    inicio_editor_abrir(g_inicio_seleccion); break;
+    case INICIO_A_GUARDAR:  inicio_editor_guardar(); break;
+    case INICIO_A_COMPILAR: inicio_editor_compilar(); break;
+    case INICIO_A_ASOCIAR:  inicio_asociar_iniciar(); break;
+    case INICIO_A_EVENTO:   inicio_accion_evento(); break;
+    case INICIO_A_NUEVO:    inicio_accion_script_nuevo(); break;
+    case INICIO_A_CANCELAR: inicio_asociar_cancelar(); break;
+    case INICIO_A_SCRIPT:
+        if (!e || e->kind != PM_KIND_BINDING) return;
+        id = inicio_ref(e, "script");
+        if (id > 0) inicio_editor_abrir(id);
+        break;
+    case INICIO_A_OBJETO:
+        if (!e || e->kind != PM_KIND_BINDING) return;
+        id = inicio_destino_de(e);
+        if (id > 0) {
+            g_inicio_editor = 0;
+            g_inicio_seleccion = id;
+            app_estado("objeto #%d seleccionado", id);
+            app_invalidar();
+        }
+        break;
+    case INICIO_A_BORRAR_ASOC:
+        if (!e || e->kind != PM_KIND_BINDING) return;
+        diagnostico[0] = 0;
+        if (!inicio_desasociar(in, e->id, diagnostico, sizeof(diagnostico)))
+            inicio_accion_fallo(diagnostico[0] ? diagnostico : "no se pudo borrar");
+        else
+            app_estado("asociacion #%d borrada", e->id);
+        break;
     }
 }
 
@@ -842,7 +1459,7 @@ static void inicio_dibujar_inspector(void) {
     dibujar_linea(p.x + INICIO_MARGEN, y, zona_derecha(p) - INICIO_MARGEN,
                   y, INICIO_LINEA);
     y += 12;
-    for (i = 0; i < e->num_propiedades && y < zona_abajo(p) - 28; i++) {
+    for (i = 0; i < e->num_propiedades && y < p.y + 314; i++) {
         _snprintf(linea, sizeof(linea), "%s = %s%s", e->propiedades[i].clave,
                   g_inicio_editando && g_inicio_edit_prop == i ?
                       g_inicio_borrador : e->propiedades[i].valor,
@@ -852,12 +1469,12 @@ static void inicio_dibujar_inspector(void) {
                                p.ancho - INICIO_MARGEN * 2);
         y += 19;
     }
-    if (e->num_referencias > 0 && y < zona_abajo(p) - 28) {
+    if (e->num_referencias > 0 && y < p.y + 314) {
         y += 5;
         dibujar_linea(p.x + INICIO_MARGEN, y, zona_derecha(p) - INICIO_MARGEN,
                       y, INICIO_LINEA);
         y += 12;
-        for (i = 0; i < e->num_referencias && y < zona_abajo(p) - 28; i++) {
+        for (i = 0; i < e->num_referencias && y < p.y + 314; i++) {
             _snprintf(linea, sizeof(linea), "%s -> #%d", e->referencias[i].nombre,
                       e->referencias[i].id);
             linea[sizeof(linea) - 1] = 0;
@@ -866,6 +1483,8 @@ static void inicio_dibujar_inspector(void) {
             y += 19;
         }
     }
+    inicio_dibujar_asociaciones(&y);
+    inicio_dibujar_acciones();
     if (g_inicio_editando && y < zona_abajo(p) - 38) {
         fuente_dibujar(p.x + INICIO_MARGEN, zona_abajo(p) - 34,
                        "Enter guarda  Esc cancela", INICIO_MUTED);
@@ -899,6 +1518,17 @@ void inicio_modelo_cargar(ProjectModel *modelo, const char *ruta) {
     g_inicio_borrador[0] = 0;
     g_inicio_edit_error[0] = 0;
     g_inicio_reparentar_origen = -1;
+    g_inicio_editor = 0;
+    g_inicio_editor_id = 0;
+    g_inicio_cursor = 0;
+    g_inicio_editor_scroll = 1;
+    g_inicio_codigo[0] = 0;
+    g_inicio_codigo_modificado = 0;
+    g_inicio_error_linea = 0;
+    g_inicio_codigo_error[0] = 0;
+    g_inicio_asociar_origen = -1;
+    g_inicio_asociar_destino = -1;
+    g_inicio_evento_indice = 0;
     inicio_filas_construir();
 }
 
@@ -917,6 +1547,17 @@ void inicio_modelo_limpiar(void) {
     g_inicio_borrador[0] = 0;
     g_inicio_edit_error[0] = 0;
     g_inicio_reparentar_origen = -1;
+    g_inicio_editor = 0;
+    g_inicio_editor_id = 0;
+    g_inicio_cursor = 0;
+    g_inicio_editor_scroll = 1;
+    g_inicio_codigo[0] = 0;
+    g_inicio_codigo_modificado = 0;
+    g_inicio_error_linea = 0;
+    g_inicio_codigo_error[0] = 0;
+    g_inicio_asociar_origen = -1;
+    g_inicio_asociar_destino = -1;
+    g_inicio_evento_indice = 0;
 }
 
 void inicio_dibujar(void) {
@@ -971,7 +1612,7 @@ static int inicio_inspector_campo_en(int x, int y) {
     if (e->origen.archivo[0]) cursor += 24;
     cursor += 24; /* separador y margen */
     for (i = 0; i < e->num_propiedades; i++) {
-        if (cursor >= zona_abajo(p) - 28) break;
+        if (cursor >= p.y + 314) break;
         if (y >= cursor - 4 && y < cursor + 17) return i;
         cursor += 19;
     }
@@ -1001,9 +1642,29 @@ static void inicio_editar_iniciar(int campo) {
 }
 
 void inicio_pulsar(int x, int y, int boton) {
-    int fila, id, campo, boton_barra;
+    int fila, id, campo, boton_barra, accion, asociacion;
     if (boton != 0) return;
     inicio_filas_construir();
+    accion = inicio_accion_en(x, y);
+    if (accion > 0) {
+        inicio_accion_ejecutar(accion);
+        return;
+    }
+    asociacion = inicio_asociacion_en(x, y);
+    if (asociacion > 0) {
+        g_inicio_seleccion = asociacion;
+        g_inicio_editor = 0;
+        app_estado("asociacion #%d seleccionada", asociacion);
+        app_invalidar();
+        return;
+    }
+    if (g_inicio_editor) {
+        Zona z = inicio_lienzo();
+        if (zona_contiene(z, x, y) && y >= z.y + 34) {
+            inicio_editor_clic(x, y);
+            return;
+        }
+    }
     boton_barra = inicio_boton_en(x, y);
     if (boton_barra >= 0) {
         switch (boton_barra) {
@@ -1031,6 +1692,11 @@ void inicio_pulsar(int x, int y, int boton) {
     }
     fila = inicio_fila_en(x, y);
     id = fila >= 0 ? g_inicio_filas[fila].id : inicio_nodo_en(x, y);
+    if (g_inicio_asociar_origen > 0 || g_inicio_asociar_destino > 0) {
+        if (id > 0) inicio_asociar_resolver(id);
+        else inicio_asociar_cancelar();
+        return;
+    }
     if (g_inicio_reparentar_origen > 0) {
         if (id > 0)
             inicio_accion_reparentar(g_inicio_reparentar_origen, id);
@@ -1044,6 +1710,7 @@ void inicio_pulsar(int x, int y, int boton) {
         return;
     }
     if (id > 0) {
+        if (g_inicio_editor && id != g_inicio_editor_id) g_inicio_editor = 0;
         g_inicio_seleccion = id;
         app_estado("entidad #%d seleccionada", id);
         app_invalidar();
@@ -1055,6 +1722,14 @@ void inicio_mover(int x, int y, int botones) { (void)x; (void)y; (void)botones; 
 
 void inicio_rueda(int x, int y, int delta, int ctrl) {
     Zona p = inicio_arbol();
+    if (g_inicio_editor && !ctrl && zona_contiene(inicio_lienzo(), x, y)) {
+        if (delta < 0 && g_inicio_editor_scroll < inicio_codigo_lineas())
+            g_inicio_editor_scroll++;
+        if (delta > 0 && g_inicio_editor_scroll > 1)
+            g_inicio_editor_scroll--;
+        app_invalidar();
+        return;
+    }
     if (ctrl || !zona_contiene(p, x, y)) return;
     if (delta > 0 && g_inicio_scroll > 0) g_inicio_scroll--;
     if (delta < 0 && g_inicio_scroll + 1 < g_inicio_num_filas) g_inicio_scroll++;
@@ -1063,6 +1738,35 @@ void inicio_rueda(int x, int y, int delta, int ctrl) {
 
 void inicio_tecla(int vk, int ctrl, int shift) {
     char diagnostico[PM_ERROR_MAX];
+    int fila, col, len;
+    if (g_inicio_editor) {
+        fila = 1;
+        col = inicio_codigo_columna(g_inicio_cursor, &fila);
+        len = (int)strlen(g_inicio_codigo);
+        if (vk == VK_ESCAPE) { inicio_editor_cerrar(); return; }
+        if (ctrl && (vk == 'G' || vk == 'g')) { inicio_editor_guardar(); return; }
+        if (vk == VK_F7) { inicio_editor_compilar(); return; }
+        if (vk == VK_BACK) { inicio_editor_retroceder(); return; }
+        if (vk == VK_RETURN) { inicio_editor_insertar("\n"); return; }
+        if (vk == VK_LEFT) {
+            if (g_inicio_cursor > 0) g_inicio_cursor--;
+        } else if (vk == VK_RIGHT) {
+            if (g_inicio_cursor < len) g_inicio_cursor++;
+        } else if (vk == VK_UP) {
+            inicio_codigo_ir(fila - 1, col);
+        } else if (vk == VK_DOWN) {
+            inicio_codigo_ir(fila + 1, col);
+        } else if (vk == VK_HOME) {
+            inicio_codigo_ir(fila, 0);
+        } else if (vk == VK_END) {
+            inicio_codigo_ir(fila, 100000);
+        } else {
+            return;
+        }
+        inicio_editor_ver_cursor();
+        app_invalidar();
+        return;
+    }
     if (g_inicio_editando) {
         if (vk == VK_ESCAPE) {
             g_inicio_editando = 0;
@@ -1105,7 +1809,9 @@ void inicio_tecla(int vk, int ctrl, int shift) {
         return;
     }
     if (vk == VK_ESCAPE) {
-        if (g_inicio_reparentar_origen > 0) {
+        if (g_inicio_asociar_origen > 0 || g_inicio_asociar_destino > 0) {
+            inicio_asociar_cancelar();
+        } else if (g_inicio_reparentar_origen > 0) {
             g_inicio_reparentar_origen = -1;
             app_estado("reparentado cancelado");
         } else {
@@ -1132,7 +1838,15 @@ void inicio_tecla(int vk, int ctrl, int shift) {
 
 void inicio_caracter(int ch) {
     size_t n;
-    if (!g_inicio_editando || ch < 32 || ch > 126) return;
+    char letra[2];
+    if (ch < 32 || ch > 126) return;
+    if (g_inicio_editor) {
+        letra[0] = (char)ch;
+        letra[1] = 0;
+        inicio_editor_insertar(letra);
+        return;
+    }
+    if (!g_inicio_editando) return;
     if (g_inicio_edit_primer_caracter) {
         g_inicio_borrador[0] = 0;
         g_inicio_edit_primer_caracter = 0;
@@ -1169,12 +1883,25 @@ void inicio_vista_volcar(const char *ruta) {
             in->num_pasado, in->num_futuro, in->ultimo,
             g_inicio_reparentar_origen);
     fprintf(f, "inicio_filas=%d\n", g_inicio_num_filas);
+    fprintf(f, "inicio_editor=%d id=%d cursor=%d modificado=%d scroll=%d\n",
+            g_inicio_editor, g_inicio_editor_id, g_inicio_cursor,
+            g_inicio_codigo_modificado, g_inicio_editor_scroll);
+    fprintf(f, "inicio_asociar=%d,%d evento=%s codigo_error=%d:%s\n",
+            g_inicio_asociar_origen, g_inicio_asociar_destino,
+            g_inicio_eventos[g_inicio_evento_indice],
+            g_inicio_error_linea, g_inicio_codigo_error);
     fprintf(f, "inicio_entidades=%d escenas=%d nodos=%d scripts=%d asociaciones=%d\n",
             g_inicio_modelo ? g_inicio_modelo->num_entidades : 0,
             escenas, nodos, scripts, asociaciones);
     if (g_inicio_modelo) {
         e = inicio_entidad(g_inicio_seleccion);
         if (e) fprintf(f, "inicio_seleccion=%s #%d\n", pm_kind_nombre(e->kind), e->id);
+        if (e && e->kind == PM_KIND_SCRIPT)
+            fprintf(f, "inicio_script=%d ruta=%s\n", e->id, inicio_prop(e, "ruta"));
+        if (e && e->kind == PM_KIND_BINDING)
+            fprintf(f, "inicio_binding=%d script=%d destino=%d evento=%s\n",
+                    e->id, inicio_ref(e, "script"), inicio_destino_de(e),
+                    inicio_prop(e, "evento"));
         for (i = 0; i < g_inicio_modelo->num_entidades; i++) {
             e = &g_inicio_modelo->entidades[i];
             if (e->kind == PM_KIND_NODO)
@@ -1379,6 +2106,383 @@ int inicio_reparentar(Inicio *in, int id, int id_padre) {
     return 1;
 }
 
+/* --- Scripts de texto y asociaciones (fase 6) --------------------------- */
+/* Las rutas son siempre relativas al .log cargado. Se rechazan absolutas y
+ * segmentos ".." para que un script no pueda salir de la carpeta del proyecto. */
+static int inicio_ruta_segura(const char *ruta) {
+    const char *p;
+    if (!ruta || !ruta[0]) return 0;
+    if (ruta[0] == '/' || ruta[0] == '\\' || ruta[1] == ':') return 0;
+    p = ruta;
+    while (*p) {
+        const char *inicio = p;
+        while (*p && *p != '/' && *p != '\\') p++;
+        if ((p - inicio) == 2 && inicio[0] == '.' && inicio[1] == '.')
+            return 0;
+        while (*p == '/' || *p == '\\') p++;
+    }
+    return 1;
+}
+
+static void inicio_base_archivo(const Inicio *in, char *dst, size_t tam) {
+    const char *ruta = in && in->origen[0] ? in->origen : NULL;
+    const char *p;
+    size_t n;
+    if (!dst || tam == 0) return;
+    if (!ruta && in) {
+        int i;
+        for (i = 0; i < in->modelo.num_entidades; i++) {
+            if (in->modelo.entidades[i].origen.archivo[0]) {
+                ruta = in->modelo.entidades[i].origen.archivo;
+                break;
+            }
+        }
+    }
+    if (!ruta || !ruta[0]) {
+        copiar_seguro(dst, tam, ".");
+        return;
+    }
+    p = ruta + strlen(ruta);
+    while (p > ruta && p[-1] != '/' && p[-1] != '\\') p--;
+    if (p == ruta) {
+        copiar_seguro(dst, tam, ".");
+        return;
+    }
+    n = (size_t)(p - ruta);
+    if (n >= tam) n = tam - 1;
+    memcpy(dst, ruta, n);
+    dst[n] = 0;
+}
+
+static void inicio_ruta_archivo(const Inicio *in, const char *relativa,
+                                char *dst, size_t tam) {
+    char base[PM_RUTA_MAX * 2];
+    inicio_base_archivo(in, base, sizeof(base));
+    _snprintf(dst, tam, "%s/%s", base, relativa);
+    dst[tam - 1] = 0;
+}
+
+static int inicio_archivo_existe(const char *ruta) {
+    FILE *f;
+    if (!ruta || !ruta[0]) return 0;
+    f = fopen(ruta, "rb");
+    if (!f) return 0;
+    fclose(f);
+    return 1;
+}
+
+static void inicio_crear_padres(const char *ruta) {
+    char tmp[PM_RUTA_MAX * 3];
+    size_t i, n;
+    if (!ruta || !ruta[0]) return;
+    n = strlen(ruta);
+    if (n >= sizeof(tmp)) return;
+    memcpy(tmp, ruta, n + 1);
+    for (i = 1; i < n; i++) {
+        char guardado;
+        if (tmp[i] != '/' && tmp[i] != '\\') continue;
+        guardado = tmp[i];
+        tmp[i] = 0;
+        crear_carpeta(tmp);
+        tmp[i] = guardado;
+    }
+}
+
+static int inicio_leer_codigo(const char *ruta, char *codigo, size_t tam) {
+    FILE *f;
+    long largo;
+    size_t leidos;
+    if (!codigo || tam == 0) return 0;
+    codigo[0] = 0;
+    f = fopen(ruta, "rb");
+    if (!f) return 0;
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return 0; }
+    largo = ftell(f);
+    if (largo < 0 || (size_t)largo >= tam) { fclose(f); return 0; }
+    if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return 0; }
+    leidos = largo > 0 ? fread(codigo, 1, (size_t)largo, f) : 0;
+    fclose(f);
+    codigo[leidos] = 0;
+    return leidos == (size_t)largo;
+}
+
+static int inicio_escribir_codigo(const char *ruta, const char *codigo) {
+    FILE *f;
+    size_t n;
+    if (!ruta || !ruta[0] || !codigo) return 0;
+    inicio_crear_padres(ruta);
+    f = fopen(ruta, "wb");
+    if (!f) return 0;
+    n = strlen(codigo);
+    if (n > 0 && fwrite(codigo, 1, n, f) != n) {
+        fclose(f);
+        return 0;
+    }
+    fclose(f);
+    return 1;
+}
+
+static void inicio_publicar(Inicio *in, const char *texto) {
+    ultimo_fijar(in, texto);
+    if (g_inicio_modelo != &in->modelo) return;
+    /* La vista y el servicio comparten snapshots; solo hace falta repintar. */
+    inicio_filas_construir();
+    app_invalidar();
+}
+
+int inicio_script_crear(Inicio *in, const char *nombre, const char *ruta,
+                        char *diagnostico, size_t longitud) {
+    ProjectModel nuevo;
+    EntidadModelo *e;
+    char abs[PM_RUTA_MAX * 3];
+    int id;
+    char validacion[PM_ERROR_MAX];
+
+    inicio_diagnostico(diagnostico, longitud, "");
+    if (!in || !nombre || !nombre[0] || !inicio_ruta_segura(ruta)) {
+        inicio_diagnostico(diagnostico, longitud, "nombre o ruta de script invalidos");
+        return 0;
+    }
+    pm_copiar(&in->modelo, &nuevo);
+    id = pm_anadir(&nuevo, PM_KIND_SCRIPT, nombre);
+    e = pm_entidad(&nuevo, id);
+    if (!e || !pm_propiedad(e, "ruta", ruta, 0)) {
+        inicio_diagnostico(diagnostico, longitud, "no se pudo crear el script");
+        return 0;
+    }
+    if (pm_validar(&nuevo, validacion, sizeof(validacion))) {
+        inicio_diagnostico(diagnostico, longitud, validacion);
+        return 0;
+    }
+    inicio_ruta_archivo(in, ruta, abs, sizeof(abs));
+    /* Si el archivo ya existe se conserva su contenido. */
+    if (!inicio_archivo_existe(abs) && !inicio_escribir_codigo(abs, "")) {
+        inicio_diagnostico(diagnostico, longitud,
+                           "no se pudo crear el archivo del script");
+        return 0;
+    }
+    guardar_pasado(in);
+    pm_copiar(&nuevo, &in->modelo);
+    if (g_inicio_modelo == &in->modelo) g_inicio_seleccion = id;
+    inicio_publicar(in, "script creado");
+    inicio_diagnostico(diagnostico, longitud, "sin errores");
+    return 1;
+}
+
+int inicio_script_leer(Inicio *in, int id, char *codigo, size_t tam,
+                       char *diagnostico, size_t longitud) {
+    const EntidadModelo *e;
+    const char *ruta;
+    char abs[PM_RUTA_MAX * 3];
+    inicio_diagnostico(diagnostico, longitud, "");
+    if (!in || !codigo) return 0;
+    e = pm_entidad_const(&in->modelo, id);
+    if (!e || e->kind != PM_KIND_SCRIPT) {
+        inicio_diagnostico(diagnostico, longitud, "no existe el script");
+        return 0;
+    }
+    ruta = inicio_prop(e, "ruta");
+    if (!inicio_ruta_segura(ruta)) {
+        inicio_diagnostico(diagnostico, longitud, "ruta de script insegura");
+        return 0;
+    }
+    inicio_ruta_archivo(in, ruta, abs, sizeof(abs));
+    if (!inicio_leer_codigo(abs, codigo, tam)) {
+        inicio_diagnostico(diagnostico, longitud, "no se pudo leer el script");
+        return 0;
+    }
+    return 1;
+}
+
+int inicio_script_escribir(Inicio *in, int id, const char *codigo,
+                           char *diagnostico, size_t longitud) {
+    const EntidadModelo *e;
+    const char *ruta;
+    char abs[PM_RUTA_MAX * 3];
+    inicio_diagnostico(diagnostico, longitud, "");
+    if (!in || !codigo) return 0;
+    e = pm_entidad_const(&in->modelo, id);
+    if (!e || e->kind != PM_KIND_SCRIPT) {
+        inicio_diagnostico(diagnostico, longitud, "no existe el script");
+        return 0;
+    }
+    ruta = inicio_prop(e, "ruta");
+    if (!inicio_ruta_segura(ruta)) {
+        inicio_diagnostico(diagnostico, longitud, "ruta de script insegura");
+        return 0;
+    }
+    if (strlen(codigo) >= FUNCIONES_CODIGO_MAX) {
+        inicio_diagnostico(diagnostico, longitud, "el script supera el limite de codigo");
+        return 0;
+    }
+    inicio_ruta_archivo(in, ruta, abs, sizeof(abs));
+    if (!inicio_escribir_codigo(abs, codigo)) {
+        inicio_diagnostico(diagnostico, longitud, "no se pudo guardar el script");
+        return 0;
+    }
+    inicio_publicar(in, "script guardado");
+    inicio_diagnostico(diagnostico, longitud, "sin errores");
+    return 1;
+}
+
+int inicio_script_compilar(Inicio *in, int id, char *diagnostico,
+                           size_t longitud) {
+    static LoboPrograma programa;
+    const EntidadModelo *e;
+    const char *ruta;
+    char abs[PM_RUTA_MAX * 3];
+    char codigo[FUNCIONES_CODIGO_MAX + 1];
+    char error[PM_ERROR_MAX];
+    char mensaje[PM_ERROR_MAX * 2];
+    const char *numero_texto;
+    int linea = 0;
+    int ok;
+    inicio_diagnostico(diagnostico, longitud, "");
+    if (!in) return 0;
+    e = pm_entidad_const(&in->modelo, id);
+    if (!e || e->kind != PM_KIND_SCRIPT) {
+        inicio_diagnostico(diagnostico, longitud, "no existe el script");
+        return 0;
+    }
+    ruta = inicio_prop(e, "ruta");
+    if (!inicio_ruta_segura(ruta) ||
+        !inicio_script_leer(in, id, codigo, sizeof(codigo), diagnostico, longitud)) {
+        if (diagnostico && longitud && !diagnostico[0])
+            inicio_diagnostico(diagnostico, longitud, "no se pudo leer el script");
+        return 0;
+    }
+    inicio_ruta_archivo(in, ruta, abs, sizeof(abs));
+    lobo_programa_iniciar(&programa);
+    error[0] = 0;
+    g_inicio_error_linea = 0;
+    g_inicio_codigo_error[0] = 0;
+    ok = lobo_compilar(codigo, &programa, LOBO_MODO_VM, error, sizeof(error));
+    if (ok) {
+        _snprintf(mensaje, sizeof(mensaje), "%s:OK:%d", ruta, programa.largo);
+        mensaje[sizeof(mensaje) - 1] = 0;
+    } else {
+        numero_texto = strstr(error, "linea ");
+        if (numero_texto) linea = atoi(numero_texto + 6);
+        if (linea > 0)
+            _snprintf(mensaje, sizeof(mensaje), "%s:%d: %s", ruta, linea, error);
+        else
+            _snprintf(mensaje, sizeof(mensaje), "%s: %s", ruta, error);
+        mensaje[sizeof(mensaje) - 1] = 0;
+        g_inicio_error_linea = linea;
+        copiar_seguro(g_inicio_codigo_error, sizeof(g_inicio_codigo_error), error);
+    }
+    lobo_programa_liberar(&programa);
+    copiar_seguro(in->ultimo, sizeof(in->ultimo), mensaje);
+    inicio_diagnostico(diagnostico, longitud, ok ? "sin errores" : mensaje);
+    app_invalidar();
+    return ok;
+}
+
+int inicio_asociar(Inicio *in, int id_script, int id_destino, int es_escena,
+                   const char *evento, char *diagnostico, size_t longitud) {
+    ProjectModel nuevo;
+    EntidadModelo *e;
+    const EntidadModelo *destino;
+    char validacion[PM_ERROR_MAX];
+    int id;
+    inicio_diagnostico(diagnostico, longitud, "");
+    if (!in || !inicio_evento_valido(evento)) {
+        inicio_diagnostico(diagnostico, longitud, "evento no soportado");
+        return 0;
+    }
+    e = pm_entidad(&in->modelo, id_script);
+    destino = pm_entidad_const(&in->modelo, id_destino);
+    if (!e || e->kind != PM_KIND_SCRIPT || !destino ||
+        destino->kind != (es_escena ? PM_KIND_ESCENA : PM_KIND_NODO)) {
+        inicio_diagnostico(diagnostico, longitud, "script o destino inexistente");
+        return 0;
+    }
+    pm_copiar(&in->modelo, &nuevo);
+    id = pm_anadir(&nuevo, PM_KIND_BINDING, "asociacion");
+    e = pm_entidad(&nuevo, id);
+    if (!e || !pm_referencia(e, "script", id_script, NULL, 0) ||
+        !pm_referencia(e, es_escena ? "escena" : "nodo", id_destino, NULL, 0) ||
+        !pm_propiedad(e, "evento", evento, 0)) {
+        inicio_diagnostico(diagnostico, longitud, "no se pudo crear la asociacion");
+        return 0;
+    }
+    if (pm_validar(&nuevo, validacion, sizeof(validacion))) {
+        inicio_diagnostico(diagnostico, longitud, validacion);
+        return 0;
+    }
+    guardar_pasado(in);
+    pm_copiar(&nuevo, &in->modelo);
+    if (g_inicio_modelo == &in->modelo) g_inicio_seleccion = id;
+    inicio_publicar(in, "script asociado");
+    inicio_diagnostico(diagnostico, longitud, "sin errores");
+    return 1;
+}
+
+int inicio_desasociar(Inicio *in, int id, char *diagnostico, size_t longitud) {
+    ProjectModel nuevo;
+    EntidadModelo *e;
+    char validacion[PM_ERROR_MAX];
+    inicio_diagnostico(diagnostico, longitud, "");
+    if (!in) return 0;
+    e = pm_entidad(&in->modelo, id);
+    if (!e || e->kind != PM_KIND_BINDING) {
+        inicio_diagnostico(diagnostico, longitud, "no existe la asociacion");
+        return 0;
+    }
+    pm_copiar(&in->modelo, &nuevo);
+    if (!pm_borrar(&nuevo, id)) {
+        inicio_diagnostico(diagnostico, longitud, pm_error(&nuevo));
+        return 0;
+    }
+    if (pm_validar(&nuevo, validacion, sizeof(validacion))) {
+        inicio_diagnostico(diagnostico, longitud, validacion);
+        return 0;
+    }
+    guardar_pasado(in);
+    pm_copiar(&nuevo, &in->modelo);
+    if (g_inicio_modelo == &in->modelo) g_inicio_seleccion = -1;
+    inicio_publicar(in, "asociacion borrada");
+    inicio_diagnostico(diagnostico, longitud, "sin errores");
+    return 1;
+}
+
+void inicio_volcar_scripts(const Inicio *in, const char *ruta) {
+    FILE *f;
+    int i, j, n, total = 0;
+    if (!in || !ruta || !ruta[0]) return;
+    for (i = 0; i < in->modelo.num_entidades; i++)
+        if (in->modelo.entidades[i].kind == PM_KIND_SCRIPT) total++;
+    f = fopen(ruta, "w");
+    if (!f) return;
+    fprintf(f, "inicio_scripts=%d\n", total);
+    for (i = 0; i < in->modelo.num_entidades; i++) {
+        const EntidadModelo *e = &in->modelo.entidades[i];
+        if (e->kind != PM_KIND_SCRIPT) continue;
+        n = 0;
+        for (j = 0; j < in->modelo.num_entidades; j++)
+            if (in->modelo.entidades[j].kind == PM_KIND_BINDING &&
+                inicio_ref(&in->modelo.entidades[j], "script") == e->id) n++;
+        fprintf(f, "inicio_script=%d nombre=%s ruta=%s asociaciones=%d\n",
+                e->id, e->nombre, inicio_prop(e, "ruta"), n);
+    }
+    for (i = 0; i < in->modelo.num_entidades; i++) {
+        const EntidadModelo *e = &in->modelo.entidades[i];
+        const ReferenciaModelo *destino;
+        if (e->kind != PM_KIND_BINDING) continue;
+        destino = NULL;
+        for (j = 0; j < e->num_referencias; j++)
+            if (strcmp(e->referencias[j].nombre, "nodo") == 0 ||
+                strcmp(e->referencias[j].nombre, "escena") == 0)
+                destino = &e->referencias[j];
+        fprintf(f, "inicio_asociacion=%d script=%d %s=%d evento=%s\n",
+                e->id, inicio_ref(e, "script"),
+                destino && strcmp(destino->nombre, "escena") == 0 ? "escena" : "nodo",
+                destino ? destino->id : 0, inicio_prop(e, "evento"));
+    }
+    fprintf(f, "inicio_compilar=%s\n", in->ultimo);
+    fclose(f);
+}
+
 int inicio_deshacer(Inicio *in) {
     if (!in || in->num_pasado <= 0) {
         ultimo_fijar(in, "no hay cambios que deshacer");
@@ -1421,7 +2525,8 @@ void inicio_volcar(const Inicio *in, const char *ruta) {
 int inicio_kind(const char *texto) {
     static const char *nombres[] = {
         "proyecto", "recurso", "escena", "actor",
-        "instancia", "control", "conexion", "accion"
+        "instancia", "control", "conexion", "accion",
+        "script", "asociacion"
     };
     int i, n;
     if (!texto || !texto[0]) return 0;
@@ -1444,6 +2549,7 @@ int inicio_ejecutar(Inicio *in, const char *comandos, char *diagnostico,
     p = comandos;
     while (*p) {
         char cmd[32], a[PM_RUTA_MAX], b[PM_NOMBRE_MAX], c[32];
+        char d[PM_RUTA_MAX], codigo[FUNCIONES_CODIGO_MAX + 1];
         char mensaje[PM_ERROR_MAX * 2];
         const char *detalle;
         int ok = 0;
@@ -1480,6 +2586,46 @@ int inicio_ejecutar(Inicio *in, const char *comandos, char *diagnostico,
             ok = inicio_deshacer(in);
         } else if (strcmp(cmd, "rehacer") == 0) {
             ok = inicio_rehacer(in);
+        } else if (strcmp(cmd, "crear_script") == 0) {
+            trozo(&p, a, sizeof(a));
+            trozo(&p, b, sizeof(b));
+            recortar(a);
+            recortar(b);
+            ok = inicio_script_crear(in, a, b, diagnostico, longitud);
+        } else if (strcmp(cmd, "escribir_script") == 0) {
+            trozo(&p, a, sizeof(a));
+            trozo(&p, d, sizeof(d));
+            recortar(a);
+            recortar(d);
+            ok = inicio_leer_codigo(d, codigo, sizeof(codigo)) &&
+                 inicio_script_escribir(in, numero(a), codigo,
+                                        diagnostico, longitud);
+            if (!ok && diagnostico && longitud && !diagnostico[0])
+                diag_fijar(diagnostico, longitud, "no se pudo leer el archivo de codigo");
+        } else if (strcmp(cmd, "compilar") == 0) {
+            trozo(&p, a, sizeof(a));
+            recortar(a);
+            ok = inicio_script_compilar(in, numero(a), diagnostico, longitud);
+        } else if (strcmp(cmd, "asociar") == 0 ||
+                   strcmp(cmd, "asociar_escena") == 0) {
+            trozo(&p, a, sizeof(a));
+            trozo(&p, b, sizeof(b));
+            trozo(&p, c, sizeof(c));
+            recortar(a);
+            recortar(b);
+            recortar(c);
+            ok = inicio_asociar(in, numero(a), numero(b),
+                                strcmp(cmd, "asociar_escena") == 0, c,
+                                diagnostico, longitud);
+        } else if (strcmp(cmd, "desasociar") == 0) {
+            trozo(&p, a, sizeof(a));
+            recortar(a);
+            ok = inicio_desasociar(in, numero(a), diagnostico, longitud);
+        } else if (strcmp(cmd, "volcar_scripts") == 0) {
+            trozo(&p, a, sizeof(a));
+            recortar(a);
+            inicio_volcar_scripts(in, a);
+            ok = a[0] != '\0';
         } else if (strcmp(cmd, "volcar") == 0) {
             trozo(&p, a, sizeof(a));
             recortar(a);

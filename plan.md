@@ -735,6 +735,12 @@ Objetivo: programar mediante archivos de texto.
 Criterio de salida: player.lobo asociado a Player puede leer entrada, mover el
 actor y producir una traza sin bloques visuales.
 
+Estado: completada. Inicio crea scripts desde el arbol, abre un editor de texto
+multilinea, guarda y compila con errores mapeados a archivo y linea, asocia por
+arbol o lienzo en dos pasos, permite elegir el evento y navega entre la
+asociacion, el script y el objeto. La suite `programa.ps1` cubre la creacion,
+la edicion, la navegacion y la traza del runtime sin bloques visuales.
+
 ### Fase 7 — Runtime jerárquico y escenas
 
 Objetivo: ejecutar el mismo árbol que se edita.

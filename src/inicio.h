@@ -7,7 +7,9 @@
 /* Servicio CLI de Inicio, compartido con la vista visual. Las ordenes de
  * inicio_ejecutar se escriben como
  *   cargar|ruta;crear|kind|nombre|padre;borrar|id;reparentar|id|padre;
- *   deshacer;rehacer;volcar|ruta
+ *   crear_script|nombre|ruta;escribir_script|id|archivo;compilar|id;
+ *   asociar|script|destino|evento;asociar_escena|script|destino|evento;
+ *   desasociar|id;deshacer;rehacer;volcar|ruta;volcar_scripts|ruta
  * El padre es opcional y 0 significa "sin padre". */
 #define INICIO_HISTORIAL_MAX 16
 
@@ -31,6 +33,20 @@ int inicio_reparentar(Inicio *in, int id, int id_padre);
 int inicio_deshacer(Inicio *in);
 int inicio_rehacer(Inicio *in);
 void inicio_volcar(const Inicio *in, const char *ruta);
+/* Fase 6: scripts de texto y asociaciones sobre el mismo historial.
+ * escritor_script guarda el texto ya leido en el buffer del editor. */
+int inicio_script_crear(Inicio *in, const char *nombre, const char *ruta,
+                        char *diagnostico, size_t longitud);
+int inicio_script_leer(Inicio *in, int id, char *codigo, size_t tam,
+                       char *diagnostico, size_t longitud);
+int inicio_script_escribir(Inicio *in, int id, const char *codigo,
+                           char *diagnostico, size_t longitud);
+int inicio_script_compilar(Inicio *in, int id, char *diagnostico,
+                           size_t longitud);
+int inicio_asociar(Inicio *in, int id_script, int id_destino, int es_escena,
+                   const char *evento, char *diagnostico, size_t longitud);
+int inicio_desasociar(Inicio *in, int id, char *diagnostico, size_t longitud);
+void inicio_volcar_scripts(const Inicio *in, const char *ruta);
 int inicio_ejecutar(Inicio *in, const char *comandos, char *diagnostico,
                     size_t longitud);
 int inicio_kind(const char *texto);

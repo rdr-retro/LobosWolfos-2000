@@ -2165,13 +2165,21 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                         if (p[1] == '\\') { app_caracter('\\'); p += 2; continue; }
                         /* Atajos de Inicio para las pruebas automaticas:
                          * \z deshacer, \Z rehacer con Shift, \y rehacer,
-                         * \d borrar, \i crear nodo, \I crear escena. */
+                         * \d borrar, \i crear nodo, \I crear escena,
+                         * \s guardar script, \f compilar, \h/\l/\u/\o mover
+                         * el cursor del editor de codigo. */
                         if (p[1] == 'z') { app_tecla('Z', 1, 0); p += 2; continue; }
                         if (p[1] == 'Z') { app_tecla('Z', 1, 1); p += 2; continue; }
                         if (p[1] == 'y') { app_tecla('Y', 1, 0); p += 2; continue; }
                         if (p[1] == 'd') { app_tecla(VK_DELETE, 0, 0); p += 2; continue; }
                         if (p[1] == 'i') { app_tecla(VK_INSERT, 0, 0); p += 2; continue; }
                         if (p[1] == 'I') { app_tecla(VK_INSERT, 0, 1); p += 2; continue; }
+                        if (p[1] == 's') { app_tecla('G', 1, 0); p += 2; continue; }
+                        if (p[1] == 'f') { app_tecla(VK_F7, 0, 0); p += 2; continue; }
+                        if (p[1] == 'h') { app_tecla(VK_LEFT, 0, 0); p += 2; continue; }
+                        if (p[1] == 'l') { app_tecla(VK_RIGHT, 0, 0); p += 2; continue; }
+                        if (p[1] == 'u') { app_tecla(VK_UP, 0, 0); p += 2; continue; }
+                        if (p[1] == 'o') { app_tecla(VK_DOWN, 0, 0); p += 2; continue; }
                         p++;
                         continue;
                     }
@@ -3050,6 +3058,25 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 char ruta[MAX_PATH];
                 recortar_texto(ruta, vi, sizeof(ruta));
                 inicio_vista_volcar(ruta);
+            }
+        }
+        /* Fase 6: edicion determinista de scripts y asociaciones. Se ejecuta
+         * antes de --guardar-modelo para que un mismo proceso pueda crear el
+         * .lobo, asociarlo y guardar el .log resultante. */
+        {
+            char *sc = arg_valor(cmd, "--inicio-scripts");
+            if (sc) {
+                char diagnostico[PM_ERROR_MAX];
+                int scripts_ok = inicio_ejecutar(inicio_servicio(), sc,
+                                                 diagnostico, sizeof(diagnostico));
+                if (!scripts_ok) {
+                    FILE *df = fopen("scripts.diagnostico.txt", "w");
+                    if (df) {
+                        fputs(diagnostico, df);
+                        fputc('\n', df);
+                        fclose(df);
+                    }
+                }
             }
         }
         /* Guarda el ProjectModel vivo de Inicio en LOG 2, manteniendo el

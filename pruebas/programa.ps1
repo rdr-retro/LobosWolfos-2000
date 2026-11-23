@@ -25,6 +25,9 @@
 #   inicio_comandos botones visuales crean, borran, reparentan y deshacen
 #   inicio_atajos   Supr, Ins, Ctrl+Z, Ctrl+Y y Ctrl+Shift+Z desde el teclado
 #   modelo_runtime  LOG 2 genera escenas, objetos y scripts ejecutables
+#   scripts_crear_asociar  crea y edita un .lobo, lo asocia y produce una traza
+#   scripts_editar_compilar el editor mapea errores a archivo y linea
+#   scripts_navegacion  salta entre asociacion, script y objeto
 #
 # Uso:
 #   pruebas\programa.ps1                 pasa la suite
@@ -198,6 +201,27 @@ function Get-PixelesInicioComandos([string]$bmp) {
     try {
         $puntos = @("454,60", "516,60", "578,60", "640,60", "702,60",
                     "764,60", "826,60", "550,200")
+        $salida = @()
+        foreach ($punto in $puntos) {
+            $xy = $punto.Split(",")
+            $color = $imagen.GetPixel([int]$xy[0], [int]$xy[1])
+            $salida += ("{0}={1:X2}{2:X2}{3:X2}" -f $punto, $color.R,
+                        $color.G, $color.B)
+        }
+        return ($salida -join " ")
+    } finally {
+        $imagen.Dispose()
+    }
+}
+
+# Sondas del editor de scripts de Inicio a 1200x700: titulo del inspector,
+# cuatro acciones del inspector, cabecera del editor, fondo de codigo y la
+# Linea resaltada por un error de compilacion.
+function Get-PixelesInicioScripts([string]$bmp) {
+    $imagen = [System.Drawing.Bitmap]::FromFile($bmp)
+    try {
+        $puntos = @("921,68", "903,474", "1001,474", "1099,474",
+                    "903,502", "400,100", "600,120", "600,160")
         $salida = @()
         foreach ($punto in $puntos) {
             $xy = $punto.Split(",")
@@ -1398,6 +1422,289 @@ Ejecutar-Caso "inicio_ciclos" {
     }
 }
 
+
+Ejecutar-Caso "scripts_crear_asociar" {
+    param($dir, $problemas)
+    $entrada = Join-Path $dir "escena.log"
+    $creado = Join-Path $dir "creado.log"
+    $final = Join-Path $dir "final.log"
+    $codigo = Join-Path $dir "Scripts\script1.lobo"
+    $creadoTxt = Join-Path $dir "creado.txt"
+    $asocTxt = Join-Path $dir "asoc.txt"
+    $scriptsTxt = Join-Path $dir "scripts.txt"
+    $logic3 = Join-Path $dir "final.logic3"
+    $diag = Join-Path $dir "final.diag"
+    $traza = Join-Path $dir "final.traza"
+    $creadoBmp = Join-Path $dir "creado.bmp"
+    $juegoBmp = Join-Path $dir "juego.bmp"
+    New-Item -ItemType Directory -Force -Path (Join-Path $dir "Scripts") | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $dir "tiles") | Out-Null
+    Copy-Item (Join-Path $raiz "pruebas\modelo\escena_scripts.log") $entrada
+    Copy-Item (Join-Path $raiz "pruebas\modelo\Scripts\player.lobo") `
+              (Join-Path $dir "Scripts\player.lobo")
+    Copy-Item (Join-Path $raiz "tiles\jugador.png") `
+              (Join-Path $dir "tiles\jugador.png")
+
+    # Nodo Player -> +SCRIPT; el editor abre el archivo nuevo y Ctrl+G lo guarda.
+    $salida = Ejecutar-Editor $dir @("--inicio-modelo", "escena.log",
+                                     "--sin-ventanas",
+                                     "--clics", "80,147;1045,483",
+                                     "--inicio-teclas", 'mi.x = mi.x + 2\n\s',
+                                     "--captura", $creadoBmp,
+                                     "--guardar-modelo", "creado.log",
+                                     "--volcar-inicio", $creadoTxt)
+    if ($salida -ne 0) { [void]$problemas.Add("el editor devolvio $salida al crear") }
+    foreach ($archivo in @($creado, $codigo, $creadoTxt, $creadoBmp)) {
+        if (-not (Test-Path -LiteralPath $archivo)) {
+            [void]$problemas.Add("falta " + (Split-Path -Leaf $archivo))
+        }
+    }
+    if ($problemas.Count -gt 0) { return }
+    $texto = Get-TextoNormalizado $creado
+    foreach ($linea in @('script id 16 nombre "Script 1" ruta "Scripts/script1.lobo"')) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("falta en creado.log: " + $linea)
+        }
+    }
+    if (-not ((Get-Content -LiteralPath $codigo -Raw).Contains("mi.x = mi.x + 2"))) {
+        [void]$problemas.Add("el editor no guardo el codigo del script nuevo")
+    }
+    $texto = Get-TextoNormalizado $creadoTxt
+    foreach ($linea in @("inicio_editor=1 id=16 cursor=16 modificado=0",
+                         "inicio_script=16 ruta=Scripts/script1.lobo",
+                         "inicio_entidades=9 escenas=1 nodos=3 scripts=2 asociaciones=1")) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("falta en el editor: " + $linea)
+        }
+    }
+    Comprobar-Texto "scripts_crear_asociar" ".pixeles" `
+                    (Get-PixelesInicioScripts $creadoBmp) $problemas
+
+    # Script 1 -> ASOCIAR -> nodo Player. Queda fijado el evento fotograma.
+    $salida = Ejecutar-Editor $dir @("--inicio-modelo", "creado.log",
+                                     "--sin-ventanas",
+                                     "--clics", "80,235;947,511;80,147",
+                                     "--inicio-scripts", "volcar_scripts|scripts.txt",
+                                     "--captura", (Join-Path $dir "asoc.bmp"),
+                                     "--volcar-inicio", $asocTxt,
+                                     "--guardar-modelo", "final.log")
+    if ($salida -ne 0) { [void]$problemas.Add("el editor devolvio $salida al asociar") }
+    foreach ($archivo in @($final, $asocTxt, $scriptsTxt)) {
+        if (-not (Test-Path -LiteralPath $archivo)) {
+            [void]$problemas.Add("falta " + (Split-Path -Leaf $archivo))
+        }
+    }
+    if ($problemas.Count -gt 0) { return }
+    $texto = Get-TextoNormalizado $asocTxt
+    foreach ($linea in @("inicio_sel=19",
+                         "inicio_seleccion=asociacion #19",
+                         "inicio_binding=19 script=16 destino=12 evento=fotograma",
+                         "inicio_entidades=10 escenas=1 nodos=3 scripts=2 asociaciones=2")) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("falta tras asociar: " + $linea)
+        }
+    }
+    $texto = Get-TextoNormalizado $scriptsTxt
+    foreach ($linea in @("inicio_scripts=2",
+                         "inicio_script=16 nombre=Script 1 ruta=Scripts/script1.lobo asociaciones=1",
+                         "inicio_asociacion=19 script=16 nodo=12 evento=fotograma")) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("falta en volcar_scripts: " + $linea)
+        }
+    }
+    $texto = Get-TextoNormalizado $final
+    if (-not $texto.Contains('asociar script 16 nodo 12 evento "fotograma"')) {
+        [void]$problemas.Add("el LOG 2 guardado no conserva la asociacion nueva")
+    }
+
+    $salida = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $juegoBmp,
+                                     "--modelo-logic3",
+                                     "final.log|final.logic3|final.diag")
+    if ($salida -ne 0) { [void]$problemas.Add("la conversion devolvio $salida") }
+    if (-not (Test-Path -LiteralPath $logic3) -or
+        -not (Test-Path -LiteralPath $diag)) {
+        [void]$problemas.Add("no se pudo convertir el LOG 2 final")
+        return
+    }
+    if ((Get-Content -LiteralPath $diag -Raw).Trim() -ne "sin errores") {
+        [void]$problemas.Add("el LOG 2 final no valida")
+    }
+    $texto = Get-TextoNormalizado $logic3
+    foreach ($linea in @('campo "codigo" "mi.x = mi.x + 2\n"', 'evento 2 fotograma')) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("falta en LOGIC3: " + $linea)
+        }
+    }
+    $salida = Ejecutar-Motor $dir @("--logic3", "final.logic3",
+                                    "--captura", $juegoBmp, "--traza", $traza,
+                                    "--fotogramas", "3", "--entidades")
+    if ($salida -ne 0) { [void]$problemas.Add("el motor devolvio $salida") }
+    if (-not (Test-Path -LiteralPath $traza)) {
+        [void]$problemas.Add("falta la traza del script creado desde Inicio")
+        return
+    }
+    $texto = Get-TextoNormalizado $traza
+    foreach ($linea in @("vm: 2 scripts", "ent 2 89 80")) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("falta en la traza: " + $linea)
+        }
+    }
+    Comprobar-Texto "scripts_crear_asociar" ".traza.txt" $texto $problemas
+}
+
+Ejecutar-Caso "scripts_editar_compilar" {
+    param($dir, $problemas)
+    $entrada = Join-Path $dir "escena.log"
+    $codigo = Join-Path $dir "Scripts\player.lobo"
+    $invalidoTxt = Join-Path $dir "invalido.txt"
+    $validoTxt = Join-Path $dir "valido.txt"
+    $invalidoBmp = Join-Path $dir "invalido.bmp"
+    New-Item -ItemType Directory -Force -Path (Join-Path $dir "Scripts") | Out-Null
+    Copy-Item (Join-Path $raiz "pruebas\modelo\escena_scripts.log") $entrada
+    Copy-Item (Join-Path $raiz "pruebas\modelo\Scripts\player.lobo") $codigo
+
+    $salida = Ejecutar-Editor $dir @("--inicio-modelo", "escena.log",
+                                     "--sin-ventanas",
+                                     "--clics", "80,213;947,483",
+                                     "--inicio-teclas", '\nzzz\f',
+                                     "--captura", $invalidoBmp,
+                                     "--volcar-inicio", $invalidoTxt)
+    if ($salida -ne 0) { [void]$problemas.Add("el editor devolvio $salida al compilar") }
+    if (-not (Test-Path -LiteralPath $invalidoTxt)) {
+        [void]$problemas.Add("falta el volcado del error")
+        return
+    }
+    $texto = Get-TextoNormalizado $invalidoTxt
+    foreach ($linea in @("inicio_editor=1 id=2",
+                         "codigo_error=3:linea 3: nombre desconocido",
+                         "ultimo=Scripts/player.lobo:3: linea 3: nombre desconocido")) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("falta el mapeo del error: " + $linea)
+        }
+    }
+    if (-not ((Get-Content -LiteralPath $codigo -Raw).Contains("zzz"))) {
+        [void]$problemas.Add("F7 no guardo el codigo con errores")
+    }
+    Comprobar-Texto "scripts_editar_compilar" ".pixeles" `
+                    (Get-PixelesInicioScripts $invalidoBmp) $problemas
+
+    # Cuatro Retrocesos quitan "zzz" y el salto; luego se escribe una linea
+    # valida, se guarda con Ctrl+G y se compila de nuevo.
+    $salida = Ejecutar-Editor $dir @("--inicio-modelo", "escena.log",
+                                     "--sin-ventanas",
+                                     "--clics", "80,213;947,483",
+                                     "--inicio-teclas", '\b\b\b\b\nmi.y = mi.y + 1\s\f',
+                                     "--captura", (Join-Path $dir "valido.bmp"),
+                                     "--volcar-inicio", $validoTxt)
+    if ($salida -ne 0) { [void]$problemas.Add("el editor devolvio $salida al corregir") }
+    if (-not (Test-Path -LiteralPath $validoTxt)) {
+        [void]$problemas.Add("falta el volcado corregido")
+        return
+    }
+    $texto = Get-TextoNormalizado $validoTxt
+    foreach ($linea in @("codigo_error=0:",
+                         "ultimo=Scripts/player.lobo:OK:8")) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("falta la compilacion correcta: " + $linea)
+        }
+    }
+    $codigoTexto = Get-Content -LiteralPath $codigo -Raw
+    foreach ($linea in @("mi.x = mi.x + 1", "mi.y = mi.y + 1")) {
+        if (-not $codigoTexto.Contains($linea)) {
+            [void]$problemas.Add("falta la linea guardada: " + $linea)
+        }
+    }
+}
+
+Ejecutar-Caso "scripts_navegacion" {
+    param($dir, $problemas)
+    $entrada = Join-Path $dir "escena.log"
+    $asocTxt = Join-Path $dir "asoc.txt"
+    $desdeAsoc = Join-Path $dir "desde_asoc.txt"
+    $desdeObjeto = Join-Path $dir "desde_objeto.txt"
+    $inversoTxt = Join-Path $dir "inverso.txt"
+    $scriptsTxt = Join-Path $dir "scripts.txt"
+    $bmp = Join-Path $dir "navegacion.bmp"
+    New-Item -ItemType Directory -Force -Path (Join-Path $dir "Scripts") | Out-Null
+    Copy-Item (Join-Path $raiz "pruebas\modelo\escena_scripts.log") $entrada
+    Copy-Item (Join-Path $raiz "pruebas\modelo\Scripts\player.lobo") `
+              (Join-Path $dir "Scripts\player.lobo")
+
+    $salida = Ejecutar-Editor $dir @("--inicio-modelo", "escena.log",
+                                     "--sin-ventanas",
+                                     "--clics", "80,213;920,405",
+                                     "--captura", (Join-Path $dir "asoc.bmp"),
+                                     "--volcar-inicio", $asocTxt)
+    if ($salida -ne 0) { [void]$problemas.Add("el editor devolvio $salida al seleccionar") }
+    if (-not (Test-Path -LiteralPath $asocTxt)) { return }
+    $texto = Get-TextoNormalizado $asocTxt
+    foreach ($linea in @("inicio_sel=14",
+                         "inicio_seleccion=asociacion #14",
+                         "inicio_binding=14 script=2 destino=12 evento=fotograma")) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("falta la asociacion seleccionada: " + $linea)
+        }
+    }
+
+    $salida = Ejecutar-Editor $dir @("--inicio-modelo", "escena.log",
+                                     "--sin-ventanas",
+                                     "--clics", "80,213;920,405;947,483",
+                                     "--captura", $bmp,
+                                     "--volcar-inicio", $desdeAsoc)
+    if ($salida -ne 0) { [void]$problemas.Add("el editor devolvio $salida al abrir el script") }
+    if (-not (Test-Path -LiteralPath $desdeAsoc)) { return }
+    $texto = Get-TextoNormalizado $desdeAsoc
+    foreach ($linea in @("inicio_sel=2", "inicio_editor=1 id=2",
+                         "inicio_seleccion=script #2")) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("la asociacion no abrio el script: " + $linea)
+        }
+    }
+    Comprobar-Texto "scripts_navegacion" ".pixeles" `
+                    (Get-PixelesInicioScripts $bmp) $problemas
+
+    $salida = Ejecutar-Editor $dir @("--inicio-modelo", "escena.log",
+                                     "--sin-ventanas",
+                                     "--clics", "80,213;920,405;1045,483",
+                                     "--captura", (Join-Path $dir "objeto.bmp"),
+                                     "--volcar-inicio", $desdeObjeto)
+    if ($salida -ne 0) { [void]$problemas.Add("el editor devolvio $salida al abrir el objeto") }
+    if (-not (Test-Path -LiteralPath $desdeObjeto)) { return }
+    $texto = Get-TextoNormalizado $desdeObjeto
+    foreach ($linea in @("inicio_sel=12", "inicio_editor=0 id=0",
+                         "inicio_seleccion=nodo #12")) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("la asociacion no abrio el objeto: " + $linea)
+        }
+    }
+
+    # Camino inverso: objeto -> ASOCIAR -> script; despues se cambia el evento.
+    $salida = Ejecutar-Editor $dir @("--inicio-modelo", "escena.log",
+                                     "--sin-ventanas",
+                                     "--clics", "80,147;947,483;80,213;1143,483",
+                                     "--inicio-scripts", "volcar_scripts|scripts.txt",
+                                     "--captura", (Join-Path $dir "inverso.bmp"),
+                                     "--volcar-inicio", $inversoTxt)
+    if ($salida -ne 0) { [void]$problemas.Add("el editor devolvio $salida al asociar al reves") }
+    foreach ($archivo in @($inversoTxt, $scriptsTxt)) {
+        if (-not (Test-Path -LiteralPath $archivo)) {
+            [void]$problemas.Add("falta " + (Split-Path -Leaf $archivo))
+        }
+    }
+    if ($problemas.Count -gt 0) { return }
+    $texto = Get-TextoNormalizado $inversoTxt
+    foreach ($linea in @("inicio_sel=16",
+                         "inicio_binding=16 script=2 destino=12 evento=inicio",
+                         "inicio_entidades=9 escenas=1 nodos=3 scripts=1 asociaciones=2")) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("falta la asociacion inversa: " + $linea)
+        }
+    }
+    $texto = Get-TextoNormalizado $scriptsTxt
+    if (-not $texto.Contains("inicio_asociacion=16 script=2 nodo=12 evento=inicio")) {
+        [void]$problemas.Add("el evento elegido no llego al volcado")
+    }
+}
 
 Write-Host ""
 if ($script:fallos -eq 0) {
