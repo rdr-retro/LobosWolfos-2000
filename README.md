@@ -933,7 +933,9 @@ el editor sigue respondiendo mientras la ventana está abierta.
 
 Para comparar la vista previa con el ejecutable compilado hay una captura
 determinista sin ventana: `--captura-juego ruta --fotogramas N` guarda un BMP
-que coincide píxel a píxel con `game.exe --captura` para el mismo proyecto.
+que coincide píxel a píxel con `game.exe --captura` cuando ambos abren el
+mismo LOGIC3 con los mismos fotogramas. El caso `preview_captura` verifica
+esa igualdad con el LOGIC3 generado desde el `.log` de ejemplo.
 
 Para flashear la imagen a un pendrive (desde una consola con permisos de
 administrador):

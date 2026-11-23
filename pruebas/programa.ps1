@@ -11,6 +11,7 @@
 #   modelo_recursos valida el PNG del actor y su conexion
 #   modelo_gestor   el .log se ve igual en el lienzo y en el inspector
 #   modelo_logic3   el LOGIC3 generado conserva la traza del .log original
+#   preview_captura preview y motor capturan el mismo fotograma del LOGIC3
 #   opciones_nuevo  el editor crea sistema.opciones en un proyecto nuevo
 #   mapa_solo       mapa sin opciones de jugador: lobo quieto y sin sprite
 #   legacy          sin sistema.opciones: lobo se mueve y el BMP cambia
@@ -433,6 +434,50 @@ Ejecutar-Caso "modelo_logic3" {
         [void]$problemas.Add(
             "el LOGIC3 generado cambio la captura: $hashOriginal / $hashGenerado")
     }
+}
+
+Ejecutar-Caso "preview_captura" {
+    param($dir, $problemas)
+
+    $entrada = Join-Path $dir "entrada.log"
+    $salida = Join-Path $dir "generado.logic3"
+    $ui = Join-Path $dir "ui.bmp"
+    $preview = Join-Path $dir "preview.bmp"
+    $motorBmp = Join-Path $dir "motor.bmp"
+    Copy-Item (Join-Path $raiz "pruebas\modelo\juego_ia.log") $entrada
+
+    # Un solo archivo para las dos vias: el generado por el ProjectModel.
+    $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $ui,
+                                     "--generar-logic3",
+                                     "entrada.log|generado.logic3")
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    if (-not (Test-Path -LiteralPath $salida)) {
+        [void]$problemas.Add("no se genero el LOGIC3 compartido")
+        return
+    }
+
+    # --captura-juego requiere --captura: el BMP de la UI se descarta.
+    $e = Ejecutar-Editor $dir @("--sin-ventanas", "--abrir-logic3", $salida,
+                                "--captura", $ui, "--captura-juego", $preview,
+                                "--fotogramas", "6")
+    $m = Ejecutar-Motor $dir @("--logic3", $salida, "--captura", $motorBmp,
+                               "--fotogramas", "6")
+    if ($e -ne 0 -or $m -ne 0) {
+        [void]$problemas.Add("preview o motor devolvieron $e / $m")
+        return
+    }
+    if (-not (Test-Path -LiteralPath $preview) -or
+        -not (Test-Path -LiteralPath $motorBmp)) {
+        [void]$problemas.Add("falta la captura de preview o de motor")
+        return
+    }
+    $hPreview = Get-Sha256 $preview
+    $hMotor = Get-Sha256 $motorBmp
+    if ($hPreview -ne $hMotor) {
+        [void]$problemas.Add(
+            "preview y motor dibujan distinto: $hPreview / $hMotor")
+    }
+    Comprobar-Hash "preview_captura" $hPreview $problemas
 }
 
 Ejecutar-Caso "opciones_nuevo" {

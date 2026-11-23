@@ -84,10 +84,11 @@ a la suite de conformidad.
 `pruebas\programa` contiene dos LOGIC3 sin CRC: `mapa_solo.logic3` lleva
 `sistema.opciones` con `jugador_implicito=0`, y `legacy.logic3` no lleva la
 pieza. Ambos apuntan al mapa `pruebas/colisiones/fisica.mav` y no tienen
-objetos. La suite comprueba trece cosas: el volcado del `ProjectModel` minimo,
+objetos. La suite comprueba catorce cosas: el volcado del `ProjectModel` minimo,
 la conversion del `.log` de ejemplo, la validacion de recursos del actor,
 que el mismo grafo aparece en el lienzo y en el inspector, que el LOGIC3
-generado conserva la traza del juego, que un proyecto
+generado conserva la traza del juego, que preview y motor capturan el mismo
+fotograma, que un proyecto
 nuevo guarda la
 pieza de opciones, que `mapa_solo` mantiene `lobo 16 16` con `--tecla
 derecha`, que `legacy` mueve el lobo y dibuja un BMP distinto, que
@@ -136,6 +137,14 @@ motor dos veces con las mismas teclas y fotogramas, una sobre el `.log` y otra
 sobre el archivo generado, y exige trazas identicas ademas del mismo hash
 del BMP. Asi se comprueba que el adaptador no cambia el resultado del juego
 ni el escritor canonico.
+
+El caso `preview_captura` cierra el ciclo con el mismo LOGIC3: primero lo
+genera con `--generar-logic3`, despues abre esa ruta en la vista previa con
+`--abrir-logic3 --captura-juego --fotogramas 6` y ejecuta `game.exe` con
+`--logic3 --captura --fotogramas 6`. El BMP de la interfaz que exige
+`--captura` se descarta; se compara el BMP de juego de las dos vias y su hash
+con `preview_captura.bmp.sha256`. Asi queda verificada la igualdad que ya
+documentaba `README.md` sin depender de un ejecutable recompilado a mano.
 
 El caso `entrada_gestor` fija el volcado `programa_modo=1 programa_piezas=0`,
 el hash del BMP y 15 sondas de pixel; la paleta aparece sin resaltar la primera
