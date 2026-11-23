@@ -499,6 +499,114 @@ void programa_cargar_logic2(void) {
     g.programa_modo = 1;
 }
 
+static const PropiedadModelo *modelo_propiedad(const EntidadModelo *e,
+                                               const char *clave) {
+    int i;
+    if (!e || !clave) return NULL;
+    for (i = 0; i < e->num_propiedades; i++)
+        if (strcmp(e->propiedades[i].clave, clave) == 0)
+            return &e->propiedades[i];
+    return NULL;
+}
+
+static const ReferenciaModelo *modelo_referencia(const EntidadModelo *e,
+                                                 const char *nombre) {
+    int i;
+    if (!e || !nombre) return NULL;
+    for (i = 0; i < e->num_referencias; i++)
+        if (strcmp(e->referencias[i].nombre, nombre) == 0)
+            return &e->referencias[i];
+    return NULL;
+}
+
+/* El tipo escrito en el .log gana cuando la paleta lo conoce. Si no existe,
+ * el kind semantico decide la pieza. Las conexiones no son tarjetas: se
+ * convierten en el campo `enlace` de la pieza de origen. */
+static int def_por_entidad(const EntidadModelo *e) {
+    const PropiedadModelo *tipo = modelo_propiedad(e, "tipo");
+    if (tipo && tipo->valor[0]) {
+        int def = def_indice(tipo->valor);
+        if (def >= 0) return def;
+    }
+    switch (e->kind) {
+    case PM_KIND_PROYECTO:
+    case PM_KIND_ESCENA:    return def_indice("sistema.escena");
+    case PM_KIND_ACTOR:     return def_indice("sistema.actor");
+    case PM_KIND_INSTANCIA: return def_indice("sistema.clon");
+    case PM_KIND_CONTROL:   return def_indice("sistema.teclado");
+    case PM_KIND_ACCION:    return def_indice("sistema.accion.movimiento");
+    case PM_KIND_RECURSO:   return def_indice("sistema.recurso.imagen");
+    default:                return -1;
+    }
+}
+
+/* Proyecta el ProjectModel del plan 16.4 sobre el lienzo real. Solo vive en
+ * memoria: no escribe sistema.pieza, no crea actor, jugador ni movimiento y
+ * deja el archivo .log intacto. Cada entidad conserva su ID, su nombre, sus
+ * coordenadas y sus dos campos; cada conexion se convierte en un enlace. */
+void programa_proyectar_modelo(const ProjectModel *m) {
+    int i, j;
+
+    programa_reiniciar();
+    if (!m) {
+        g.programa_modo = 1;
+        return;
+    }
+    for (i = 0; i < m->num_entidades &&
+                g.num_programa_piezas < PROGRAMA_PIEZAS_MAX; i++) {
+        const EntidadModelo *e = &m->entidades[i];
+        const PropiedadModelo *p;
+        PiezaPrograma *pz;
+        int def = def_por_entidad(e);
+
+        if (def < 0) continue;
+        pz = &g.programa_piezas[g.num_programa_piezas++];
+        memset(pz, 0, sizeof(*pz));
+        pz->id = e->id > 0 ? e->id : g.programa_siguiente_id;
+        pz->def = def;
+        pz->x = e->ui.x;
+        pz->y = e->ui.y;
+        if (!pz->x && !pz->y) {
+            int n = g.num_programa_piezas - 1;
+            pz->x = 24 + (n % 3) * 150;
+            pz->y = 40 + (n / 3) * 92;
+        }
+        pz->ancho = PROGRAMA_TARJETA_ANCHO;
+        pz->alto = PROGRAMA_TARJETA_ALTO;
+        copiar_local(pz->nombre, sizeof(pz->nombre), e->nombre);
+        if (!pz->nombre[0])
+            copiar_local(pz->nombre, sizeof(pz->nombre), DEFS[def].nombre);
+        p = modelo_propiedad(e, "enlace");
+        if (p) pz->enlace = atoi(p->valor);
+        for (j = 0; j < m->num_entidades; j++) {
+            const EntidadModelo *c = &m->entidades[j];
+            const ReferenciaModelo *origen = modelo_referencia(c, "origen");
+            const ReferenciaModelo *destino = modelo_referencia(c, "destino");
+            if (c->kind == PM_KIND_CONEXION && origen && destino &&
+                origen->id == pz->id)
+                pz->enlace = destino->id;
+        }
+        if (e->kind == PM_KIND_PROYECTO) {
+            p = modelo_propiedad(e, "ancho");
+            if (p) copiar_local(pz->valor, sizeof(pz->valor), p->valor);
+            p = modelo_propiedad(e, "alto");
+            if (p) copiar_local(pz->valor2, sizeof(pz->valor2), p->valor);
+        } else {
+            p = modelo_propiedad(e, "ruta");
+            if (!p || !p->valor[0]) p = modelo_propiedad(e, "valor");
+            if (p) copiar_local(pz->valor, sizeof(pz->valor), p->valor);
+            else copiar_local(pz->valor, sizeof(pz->valor), DEFS[def].valor[0]);
+            p = modelo_propiedad(e, "valor2");
+            if (p) copiar_local(pz->valor2, sizeof(pz->valor2), p->valor);
+            else copiar_local(pz->valor2, sizeof(pz->valor2), DEFS[def].valor[1]);
+        }
+        if (pz->id >= g.programa_siguiente_id)
+            g.programa_siguiente_id = pz->id + 1;
+    }
+    programa_validar();
+    g.programa_modo = 1;
+}
+
 /* Prepara la vista al entrar al gestor. Sin modelo cargado los contadores
  * arrancan a cero, asi que hay que dejar la seleccion en -1 para que no
  * aparezca resaltada la primera pieza de la paleta. */

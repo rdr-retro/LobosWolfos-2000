@@ -1025,6 +1025,12 @@ procesado en `src\nucleo.c`.
   `--leer-modelo "entrada.log|volcado.txt|diagnostico.txt|recursos.txt"`
   expone la conversion y la validacion en las pruebas; el ultimo campo es
   opcional, no abre ventanas ni modifica archivos de juego.
+  `programa_proyectar_modelo()` muestra ese mismo grafo en el Gestor de
+  logica: cada entidad se convierte en una pieza real del lienzo, cada
+  `conecta` pasa a ser el `enlace` de la pieza de origen y el inspector
+  añade el resumen `grafo: N entidades, C conexiones` con su origen. El flag
+  `--gestor-modelo "entrada.log"` abre esa vista sin escribir LOGIC3 y sin
+  crear actor, jugador ni movimiento.
 - `motor/` — motor egine: núcleo en ensamblador 32 bits (`nucleo32.s`),
   interfaz común (`motor.h`), carga del proyecto (`activo.c`) y `juego.c`
   (`game.exe`).

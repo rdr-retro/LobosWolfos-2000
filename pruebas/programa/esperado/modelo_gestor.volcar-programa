@@ -1,0 +1,7 @@
+programa_modo=1 programa_piezas=6 programa_sel=-1 programa_paleta=-1 programa_grupos=0000000 programa_undo=0 programa_redo=0
+programa_pieza=1:sistema.escena:160,80:0::
+programa_pieza=2:sistema.actor:360,80:3:Jugador:lobo
+programa_pieza=3:sistema.teclado:360,190:4:1:teclado
+programa_pieza=4:sistema.accion.movimiento:360,300:0:derecha:mantener
+programa_pieza=5:sistema.recurso.imagen:540,80:2:tiles/jugador.png:tiles
+programa_pieza=6:sistema.escena:324,132:0:640:360

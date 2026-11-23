@@ -4976,12 +4976,27 @@ static void programa_dibujar_inspector(void) {
     dibujar_rect_z(z, BARRA);
     dibujar_marco_z(z, BARRA_BORDE);
     if (idx < 0 || idx >= g.num_programa_piezas) {
+        int base = 12;
+        if (g.modelo_gestor_activo) {
+            char texto_modelo[96];
+            formatear(texto_modelo, sizeof(texto_modelo),
+                      "grafo: %d entidades, %d conexiones",
+                      g.modelo_gestor_entidades,
+                      g.modelo_gestor_conexiones);
+            texto_recortado(z.x + 10, z.y + 12, texto_modelo,
+                            TEXTO_UI, z.ancho - 20);
+            formatear(texto_modelo, sizeof(texto_modelo), "origen: %s",
+                      g.modelo_gestor_origen);
+            texto_recortado(z.x + 10, z.y + 30, texto_modelo,
+                            SEPARADOR, z.ancho - 20);
+            base = 52;
+        }
         if (g.num_programa_piezas == 0 && g.num_modulos > 0)
             programa_dibujar_elementos_logic2(z);
         else {
-            fuente_dibujar(z.x + 10, z.y + 12,
+            fuente_dibujar(z.x + 10, z.y + base,
                            "Selecciona una pieza del lienzo", TEXTO_UI);
-            fuente_dibujar(z.x + 10, z.y + 30,
+            fuente_dibujar(z.x + 10, z.y + base + 18,
                            "Arrastra desde la paleta o pulsa una pieza",
                            SEPARADOR);
         }

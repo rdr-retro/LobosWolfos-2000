@@ -19,6 +19,7 @@
 #include <stdarg.h>
 
 #include "recurso.h"
+#include "proyecto_modelo.h"
 #include "../motor/lobo.h" /* lenguaje lobo de los botones FUNCIONES */
 
 #ifdef __cplusplus
@@ -1053,6 +1054,14 @@ typedef struct App {
     int programa_snap_x, programa_snap_y;
     int programa_enlace_desde;
 
+    /* Plan 16.4: grafo del .log proyectado en el gestor. Las piezas reales
+     * viven en programa_piezas; aqui solo se guarda el origen del grafo para
+     * que el inspector pueda mostrar el mismo resumen que el lienzo. */
+    int modelo_gestor_activo;
+    int modelo_gestor_entidades;
+    int modelo_gestor_conexiones;
+    char modelo_gestor_origen[MAX_PATH];
+
     /* Modo tiles */
     int modo_tiles;
     int tile_cx, tile_cy;               /* celda del documento activo */
@@ -1622,6 +1631,7 @@ void modulos_insertar_funcion(int x, int y, int funcion);
 void programa_reiniciar(void);
 void programa_cargar_modelo(void);
 void programa_cargar_logic2(void);
+void programa_proyectar_modelo(const ProjectModel *m);
 void programa_guardar_modelo(void *modelo);
 void programa_volcar(const char *ruta);
 int  programa_modo_actual(void);

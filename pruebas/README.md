@@ -84,9 +84,10 @@ a la suite de conformidad.
 `pruebas\programa` contiene dos LOGIC3 sin CRC: `mapa_solo.logic3` lleva
 `sistema.opciones` con `jugador_implicito=0`, y `legacy.logic3` no lleva la
 pieza. Ambos apuntan al mapa `pruebas/colisiones/fisica.mav` y no tienen
-objetos. La suite comprueba once cosas: el volcado del `ProjectModel` minimo,
+objetos. La suite comprueba doce cosas: el volcado del `ProjectModel` minimo,
 la conversion del `.log` de ejemplo, la validacion de recursos del actor,
-que un proyecto nuevo guarda la
+que el mismo grafo aparece en el lienzo y en el inspector, que un proyecto
+nuevo guarda la
 pieza de opciones, que `mapa_solo` mantiene `lobo 16 16` con `--tecla
 derecha`, que `legacy` mueve el lobo y dibuja un BMP distinto, que
 `ui_programa` construye un lienzo con Escenario, Actor y Teclado enlazados,
@@ -117,6 +118,15 @@ Por ultimo cambia `conecta 5 -> 2` por `conecta 5 -> 3` y espera
 `linea 8: actor 2 sin recurso conectado`. La validacion es generica: no nombra
 el proyecto de ejemplo y solo exige que todo recurso exista y que todo actor
 tenga un recurso entrante.
+
+El caso `modelo_gestor` abre `pruebas/modelo/juego_ia.log` con
+`--gestor-modelo` y comprueba que el lienzo y el inspector reciben el mismo
+grafo: seis piezas reales (cinco nodos y la cabecera `proyecto`), los tres
+`conecta` convertidos en `enlace` y los dos campos de cada entidad. El BMP
+fija el color de cada tarjeta y el titulo `INSPECTOR`, que sigue visible; el
+resumen del grafo se dibuja solo cuando hay un modelo activo, asi que los
+casos antiguos no cambian. Sus patrones son `modelo_gestor.volcar-programa`,
+`modelo_gestor.bmp.sha256` y `modelo_gestor.pixeles`.
 
 El caso `entrada_gestor` fija el volcado `programa_modo=1 programa_piezas=0`,
 el hash del BMP y 15 sondas de pixel; la paleta aparece sin resaltar la primera

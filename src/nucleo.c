@@ -2858,6 +2858,42 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 datos_saves_herramienta(carpeta, salida, borrar);
             }
         }
+        /* Plan 16.4: muestra el mismo grafo en el gestor y en el inspector.
+         * --gestor-modelo "entrada.log" solo proyecta en memoria: no guarda
+         * LOGIC3 y no crea actor, jugador ni movimiento. */
+        {
+            char *gm = arg_valor(cmd, "--gestor-modelo");
+            if (gm) {
+                char entrada[MAX_PATH];
+                char diagnostico[PM_ERROR_MAX];
+                ProjectModel *m;
+                int i;
+
+                recortar_texto(entrada, gm, sizeof(entrada));
+                diagnostico[0] = '\0';
+                m = ml_leer(entrada, diagnostico, sizeof(diagnostico));
+                if (m) {
+                    g.modelo_gestor_entidades = m->num_entidades;
+                    g.modelo_gestor_conexiones = 0;
+                    for (i = 0; i < m->num_entidades; i++)
+                        if (m->entidades[i].kind == PM_KIND_CONEXION)
+                            g.modelo_gestor_conexiones++;
+                    recortar_texto(g.modelo_gestor_origen, entrada,
+                                   (int)sizeof(g.modelo_gestor_origen));
+                    g.modelo_gestor_activo = 1;
+                    programa_proyectar_modelo(m);
+                    pm_destruir(m);
+                } else {
+                    g.modelo_gestor_activo = 0;
+                    g.modelo_gestor_entidades = 0;
+                    g.modelo_gestor_conexiones = 0;
+                    g.modelo_gestor_origen[0] = '\0';
+                    programa_reiniciar();
+                }
+                g.vista = VISTA_MODULOS;
+                g.programa_modo = 1;
+            }
+        }
         /* Fase 47: volcado propio del constructor, con flag nuevo para no
          * alterar ninguna suite anterior. */
         {

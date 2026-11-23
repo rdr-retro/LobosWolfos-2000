@@ -9,6 +9,7 @@
 #   modelo_minimo   vuelca el ProjectModel con los siete tipos y dos enlaces
 #   modelo_desde_log lee el .log de ejemplo y vuelca el grafo convertido
 #   modelo_recursos valida el PNG del actor y su conexion
+#   modelo_gestor   el .log se ve igual en el lienzo y en el inspector
 #   opciones_nuevo  el editor crea sistema.opciones en un proyecto nuevo
 #   mapa_solo       mapa sin opciones de jugador: lobo quieto y sin sprite
 #   legacy          sin sistema.opciones: lobo se mueve y el BMP cambia
@@ -120,6 +121,26 @@ function Get-PixelesElementosLogic2([string]$bmp) {
         $puntos = @("921,68", "930,94", "190,92", "200,110", "310,115",
                     "250,150", "340,92", "350,110", "460,115", "400,150",
                     "500,110")
+        $salida = @()
+        foreach ($punto in $puntos) {
+            $xy = $punto.Split(",")
+            $color = $imagen.GetPixel([int]$xy[0], [int]$xy[1])
+            $salida += ("{0}={1:X2}{2:X2}{3:X2}" -f $punto, $color.R,
+                        $color.G, $color.B)
+        }
+        return ($salida -join " ")
+    } finally {
+        $imagen.Dispose()
+    }
+}
+
+# Sondas del gestor con un ProjectModel activo: titulo del inspector, panel
+# derecho, resumen del grafo y una tarjeta por cada entidad no conexion.
+function Get-PixelesModeloGestor([string]$bmp) {
+    $imagen = [System.Drawing.Bitmap]::FromFile($bmp)
+    try {
+        $puntos = @("921,68", "930,94", "500,202", "336,150",
+                    "536,150", "536,260", "536,370", "716,150")
         $salida = @()
         foreach ($punto in $puntos) {
             $xy = $punto.Split(",")
@@ -316,6 +337,43 @@ Ejecutar-Caso "modelo_recursos" {
     $texto_desconectado = Get-TextoNormalizado $desconectado
     if (-not $texto_desconectado.Contains("linea 8: actor 2 sin recurso conectado")) {
         [void]$problemas.Add("no se diagnostico el actor sin recurso")
+    }
+}
+
+Ejecutar-Caso "modelo_gestor" {
+    param($dir, $problemas)
+    $entrada = Join-Path $dir "entrada.log"
+    $bmp = Join-Path $dir "grafo.bmp"
+    $vpr = Join-Path $dir "grafo_ui.txt"
+    Copy-Item (Join-Path $raiz "pruebas\modelo\juego_ia.log") $entrada
+    $codigo = Ejecutar-Editor $dir @("--gestor-modelo", "entrada.log",
+                                     "--sin-ventanas", "--captura", $bmp,
+                                     "--volcar-programa", $vpr)
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    foreach ($archivo in @($bmp, $vpr)) {
+        if (-not (Test-Path -LiteralPath $archivo)) {
+            [void]$problemas.Add("falta " + (Split-Path -Leaf $archivo))
+        }
+    }
+    if ($problemas.Count -gt 0) { return }
+    $ui = Get-TextoNormalizado $vpr
+    Comprobar-Texto "modelo_gestor" ".volcar-programa" $ui $problemas
+    Comprobar-Hash "modelo_gestor" (Get-Sha256 $bmp) $problemas
+    Comprobar-Texto "modelo_gestor" ".pixeles" `
+                    (Get-PixelesModeloGestor $bmp) $problemas
+    if ($ui -notlike "programa_modo=1 programa_piezas=6*") {
+        [void]$problemas.Add("el .log no projecto seis piezas reales")
+    }
+    foreach ($pieza in @(
+        "programa_pieza=1:sistema.escena:160,80:0::",
+        "programa_pieza=2:sistema.actor:360,80:3:Jugador:lobo",
+        "programa_pieza=3:sistema.teclado:360,190:4:1:teclado",
+        "programa_pieza=4:sistema.accion.movimiento:360,300:0:derecha:mantener",
+        "programa_pieza=5:sistema.recurso.imagen:540,80:2:tiles/jugador.png:tiles",
+        "programa_pieza=6:sistema.escena:324,132:0:640:360")) {
+        if (-not $ui.Contains($pieza)) {
+            [void]$problemas.Add("falta en el volcado: " + $pieza)
+        }
     }
 }
 
