@@ -1005,6 +1005,37 @@ procesado en `src\nucleo.c`.
 | `Enter` | Confirmar la acción en curso |
 | `Supr` | Borrar la selección |
 
+## Contrato del ProjectModel
+
+`pruebas/modelo/juego_ia.log` es el fixture de esta entrega: un `.log` de
+ejemplo con cabecera LOGIC3 y una sección `montaje` de cinco nodos y tres
+`conecta`. El contrato que fijan las pruebas es:
+
+1. `src/proyecto_modelo.h` expone entidades con ID estable, tipo semántico,
+   nombre, propiedades, referencias por ID, estado de UI, origen con archivo y
+   línea, y conexiones con puertos. Los IDs no se reciclan y las vistas guardan
+   IDs, nunca punteros.
+2. `--leer-modelo "entrada.log|volcado.txt|diagnostico.txt|recursos.txt"`
+   convierte ese fixture sin tocar los lectores de LOGIC3 ni crear actor,
+   jugador o movimiento en el juego.
+3. `pm_validar_recursos()` exige que cada recurso tenga archivo y que cada
+   actor reciba uno por conexión. La orden
+   `--diagnostico-json "entrada.log|salida.json"` emite lo mismo como JSON con
+   `version`, `proyecto`, `estado`, `total` y `errores[]`; cada error trae
+   `codigo`, `linea`, `id_entidad`, `nombre` y, cuando aplica, `ruta`.
+4. `--gestor-modelo "entrada.log"` proyecta el grafo en piezas reales del
+   lienzo y en el inspector sin escribir LOGIC3.
+5. `--generar-logic3 "entrada.log|salida.logic3"` delega en
+   `logic3_guardar()`, así que el formato y el CRC no cambian. El caso
+   `modelo_logic3` exige la misma traza y el mismo BMP que el `.log`.
+6. La orden `--captura-juego ruta --fotogramas N` de la vista previa y la
+   orden `--captura ruta --fotogramas N` de `game.exe` producen el mismo BMP
+   para el LOGIC3 generado; el caso `preview_captura` lo comprueba.
+
+Las comprobaciones están en `pruebas/programa.ps1` y sus patrones en
+`pruebas/programa/esperado/`. Ninguno de estos flags modifica el archivo de
+entrada ni desplaza los índices de menú (`ARCHIVO=1`, `MODO=2`, `AYUDA=9`).
+
 ## Estructura
 
 - `src/` — código fuente C y recursos de la interfaz. `src/compilar.c` es el
