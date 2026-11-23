@@ -3,6 +3,7 @@
  * ========================================================================== */
 #include "app.h"
 #include "logic3.h"
+#include "proyecto_modelo.h"
 
 App g;
 
@@ -66,6 +67,81 @@ int termina_con(const char *texto, const char *sufijo) {
     b = strlen(sufijo);
     if (b > a) return 0;
     return _stricmp(texto + a - b, sufijo) == 0;
+}
+
+/* Fixture en memoria del contrato del plan 16.1. Solo se construye cuando
+ * el CLI pide --volcar-modelo: no abre ventanas, no lee .log y no toca
+ * LOGIC3. Las pruebas comparan el volcado determinista de este grafo. */
+static void volcar_modelo_minimo(const char *ruta) {
+    ProjectModel *m = pm_crear();
+    EntidadModelo *e;
+    int id_proyecto, id_imagen, id_mapa, id_escena;
+    int id_actor, id_instancia, id_control, id_conexion;
+    char diagnostico[PM_ERROR_MAX];
+
+    if (!m) return;
+
+    id_proyecto = pm_anadir(m, PM_KIND_PROYECTO, "Primer juego");
+    e = pm_entidad(m, id_proyecto);
+    pm_origen(e, "ejemplos/juego_ia.log", 2);
+    pm_ui(e, 20, 20, 180, 40, 0, 0x003278E0u, 0);
+    pm_propiedad(e, "ancho", "640", 2);
+    pm_propiedad(e, "alto", "480", 2);
+    pm_propiedad(e, "fps", "60", 2);
+    pm_propiedad(e, "fondo", "#102030", 2);
+
+    id_imagen = pm_anadir_con_id(m, 10, PM_KIND_RECURSO, "Jugador");
+    e = pm_entidad(m, id_imagen);
+    pm_origen(e, "ejemplos/juego_ia.log", 5);
+    pm_propiedad(e, "tipo", "imagen", 5);
+    pm_propiedad(e, "ruta", "tiles/jugador.png", 5);
+    pm_propiedad(e, "origen", "pintado", 5);
+
+    id_mapa = pm_anadir_con_id(m, 11, PM_KIND_RECURSO, "Pradera");
+    e = pm_entidad(m, id_mapa);
+    pm_origen(e, "ejemplos/juego_ia.log", 6);
+    pm_propiedad(e, "tipo", "mapa", 6);
+    pm_propiedad(e, "ruta", "maps/pradera.mav", 6);
+
+    id_escena = pm_anadir_con_id(m, 20, PM_KIND_ESCENA, "Nivel 1");
+    e = pm_entidad(m, id_escena);
+    pm_origen(e, "ejemplos/juego_ia.log", 8);
+    pm_ui(e, 20, 40, 180, 48, 0, 0x003278E0u, 0);
+    pm_referencia(e, "mapa", id_mapa, "maps/pradera.mav", 8);
+    pm_propiedad(e, "inicial", "1", 8);
+
+    id_actor = pm_anadir_con_id(m, 21, PM_KIND_ACTOR, "Jugador");
+    e = pm_entidad(m, id_actor);
+    pm_origen(e, "ejemplos/juego_ia.log", 9);
+    pm_referencia(e, "recurso", id_imagen, "tiles/jugador.png", 9);
+    pm_propiedad(e, "visible", "1", 9);
+
+    id_instancia = pm_anadir_con_id(m, 22, PM_KIND_INSTANCIA, "Jugador en Nivel 1");
+    e = pm_entidad(m, id_instancia);
+    pm_origen(e, "ejemplos/juego_ia.log", 10);
+    pm_referencia(e, "actor", id_actor, NULL, 10);
+    pm_referencia(e, "escena", id_escena, NULL, 10);
+    pm_propiedad(e, "x", "80", 10);
+    pm_propiedad(e, "y", "80", 10);
+    pm_propiedad(e, "capa", "10", 10);
+
+    id_control = pm_anadir_con_id(m, 23, PM_KIND_CONTROL, "Jugador 1");
+    e = pm_entidad(m, id_control);
+    pm_origen(e, "ejemplos/juego_ia.log", 11);
+    pm_ui(e, 20, 118, 180, 48, 0, 0x003278E0u, 0);
+    pm_referencia(e, "instancia", id_instancia, NULL, 11);
+    pm_propiedad(e, "dispositivo", "teclado", 11);
+    pm_propiedad(e, "teclas", "derecha", 11);
+
+    id_conexion = pm_conectar(m, id_imagen, "salida", id_actor, "textura", 12);
+    pm_origen(pm_entidad(m, id_conexion), "ejemplos/juego_ia.log", 12);
+    id_conexion = pm_conectar(m, id_control, "salida", id_instancia,
+                              "movimiento", 13);
+    pm_origen(pm_entidad(m, id_conexion), "ejemplos/juego_ia.log", 13);
+
+    pm_validar(m, diagnostico, sizeof(diagnostico));
+    pm_volcar(m, ruta);
+    pm_destruir(m);
 }
 
 void ruta_carpeta(char *dst, int tam, const char *ruta) {
@@ -2777,6 +2853,15 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 char ruta[MAX_PATH];
                 recortar_texto(ruta, vpr, sizeof(ruta));
                 programa_volcar(ruta);
+            }
+        }
+        /* Contrato del ProjectModel del plan 16.1, sin tocar ninguna vista. */
+        {
+            char *vm = arg_valor(cmd, "--volcar-modelo");
+            if (vm) {
+                char ruta[MAX_PATH];
+                recortar_texto(ruta, vm, sizeof(ruta));
+                volcar_modelo_minimo(ruta);
             }
         }
         /* Vuelca el lobo generado (fase 33) como texto plano. */

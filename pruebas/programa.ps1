@@ -6,6 +6,7 @@
 # paleta, tarjetas, enlaces e inspector dentro del gestor.
 #
 # Casos:
+#   modelo_minimo   vuelca el ProjectModel con los siete tipos y dos enlaces
 #   opciones_nuevo  el editor crea sistema.opciones en un proyecto nuevo
 #   mapa_solo       mapa sin opciones de jugador: lobo quieto y sin sprite
 #   legacy          sin sistema.opciones: lobo se mueve y el BMP cambia
@@ -179,6 +180,40 @@ function Ejecutar-Caso([string]$nombre, [scriptblock]$cuerpo) {
         Write-Host ("  [{0,3}] {1,-15} FALLA" -f $script:indice, $nombre) -ForegroundColor Red
         foreach ($p in $problemas) {
             Write-Host ("        - {0}" -f $p) -ForegroundColor Red
+        }
+    }
+}
+
+Ejecutar-Caso "modelo_minimo" {
+    param($dir, $problemas)
+    $volcado = Join-Path $dir "modelo.txt"
+    $bmp = Join-Path $dir "modelo.bmp"
+    $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $bmp,
+                                     "--volcar-modelo", $volcado)
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    if (-not (Test-Path -LiteralPath $volcado)) {
+        [void]$problemas.Add("falta el volcado del ProjectModel")
+        return
+    }
+    $texto = Get-TextoNormalizado $volcado
+    Comprobar-Texto "modelo_minimo" ".volcar" $texto $problemas
+    foreach ($linea in @(
+        "proyecto_modelo entidades=9 conexiones=2 validacion=0 diagnostico=sin_errores",
+        "entidad=1:proyecto:Primer_juego:origen=ejemplos/juego_ia.log:2:",
+        "entidad=10:recurso:Jugador:origen=ejemplos/juego_ia.log:5:",
+        "entidad=11:recurso:Pradera:origen=ejemplos/juego_ia.log:6:",
+        "entidad=20:escena:Nivel_1:origen=ejemplos/juego_ia.log:8:",
+        "entidad=21:actor:Jugador:origen=ejemplos/juego_ia.log:9:",
+        "entidad=22:instancia:Jugador_en_Nivel_1:origen=ejemplos/juego_ia.log:10:",
+        "entidad=23:control:Jugador_1:origen=ejemplos/juego_ia.log:11:",
+        "entidad=24:conexion:conexion_24:origen=ejemplos/juego_ia.log:12:",
+        "entidad=25:conexion:conexion_25:origen=ejemplos/juego_ia.log:13:",
+        "referencia=21:recurso:10:tiles/jugador.png:9",
+        "referencia=20:mapa:11:maps/pradera.mav:8",
+        "conexion=24:10:salida:21:textura:12",
+        "conexion=25:23:salida:22:movimiento:13")) {
+        if (-not $texto.Contains($linea)) {
+            [void]$problemas.Add("falta en el volcado: " + $linea)
         }
     }
 }

@@ -1014,6 +1014,10 @@ procesado en `src\nucleo.c`.
   juego de ejemplo y su guía (menú AYUDA), `src/estudio.c` y
   `src/estudio_ui.c` la vista Estudio y `src/bloques.c` y
   `src/bloques_ui.c` el modelo y el dibujo del lienzo de bloques.
+  `src/proyecto_modelo.c` y `src/proyecto_modelo.h` definen el contrato minimo
+  del `ProjectModel` del plan: entidades con ID estable, propiedades,
+  referencias, estado de UI, origen y conexiones con puertos. Todavia no lee
+  `.log`, no dibuja y no escribe LOGIC3.
 - `motor/` — motor egine: núcleo en ensamblador 32 bits (`nucleo32.s`),
   interfaz común (`motor.h`), carga del proyecto (`activo.c`) y `juego.c`
   (`game.exe`).

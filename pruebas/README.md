@@ -84,7 +84,8 @@ a la suite de conformidad.
 `pruebas\programa` contiene dos LOGIC3 sin CRC: `mapa_solo.logic3` lleva
 `sistema.opciones` con `jugador_implicito=0`, y `legacy.logic3` no lleva la
 pieza. Ambos apuntan al mapa `pruebas/colisiones/fisica.mav` y no tienen
-objetos. La suite comprueba ocho cosas: que un proyecto nuevo guarda la
+objetos. La suite comprueba nueve cosas: el volcado del `ProjectModel` minimo,
+que un proyecto nuevo guarda la
 pieza de opciones, que `mapa_solo` mantiene `lobo 16 16` con `--tecla
 derecha`, que `legacy` mueve el lobo y dibuja un BMP distinto, que
 `ui_programa` construye un lienzo con Escenario, Actor y Teclado enlazados,
@@ -93,6 +94,12 @@ que `entrada_gestor` abre el constructor con `--gestor` sin `--programa`, que
 del lienzo, que `menu_tras_piezas` recarga ese LOGIC2 por la ruta del menú
 después de un LOGIC3 con piezas, y que `arrastre_gestor` crea una pieza desde
 esa entrada normal.
+
+El caso `modelo_minimo` usa `--volcar-modelo` para construir en memoria un
+grafo con proyecto, dos recursos, escena, actor, instancia, control y dos
+conexiones con puertos. No lee `.log`, no dibuja y no escribe LOGIC3. Su unico
+patron es `modelo_minimo.volcar`, que fija IDs, nombres, origen, estado de UI,
+referencias, puertos y un diagnostico `sin_errores`.
 
 El caso `entrada_gestor` fija el volcado `programa_modo=1 programa_piezas=0`,
 el hash del BMP y 15 sondas de pixel; la paleta aparece sin resaltar la primera
