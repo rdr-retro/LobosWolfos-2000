@@ -274,6 +274,88 @@ int pm_validar(const ProjectModel *m, char *diagnostico, size_t longitud) {
     return fallos;
 }
 
+static const ReferenciaModelo *buscar_referencia(const EntidadModelo *e,
+                                                 const char *nombre) {
+    int i;
+    if (!e || !nombre) return NULL;
+    for (i = 0; i < e->num_referencias; i++)
+        if (strcmp(e->referencias[i].nombre, nombre) == 0)
+            return &e->referencias[i];
+    return NULL;
+}
+
+/* Un actor queda conectado cuando alguna conexion tiene como origen un
+ * recurso y como destino ese actor. No se mira el nombre del recurso. */
+static int actor_con_recurso(const ProjectModel *m, int id_actor) {
+    const EntidadModelo *c;
+    const ReferenciaModelo *origen, *destino;
+    const EntidadModelo *recurso;
+    int i;
+    if (!m) return 0;
+    for (i = 0; i < m->num_entidades; i++) {
+        c = &m->entidades[i];
+        if (c->kind != PM_KIND_CONEXION) continue;
+        origen = buscar_referencia(c, "origen");
+        destino = buscar_referencia(c, "destino");
+        if (!origen || !destino || destino->id != id_actor) continue;
+        recurso = pm_entidad_const(m, origen->id);
+        if (recurso && recurso->kind == PM_KIND_RECURSO) return 1;
+    }
+    return 0;
+}
+
+int pm_validar_recursos(const ProjectModel *m, const char *raiz,
+                        char *diagnostico, size_t longitud) {
+    const EntidadModelo *e;
+    const PropiedadModelo *p;
+    char primera[PM_ERROR_MAX];
+    char buf[PM_ERROR_MAX];
+    char ruta[PM_RUTA_MAX * 2 + 4];
+    FILE *f;
+    int fallos = 0;
+    int i;
+
+    primera[0] = '\0';
+    if (!m) {
+        anotar_fallo(primera, sizeof(primera), &fallos, "sin modelo");
+    } else {
+        for (i = 0; i < m->num_entidades; i++) {
+            e = &m->entidades[i];
+            if (e->kind == PM_KIND_RECURSO) {
+                p = buscar_propiedad(e, "ruta");
+                if (!p || !p->valor[0]) {
+                    snprintf(buf, sizeof(buf), "linea %d: recurso %d sin ruta",
+                             e->origen.linea, e->id);
+                    anotar_fallo(primera, sizeof(primera), &fallos, buf);
+                    continue;
+                }
+                if (raiz && raiz[0])
+                    snprintf(ruta, sizeof(ruta), "%s/%s", raiz, p->valor);
+                else
+                    copiar_seguro(ruta, sizeof(ruta), p->valor);
+                f = fopen(ruta, "rb");
+                if (f) fclose(f);
+                else {
+                    snprintf(buf, sizeof(buf),
+                             "linea %d: recurso %d sin archivo: %s",
+                             p->linea, e->id, p->valor);
+                    anotar_fallo(primera, sizeof(primera), &fallos, buf);
+                }
+            } else if (e->kind == PM_KIND_ACTOR) {
+                if (!actor_con_recurso(m, e->id)) {
+                    snprintf(buf, sizeof(buf),
+                             "linea %d: actor %d sin recurso conectado",
+                             e->origen.linea, e->id);
+                    anotar_fallo(primera, sizeof(primera), &fallos, buf);
+                }
+            }
+        }
+    }
+    if (diagnostico && longitud > 0)
+        copiar_seguro(diagnostico, longitud, fallos ? primera : "sin errores");
+    return fallos;
+}
+
 void pm_volcar(const ProjectModel *m, const char *ruta) {
     FILE *f;
     char nombre[PM_NOMBRE_MAX];

@@ -8,6 +8,7 @@
 # Casos:
 #   modelo_minimo   vuelca el ProjectModel con los siete tipos y dos enlaces
 #   modelo_desde_log lee el .log de ejemplo y vuelca el grafo convertido
+#   modelo_recursos valida el PNG del actor y su conexion
 #   opciones_nuevo  el editor crea sistema.opciones en un proyecto nuevo
 #   mapa_solo       mapa sin opciones de jugador: lobo quieto y sin sprite
 #   legacy          sin sistema.opciones: lobo se mueve y el BMP cambia
@@ -269,6 +270,52 @@ Ejecutar-Caso "modelo_desde_log" {
     $texto_roto = Get-TextoNormalizado $diag_roto
     if (-not $texto_roto.Contains("linea 13: conecta referencia un nodo inexistente")) {
         [void]$problemas.Add("falta el diagnostico con numero de linea")
+    }
+}
+
+Ejecutar-Caso "modelo_recursos" {
+    param($dir, $problemas)
+    $entrada = Join-Path $dir "entrada.log"
+    $bmp = Join-Path $dir "recursos.bmp"
+    $tiles = Join-Path $dir "tiles"
+    $png = Join-Path $tiles "jugador.png"
+    Copy-Item (Join-Path $raiz "pruebas\modelo\juego_ia.log") $entrada
+    if (-not (Test-Path -LiteralPath $tiles)) {
+        [void](New-Item -ItemType Directory -Path $tiles)
+    }
+    [void](New-Item -ItemType File -Path $png -Force)
+    $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $bmp,
+                                     "--leer-modelo",
+                                     "entrada.log|modelo.txt|estructura.txt|recursos.txt")
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    $ok = Join-Path $dir "recursos.txt"
+    if (-not (Test-Path -LiteralPath $ok)) {
+        [void]$problemas.Add("falta el diagnostico de recursos")
+        return
+    }
+    Comprobar-Texto "modelo_recursos" ".recursos" `
+                    (Get-TextoNormalizado $ok) $problemas
+
+    Remove-Item -LiteralPath $png
+    $falta = Join-Path $dir "falta.txt"
+    [void](Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $bmp,
+                                  "--leer-modelo",
+                                  "entrada.log|modelo.txt|estructura.txt|falta.txt"))
+    $texto_falta = Get-TextoNormalizado $falta
+    if (-not $texto_falta.Contains("linea 11: recurso 5 sin archivo: tiles/jugador.png")) {
+        [void]$problemas.Add("no se diagnostico el PNG ausente")
+    }
+
+    [void](New-Item -ItemType File -Path $png -Force)
+    $sin_enlace = Join-Path $dir "sin_enlace.log"
+    (Get-Content -LiteralPath $entrada) -replace 'conecta 5 -> 2', 'conecta 5 -> 3' | Set-Content -LiteralPath $sin_enlace
+    $desconectado = Join-Path $dir "desconectado.txt"
+    [void](Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $bmp,
+                                  "--leer-modelo",
+                                  "sin_enlace.log|modelo.txt|estructura.txt|desconectado.txt"))
+    $texto_desconectado = Get-TextoNormalizado $desconectado
+    if (-not $texto_desconectado.Contains("linea 8: actor 2 sin recurso conectado")) {
+        [void]$problemas.Add("no se diagnostico el actor sin recurso")
     }
 }
 

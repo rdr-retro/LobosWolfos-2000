@@ -2877,15 +2877,19 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 volcar_modelo_minimo(ruta);
             }
         }
-        /* Plan 16.2: convierte el .log de ejemplo al ProjectModel.
-         * --leer-modelo "entrada.log|volcado.txt|diagnostico.txt" */
+        /* Plan 16.2 y 16.3: convierte el .log al ProjectModel y valida
+         * recursos. El ultimo campo es opcional:
+         * --leer-modelo "entrada.log|volcado.txt|diagnostico.txt|recursos.txt" */
         {
             char *lm = arg_valor(cmd, "--leer-modelo");
             if (lm) {
                 char entrada[MAX_PATH];
                 char volcado[MAX_PATH];
                 char ruta_diag[MAX_PATH];
+                char ruta_recursos[MAX_PATH];
+                char raiz[MAX_PATH];
                 char diagnostico[PM_ERROR_MAX];
+                char recursos_diag[PM_ERROR_MAX];
                 const char *p = lm;
                 ProjectModel *m;
                 FILE *df;
@@ -2893,10 +2897,22 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 tramo_flag_modelo(entrada, (int)sizeof(entrada), &p);
                 tramo_flag_modelo(volcado, (int)sizeof(volcado), &p);
                 tramo_flag_modelo(ruta_diag, (int)sizeof(ruta_diag), &p);
+                tramo_flag_modelo(ruta_recursos, (int)sizeof(ruta_recursos), &p);
                 diagnostico[0] = '\0';
                 m = ml_leer(entrada, diagnostico, sizeof(diagnostico));
                 if (m) {
                     pm_volcar(m, volcado);
+                    if (ruta_recursos[0]) {
+                        ruta_carpeta(raiz, (int)sizeof(raiz), entrada);
+                        if (!raiz[0]) strcpy(raiz, ".");
+                        pm_validar_recursos(m, raiz, recursos_diag,
+                                            sizeof(recursos_diag));
+                        if ((df = fopen(ruta_recursos, "w")) != NULL) {
+                            fputs(recursos_diag, df);
+                            fputc('\n', df);
+                            fclose(df);
+                        }
+                    }
                     pm_destruir(m);
                 }
                 if (ruta_diag[0] && (df = fopen(ruta_diag, "w")) != NULL) {

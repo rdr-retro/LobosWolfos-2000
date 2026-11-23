@@ -1019,9 +1019,12 @@ procesado en `src\nucleo.c`.
   referencias, estado de UI, origen y conexiones con puertos. No dibuja ni
   escribe LOGIC3. `src/modelo_log.c` y `src/modelo_log.h` leen el `.log` de
   ejemplo con seccion `montaje` y lo convierten a ese modelo sin tocar los
-  lectores de LOGIC3. El flag `--leer-modelo "entrada.log|volcado.txt|diagnostico.txt"`
-  expone la conversion en las pruebas; no abre ventanas ni modifica archivos
-  de juego.
+  lectores de LOGIC3. `pm_validar_recursos()` comprueba en disco cada recurso
+  y que cada actor recibe un recurso por una conexion, sin tratar el ejemplo
+  como un caso especial. El flag
+  `--leer-modelo "entrada.log|volcado.txt|diagnostico.txt|recursos.txt"`
+  expone la conversion y la validacion en las pruebas; el ultimo campo es
+  opcional, no abre ventanas ni modifica archivos de juego.
 - `motor/` — motor egine: núcleo en ensamblador 32 bits (`nucleo32.s`),
   interfaz común (`motor.h`), carga del proyecto (`activo.c`) y `juego.c`
   (`game.exe`).

@@ -97,6 +97,12 @@ void pm_ui(EntidadModelo *e, int x, int y, int ancho, int alto, int grupo,
 int pm_conectar(ProjectModel *m, int origen, const char *puerto_origen,
                 int destino, const char *puerto_destino, int linea);
 int pm_validar(const ProjectModel *m, char *diagnostico, size_t longitud);
+/* Comprueba en disco cada recurso y que cada actor recibe un recurso por
+ * una conexion. `raiz` es la carpeta del proyecto; NULL o "" usa la actual.
+ * Es una validacion distinta de pm_validar porque no depende de los archivos
+ * presentes y puede ejecutarse antes de que existan los recursos. */
+int pm_validar_recursos(const ProjectModel *m, const char *raiz,
+                        char *diagnostico, size_t longitud);
 void pm_volcar(const ProjectModel *m, const char *ruta);
 const char *pm_kind_nombre(int kind);
 

@@ -84,8 +84,9 @@ a la suite de conformidad.
 `pruebas\programa` contiene dos LOGIC3 sin CRC: `mapa_solo.logic3` lleva
 `sistema.opciones` con `jugador_implicito=0`, y `legacy.logic3` no lleva la
 pieza. Ambos apuntan al mapa `pruebas/colisiones/fisica.mav` y no tienen
-objetos. La suite comprueba diez cosas: el volcado del `ProjectModel` minimo,
-la conversion del `.log` de ejemplo, que un proyecto nuevo guarda la
+objetos. La suite comprueba once cosas: el volcado del `ProjectModel` minimo,
+la conversion del `.log` de ejemplo, la validacion de recursos del actor,
+que un proyecto nuevo guarda la
 pieza de opciones, que `mapa_solo` mantiene `lobo 16 16` con `--tecla
 derecha`, que `legacy` mueve el lobo y dibuja un BMP distinto, que
 `ui_programa` construye un lienzo con Escenario, Actor y Teclado enlazados,
@@ -108,6 +109,14 @@ que la ruta `tiles/jugador.png` se construye con la carpeta del nodo, que los
 tres `conecta` se vuelven conexiones con puertos y que el diagnostico es
 `sin errores`. Despues rompe un enlace y comprueba que no se escribe volcado y
 que el diagnostico senala `linea 13`.
+
+El caso `modelo_recursos` crea un `tiles/jugador.png` vacio en el directorio
+del caso y comprueba que `pm_validar_recursos()` no informa fallos. Luego
+borra el PNG y espera `linea 11: recurso 5 sin archivo: tiles/jugador.png`.
+Por ultimo cambia `conecta 5 -> 2` por `conecta 5 -> 3` y espera
+`linea 8: actor 2 sin recurso conectado`. La validacion es generica: no nombra
+el proyecto de ejemplo y solo exige que todo recurso exista y que todo actor
+tenga un recurso entrante.
 
 El caso `entrada_gestor` fija el volcado `programa_modo=1 programa_piezas=0`,
 el hash del BMP y 15 sondas de pixel; la paleta aparece sin resaltar la primera
