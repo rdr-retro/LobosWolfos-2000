@@ -63,6 +63,9 @@ function Normalizar-Perfil([string]$ruta) {
                           "excedido en el fotograma `$1 <us> us")
     $t = [regex]::Replace($t, "(?m)^memoria: blob \d+", "memoria: blob <blob>")
     $t = [regex]::Replace($t, "runtime \d+", "runtime <runtime>")
+    # El numero de avisos depende del tiempo real de cada fotograma.
+    $t = [regex]::Replace($t, "(?m)^(perfil: presupuesto \d+ avisos) \d+",
+                          "`$1 <avisos>")
     $t = [regex]::Replace($t, "imagenes \d+", "imagenes <bytes>")
     return $t
 }

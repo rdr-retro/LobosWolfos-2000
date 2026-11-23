@@ -19,6 +19,7 @@
 #include "../motor/entrada.h"
 #include "../motor/logic3_motor.h"
 #include "../motor/programa.h"
+#include "../motor/entidades.h"
 
 #define JV_ANCHO      640
 #define JV_ALTO       480
@@ -86,6 +87,136 @@ static void jv_sprite_crear(void) {
             g_sprite[py * JV_SPRITE_LADO + px] = c;
         }
     }
+}
+
+/* ------------------------------------------------------------------ */
+/* Runtime Programa: entidades y dibujo comun con game.exe             */
+/* ------------------------------------------------------------------ */
+
+/* Los proyectos con Actor + Teclado no usan el lobito procedural: el
+ * runtime comparte las entidades de LOGIC3 con game.exe y las pinta igual. */
+static const unsigned char jv_digitos[10][5] = {
+    {7, 5, 5, 5, 7}, {2, 6, 2, 2, 7}, {7, 1, 7, 4, 7}, {7, 1, 7, 1, 7},
+    {5, 5, 7, 1, 1}, {7, 4, 7, 1, 7}, {7, 4, 7, 5, 7}, {7, 1, 1, 2, 2},
+    {7, 5, 5, 5, 7}, {5, 5, 7, 1, 1}
+};
+
+static void jv_rellenar_rect(int x, int y, int w, int h, u32 color) {
+    int i, j;
+    for (j = 0; j < h; j++) {
+        int py = y + j;
+        if (py < 0 || py >= jv_alto) continue;
+        for (i = 0; i < w; i++) {
+            int px = x + i;
+            if (px < 0 || px >= jv_ancho) continue;
+            g_fb[py * jv_ancho + px] = color;
+        }
+    }
+}
+
+static void jv_dibujar_digito(int x, int y, int d) {
+    int fy, fx;
+    if (d < 0 || d > 9) return;
+    for (fy = 0; fy < 5; fy++)
+        for (fx = 0; fx < 3; fx++)
+            if (jv_digitos[d][fy] & (1 << (2 - fx)))
+                jv_rellenar_rect(x + fx * 2, y + fy * 2, 2, 2,
+                                 0xFFFFFFFFu);
+}
+
+static void jv_dibujar_id(int x, int y, int id) {
+    char num[12];
+    int n = 0, i;
+    if (id < 0) return;
+    do {
+        num[n++] = (char)('0' + id % 10);
+        id /= 10;
+    } while (id && n < (int)sizeof(num));
+    for (i = 0; i < n; i++)
+        jv_dibujar_digito(x + i * 8, y, num[n - 1 - i] - '0');
+}
+
+static void jv_dibujar_entidades(int cam_x, int cam_y) {
+    static const u32 colores[8] = {
+        0xFFC84A4Au, 0xFF4AA85Au, 0xFF4A72C8u, 0xFFC89A3Au,
+        0xFF9A4AC8u, 0xFF3AA8A8u, 0xFFC85A9Au, 0xFF7A8A3Au
+    };
+    int orden[ENTIDADES_MAX];
+    int n = entidades_orden(orden, ENTIDADES_MAX);
+    int i;
+    for (i = 0; i < n; i++) {
+        Entidad *e = entidad_indice(orden[i]);
+        int sx, sy, w, h;
+        if (!e || !e->visible) continue;
+        sx = e->x - cam_x;
+        sy = e->y - cam_y;
+        w = e->w > 0 ? e->w : 16;
+        h = e->h > 0 ? e->h : 16;
+        jv_rellenar_rect(sx, sy, w, h, colores[(e->id - 1) & 7]);
+        jv_rellenar_rect(sx, sy, w, 1, 0xFF101010u);
+        jv_rellenar_rect(sx, sy + h - 1, w, 1, 0xFF101010u);
+        jv_rellenar_rect(sx, sy, 1, h, 0xFF101010u);
+        jv_rellenar_rect(sx + w - 1, sy, 1, h, 0xFF101010u);
+        jv_dibujar_id(sx + 2, sy + 2, e->id);
+    }
+}
+
+/* Instancia la escena inicial exactamente como game.exe: sin este paso
+ * motor_programa_aplicar no encontraria el actor del control. */
+static void jv_entidades_preparar(void) {
+    int i, j, pasada;
+    entidades_reiniciar();
+    for (i = 0; i < g_l3.num_objetos; i++) {
+        MotorL3Objeto *o = &g_l3.objetos[i];
+        int tipo = entidades_tipo_agregar(o->id, o->nombre, o->escena,
+                                          o->padre, o->x, o->y, o->w, o->h,
+                                          o->visible, o->capa);
+        if (tipo < 0) continue;
+        for (j = 0; j < o->num_variables; j++)
+            entidades_tipo_var(tipo, j, o->variables[j].nombre,
+                               o->variables[j].valor);
+    }
+    for (pasada = 0; pasada <= g_l3.num_objetos; pasada++) {
+        int progreso = 0;
+        for (i = 0; i < g_l3.num_objetos; i++) {
+            MotorL3Objeto *o = &g_l3.objetos[i];
+            int padre = 0, tipo;
+            if (o->escena != g_l3.escena_inicial ||
+                entidad_de_objeto_escena(o->id, g_l3.escena_inicial) > 0)
+                continue;
+            if (o->padre > 0) {
+                padre = entidad_de_objeto_escena(o->padre,
+                                                 g_l3.escena_inicial);
+                if (padre <= 0) continue;
+            }
+            tipo = entidades_tipo_por_objeto(o->id);
+            if (tipo >= 0 &&
+                entidad_crear_hijo(tipo, o->x, o->y, padre) > 0)
+                progreso = 1;
+        }
+        if (!progreso) break;
+    }
+    entidades_recalcular_jerarquia();
+    entidades_fin_fotograma();
+}
+
+/* Camara del modo Programa: sigue al actor del primer control activo,
+ * como render_camara_calcular de game.exe sin limites de escena. */
+static void jv_camara_programa(int *cam_x, int *cam_y) {
+    const MotorL3Control *c = motor_programa_control_principal(&g_l3);
+    int tx = jv_ancho / 2, ty = jv_alto / 2;
+    if (c && c->actor > 0) {
+        int ids[4], n = entidades_de_objeto(c->actor, ids, 4);
+        if (n > 0) {
+            Entidad *e = entidad_buscar(ids[0]);
+            if (e && e->visible) {
+                tx = e->x + (e->w > 0 ? e->w / 2 : 8);
+                ty = e->y + (e->h > 0 ? e->h / 2 : 8);
+            }
+        }
+    }
+    *cam_x = tx - jv_ancho / 2;
+    *cam_y = ty - jv_alto / 2;
 }
 
 /* ------------------------------------------------------------------ */
@@ -226,19 +357,12 @@ static int jv_actualizar(void) {
      * tambien en la vista previa, usando la misma resolucion de entrada que
      * game.exe. */
     if (jv_programa_actor) {
-        const MotorL3Control *c = motor_programa_control_principal(&g_l3);
-        int dx = 0, dy = 0;
-        if (motor_programa_movimiento(c, &g_entrada_ext, g_entrada,
-                                      jv_velocidad, &dx, &dy)) {
-            int nx = g_x, ny = g_y;
-            if (g_mapa.celdas)
-                colisionar_caja_mapa(&g_mapa, &nx, &ny, JV_SPRITE_LADO,
-                                     JV_SPRITE_LADO, dx, dy, NULL, 0, NULL,
-                                     NULL);
-            else { nx += dx; ny += dy; }
-            g_x = nx;
-            g_y = ny;
-        }
+        /* Mismo runtime que game.exe: las entidades del LOGIC3 se mueven
+         * con el control activo y se pintan desde la tabla de entidades. */
+        motor_programa_aplicar(&g_l3, &g_entrada_ext, g_entrada,
+                               g_mapa.celdas ? &g_mapa : NULL, jv_velocidad);
+        entidades_recalcular_jerarquia();
+        entidades_fin_fotograma();
         return 1;
     }
 
@@ -272,32 +396,44 @@ static void jv_renderizar(void) {
 
     if (!g_fb) return;
 
+    /* El modo Programa pinta las entidades del runtime, igual que game.exe.
+     * La camara sigue al actor del control activo aunque no haya mapa. */
+    if (jv_programa_actor) {
+        jv_camara_programa(&cam_x, &cam_y);
+        if (!g_mapa_usado[0]) {
+            motor_limpiar(g_fb, jv_ancho, jv_alto, g.ajustes.fondo);
+            jv_dibujar_entidades(cam_x, cam_y);
+            return;
+        }
+        motor_limpiar(g_fb, jv_ancho, jv_alto, 0x00101826u);
+        motor_mapa_render(g_fb, jv_ancho, jv_alto, cam_x, cam_y, m->lado,
+                          m->dibujo_celdas ? m->dibujo_celdas : m->celdas,
+                          m->dibujo_celdas ? m->num_dibujo : m->num_celdas,
+                          m->imagenes);
+        jv_dibujar_entidades(cam_x, cam_y);
+        return;
+    }
+
     /* Sin mapa el proyecto corre igual, pero no se pinta nada: la
      * ventana queda con el color de fondo del proyecto (negro por defecto). */
     if (!g_mapa_usado[0]) {
         motor_limpiar(g_fb, jv_ancho, jv_alto, g.ajustes.fondo);
-        if (jv_sprite_clasico || jv_programa_actor)
+        if (jv_sprite_clasico)
             motor_blit_alpha(g_fb, jv_ancho, jv_alto, g_x, g_y,
                              g_sprite, JV_SPRITE_LADO, JV_SPRITE_LADO);
         return;
     }
 
-    /* Camara centrada en el jugador implicito, o en el mundo si el
-     * proyecto no tiene lobito (fase 46). */
-    if (jv_sprite_clasico || jv_programa_actor) {
-        cam_x = g_x + JV_SPRITE_LADO / 2 - jv_ancho / 2;
-        cam_y = g_y + JV_SPRITE_LADO / 2 - jv_alto / 2;
-    } else {
-        cam_x = jv_ancho / 2 - jv_ancho / 2;
-        cam_y = jv_alto / 2 - jv_alto / 2;
-    }
+    /* Camara centrada en el jugador implicito. */
+    cam_x = g_x + JV_SPRITE_LADO / 2 - jv_ancho / 2;
+    cam_y = g_y + JV_SPRITE_LADO / 2 - jv_alto / 2;
 
     motor_limpiar(g_fb, jv_ancho, jv_alto, 0x00101826u);
     motor_mapa_render(g_fb, jv_ancho, jv_alto, cam_x, cam_y, m->lado,
                       m->dibujo_celdas ? m->dibujo_celdas : m->celdas,
                       m->dibujo_celdas ? m->num_dibujo : m->num_celdas,
                       m->imagenes);
-    if (jv_sprite_clasico || jv_programa_actor)
+    if (jv_sprite_clasico)
         motor_blit_alpha(g_fb, jv_ancho, jv_alto,
                          g_x - cam_x, g_y - cam_y,
                          g_sprite, JV_SPRITE_LADO, JV_SPRITE_LADO);
@@ -394,6 +530,7 @@ static void jv_liberar(void) {
     g_fb = NULL;
     motor_mapa_liberar(&g_mapa);
     activo_virtuales_limpiar();
+    entidades_reiniciar();
     g_num_programas = 0;
     g_num_scripts = 0;
     jv_programa_actor = 0;
@@ -460,6 +597,7 @@ static int jv_cargar_proyecto(int avisar) {
             g_l3.sistema.opciones.jugador_implicito ? 1 : 0;
         jv_programa_actor = !jv_sprite_clasico &&
                             motor_programa_control_principal(&g_l3) != NULL;
+        if (jv_programa_actor) jv_entidades_preparar();
         if (g_l3.mapa[0]) {
             if (!activo_cargar_mapa(g_l3.mapa, &g_mapa)) {
                 if (avisar)

@@ -1,5 +1,5 @@
 perfil: fotogramas 12 us totales <us> us medios <us> us maximos <us>
-perfil: presupuesto 1 avisos 12 blits por fotograma 0
+perfil: presupuesto 1 avisos <avisos> blits por fotograma 0
 memoria: blob <blob> archivos 0 trajes 0 cargas 0 imagenes <bytes> runtime <runtime>
 memoria: mapa celdas 0 entidades 1 tiles 0
 script 0 evento 1 tipo 3 instrucciones 4 microsegundos <us> blits 0 disparos 1

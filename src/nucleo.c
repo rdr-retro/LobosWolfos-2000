@@ -1789,6 +1789,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
         }
     }
     if (captura) {
+        int inicio_ok = 1;
         int ok;
         char *menu_arg = arg_valor(cmd, "--menu");
         char *vista_arg = arg_valor(cmd, "--vista");
@@ -3039,7 +3040,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
             if (vi) {
                 char ruta[MAX_PATH];
                 recortar_texto(ruta, vi, sizeof(ruta));
-                inicio_volcar(ruta);
+                inicio_vista_volcar(ruta);
             }
         }
         /* Guarda el ProjectModel vivo de Inicio en LOG 2, manteniendo el
@@ -3119,6 +3120,40 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 }
             }
         }
+        /* Plan 16.7: diagnostico JSON de recursos faltantes. Usa el mismo
+         * ProjectModel que --leer-modelo y la misma comprobacion en disco;
+         * solo cambia el formato de salida para que una IA pueda leerlo. */
+        {
+            char *dj = arg_valor(cmd, "--diagnostico-json");
+            if (dj) {
+                char entrada[MAX_PATH];
+                char salida[MAX_PATH];
+                char raiz[MAX_PATH];
+                char diagnostico[PM_ERROR_MAX];
+                char json[32768];
+                const char *p = dj;
+                ProjectModel *m;
+                FILE *df;
+
+                tramo_flag_modelo(entrada, (int)sizeof(entrada), &p);
+                tramo_flag_modelo(salida, (int)sizeof(salida), &p);
+                diagnostico[0] = '\0';
+                m = ml_leer(entrada, diagnostico, sizeof(diagnostico));
+                if (m) {
+                    ruta_carpeta(raiz, (int)sizeof(raiz), entrada);
+                    if (!raiz[0]) strcpy(raiz, ".");
+                    pm_validar_recursos_json(m, raiz, json, sizeof(json));
+                    pm_destruir(m);
+                } else {
+                    pm_validar_recursos_json(NULL, NULL, json, sizeof(json));
+                }
+                if (salida[0] && (df = fopen(salida, "w")) != NULL) {
+                    fputs(json, df);
+                    fputc('\n', df);
+                    fclose(df);
+                }
+            }
+        }
         /* Plan 16.6: puente sin ventanas .log -> modelo -> LOGIC3. El
          * adaptador usa el escritor canonico y deja un diagnostico opcional. */
         {
@@ -3150,6 +3185,25 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 }
             }
         }
+        /* Inicio: creacion, borrado, reparentado y undo/redo del ProjectModel.
+         * Una sola flag encadena las ordenes separadas por ';' para poder
+         * congelar estados intermedios con 'volcar|ruta' en las pruebas. */
+        {
+            char *ini = arg_valor(cmd, "--inicio");
+            if (ini) {
+                char diagnostico[PM_ERROR_MAX];
+                inicio_ok = inicio_ejecutar(inicio_servicio(), ini,
+                                            diagnostico, sizeof(diagnostico));
+                if (!inicio_ok) {
+                    FILE *df = fopen("inicio.diagnostico.txt", "w");
+                    if (df) {
+                        fputs(diagnostico, df);
+                        fputc('\n', df);
+                        fclose(df);
+                    }
+                }
+            }
+        }
         /* Vuelca el lobo generado (fase 33) como texto plano. */
         {
             char *codigo_arg = arg_valor(cmd, "--volcar-codigo");
@@ -3175,7 +3229,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
         DestroyWindow(hwnd);
         g.hwnd = NULL;
         app_terminar();
-        return ok ? 0 : 2;
+        return (ok && inicio_ok) ? 0 : 2;
     }
 
     ShowWindow(hwnd, mostrar == SW_SHOWMAXIMIZED ? SW_SHOWMAXIMIZED : SW_SHOW);

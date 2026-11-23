@@ -101,6 +101,14 @@ void pm_ui(EntidadModelo *e, int x, int y, int ancho, int alto, int grupo,
            unsigned int color, int plegado);
 int pm_conectar(ProjectModel *m, int origen, const char *puerto_origen,
                 int destino, const char *puerto_destino, int linea);
+/* Operaciones de la vista Inicio sobre el mismo grafo. Borrar quita la
+ * entidad y las conexiones que la referencian; los hijos suben un nivel.
+ * Reparentar usa la referencia "padre" y rechaza ciclos. Los IDs no se
+ * reciclan. pm_copiar sirve para los snapshots del historial. */
+int pm_borrar(ProjectModel *m, int id);
+int pm_reparentar(ProjectModel *m, int id, int id_padre);
+int pm_padre(const ProjectModel *m, int id);
+void pm_copiar(const ProjectModel *origen, ProjectModel *destino);
 int pm_validar(const ProjectModel *m, char *diagnostico, size_t longitud);
 /* Comprueba en disco cada recurso y que cada actor recibe un recurso por
  * una conexion. `raiz` es la carpeta del proyecto; NULL o "" usa la actual.
@@ -108,6 +116,13 @@ int pm_validar(const ProjectModel *m, char *diagnostico, size_t longitud);
  * presentes y puede ejecutarse antes de que existan los recursos. */
 int pm_validar_recursos(const ProjectModel *m, const char *raiz,
                         char *diagnostico, size_t longitud);
+/* Igual comprobacion, pero el resultado es un JSON de una sola linea con
+ * todos los fallos: codigo, archivo, linea, id y nombre de la entidad, y
+ * cuando aplica la ruta del recurso. Cada fallo incluye una sugerencia para
+ * repararlo. No escribe archivos; devuelve el numero de fallos y deja el
+ * texto en `json`. */
+int pm_validar_recursos_json(const ProjectModel *m, const char *raiz,
+                             char *json, size_t longitud);
 void pm_volcar(const ProjectModel *m, const char *ruta);
 const char *pm_kind_nombre(int kind);
 

@@ -1,0 +1,11 @@
+LOG 2
+
+proyecto nombre "Jerarquia runtime" ancho 320 alto 200 fps 60 fondo "#000000"
+
+script id 30 nombre "MoverPadre" ruta "Scripts/parent.lobo"
+escena id 10 nombre "Nivel 1" inicial 1
+nodo id 21 escena 10 padre 20 tipo "sprite" nombre "Hijo" x 5 y 7
+nodo id 20 escena 10 padre 0 tipo "actor" nombre "Padre" x 100 y 50
+
+asociar script 30 nodo 20 evento "fotograma"
+FIN

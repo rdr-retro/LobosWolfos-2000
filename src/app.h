@@ -1503,7 +1503,7 @@ void inicio_mover(int x, int y, int botones);
 void inicio_rueda(int x, int y, int delta, int ctrl);
 void inicio_tecla(int vk, int ctrl, int shift);
 void inicio_caracter(int ch);
-void inicio_volcar(const char *ruta);
+void inicio_vista_volcar(const char *ruta);
 void ui_dibujar_barra_menus(void);
 void ui_dibujar_sidebar(void);
 void ui_dibujar_topbar(void);
