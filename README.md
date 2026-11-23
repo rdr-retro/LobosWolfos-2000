@@ -1031,6 +1031,14 @@ procesado en `src\nucleo.c`.
   añade el resumen `grafo: N entidades, C conexiones` con su origen. El flag
   `--gestor-modelo "entrada.log"` abre esa vista sin escribir LOGIC3 y sin
   crear actor, jugador ni movimiento.
+  `src/modelo_logic3.c` y `src/modelo_logic3.h` cierran el ciclo: convierten
+  el modelo en bloques `sistema.pieza` y delegan en `logic3_guardar()`, asi
+  que el formato y el CRC siguen siendo los del escritor canonico. La
+  cabecera sale de la entidad de proyecto y las conexiones sobrescriben el
+  campo `enlace` de la pieza de origen. El flag
+  `--generar-logic3 "entrada.log|salida.logic3"` expone esa conversion sin
+  abrir ventanas; el caso `modelo_logic3` comprueba que la traza del motor
+  con el archivo generado es identica a la del `.log` original.
 - `motor/` — motor egine: núcleo en ensamblador 32 bits (`nucleo32.s`),
   interfaz común (`motor.h`), carga del proyecto (`activo.c`) y `juego.c`
   (`game.exe`).

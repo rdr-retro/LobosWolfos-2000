@@ -84,9 +84,10 @@ a la suite de conformidad.
 `pruebas\programa` contiene dos LOGIC3 sin CRC: `mapa_solo.logic3` lleva
 `sistema.opciones` con `jugador_implicito=0`, y `legacy.logic3` no lleva la
 pieza. Ambos apuntan al mapa `pruebas/colisiones/fisica.mav` y no tienen
-objetos. La suite comprueba doce cosas: el volcado del `ProjectModel` minimo,
+objetos. La suite comprueba trece cosas: el volcado del `ProjectModel` minimo,
 la conversion del `.log` de ejemplo, la validacion de recursos del actor,
-que el mismo grafo aparece en el lienzo y en el inspector, que un proyecto
+que el mismo grafo aparece en el lienzo y en el inspector, que el LOGIC3
+generado conserva la traza del juego, que un proyecto
 nuevo guarda la
 pieza de opciones, que `mapa_solo` mantiene `lobo 16 16` con `--tecla
 derecha`, que `legacy` mueve el lobo y dibuja un BMP distinto, que
@@ -127,6 +128,14 @@ fija el color de cada tarjeta y el titulo `INSPECTOR`, que sigue visible; el
 resumen del grafo se dibuja solo cuando hay un modelo activo, asi que los
 casos antiguos no cambian. Sus patrones son `modelo_gestor.volcar-programa`,
 `modelo_gestor.bmp.sha256` y `modelo_gestor.pixeles`.
+
+El caso `modelo_logic3` usa `--generar-logic3` para convertir el mismo `.log`
+en LOGIC3 canonico. El patron `modelo_logic3.logic3` fija la cabecera y los
+cinco bloques `sistema.pieza` con sus campos y enlaces. Despues ejecuta el
+motor dos veces con las mismas teclas y fotogramas, una sobre el `.log` y otra
+sobre el archivo generado, y exige trazas identicas ademas del mismo hash
+del BMP. Asi se comprueba que el adaptador no cambia el resultado del juego
+ni el escritor canonico.
 
 El caso `entrada_gestor` fija el volcado `programa_modo=1 programa_piezas=0`,
 el hash del BMP y 15 sondas de pixel; la paleta aparece sin resaltar la primera

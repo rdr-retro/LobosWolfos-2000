@@ -10,6 +10,7 @@
 #   modelo_desde_log lee el .log de ejemplo y vuelca el grafo convertido
 #   modelo_recursos valida el PNG del actor y su conexion
 #   modelo_gestor   el .log se ve igual en el lienzo y en el inspector
+#   modelo_logic3   el LOGIC3 generado conserva la traza del .log original
 #   opciones_nuevo  el editor crea sistema.opciones en un proyecto nuevo
 #   mapa_solo       mapa sin opciones de jugador: lobo quieto y sin sprite
 #   legacy          sin sistema.opciones: lobo se mueve y el BMP cambia
@@ -374,6 +375,63 @@ Ejecutar-Caso "modelo_gestor" {
         if (-not $ui.Contains($pieza)) {
             [void]$problemas.Add("falta en el volcado: " + $pieza)
         }
+    }
+}
+
+Ejecutar-Caso "modelo_logic3" {
+    param($dir, $problemas)
+    $entrada = Join-Path $dir "entrada.log"
+    $salida = Join-Path $dir "generado.logic3"
+    $bmp = Join-Path $dir "generado.bmp"
+    Copy-Item (Join-Path $raiz "pruebas\modelo\juego_ia.log") $entrada
+    $codigo = Ejecutar-Editor $dir @("--sin-ventanas", "--captura", $bmp,
+                                     "--generar-logic3",
+                                     "entrada.log|generado.logic3")
+    if ($codigo -ne 0) { [void]$problemas.Add("el editor devolvio $codigo") }
+    if (-not (Test-Path -LiteralPath $salida)) {
+        [void]$problemas.Add("no se genero el LOGIC3 del ProjectModel")
+        return
+    }
+    $logic3 = Get-TextoNormalizado $salida
+    Comprobar-Texto "modelo_logic3" ".logic3" $logic3 $problemas
+
+    $trazaOriginal = Join-Path $dir "original.traza.txt"
+    $trazaGenerada = Join-Path $dir "generada.traza.txt"
+    $bmpOriginal = Join-Path $dir "original.bmp"
+    $bmpGenerado = Join-Path $dir "generado.juego.bmp"
+    $comun = @("--entrada-teclas", "derecha", "--fotogramas", "6",
+               "--entidades")
+    $c1 = Ejecutar-Motor $dir (@("--logic3", "entrada.log",
+                                 "--traza", $trazaOriginal,
+                                 "--captura", $bmpOriginal) + $comun)
+    $c2 = Ejecutar-Motor $dir (@("--logic3", "generado.logic3",
+                                 "--traza", $trazaGenerada,
+                                 "--captura", $bmpGenerado) + $comun)
+    if ($c1 -ne 0 -or $c2 -ne 0) {
+        [void]$problemas.Add("el motor devolvio $c1 / $c2")
+        return
+    }
+    if (-not (Test-Path -LiteralPath $trazaOriginal) -or
+        -not (Test-Path -LiteralPath $trazaGenerada)) {
+        [void]$problemas.Add("falta alguna traza del juego")
+        return
+    }
+    $a = Get-TextoNormalizado $trazaOriginal
+    $b = Get-TextoNormalizado $trazaGenerada
+    if ($a -ne $b) {
+        [void]$problemas.Add("el LOGIC3 generado cambio la traza del juego")
+        Mostrar-Diferencia ($a -split "`n") ($b -split "`n") 8
+    }
+    if (-not (Test-Path -LiteralPath $bmpOriginal) -or
+        -not (Test-Path -LiteralPath $bmpGenerado)) {
+        [void]$problemas.Add("falta alguna captura del juego")
+        return
+    }
+    $hashOriginal = Get-Sha256 $bmpOriginal
+    $hashGenerado = Get-Sha256 $bmpGenerado
+    if ($hashOriginal -ne $hashGenerado) {
+        [void]$problemas.Add(
+            "el LOGIC3 generado cambio la captura: $hashOriginal / $hashGenerado")
     }
 }
 

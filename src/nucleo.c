@@ -5,6 +5,7 @@
 #include "logic3.h"
 #include "proyecto_modelo.h"
 #include "modelo_log.h"
+#include "modelo_logic3.h"
 
 App g;
 
@@ -2955,6 +2956,29 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                     fputs(diagnostico, df);
                     fputc('\n', df);
                     fclose(df);
+                }
+            }
+        }
+        /* Plan 16.5: escribe el LOGIC3 canonico del ProjectModel leido del
+         * .log. El formato, el CRC y el resultado del juego los decide el
+         * escritor de siempre; este flag solo puentea las dos capas. */
+        {
+            char *gl = arg_valor(cmd, "--generar-logic3");
+            if (gl) {
+                char entrada[MAX_PATH];
+                char salida[MAX_PATH];
+                char diagnostico[PM_ERROR_MAX];
+                const char *p = gl;
+                ProjectModel *m;
+
+                tramo_flag_modelo(entrada, (int)sizeof(entrada), &p);
+                tramo_flag_modelo(salida, (int)sizeof(salida), &p);
+                diagnostico[0] = '\0';
+                m = ml_leer(entrada, diagnostico, sizeof(diagnostico));
+                if (m) {
+                    (void)ml3_generar(m, salida, diagnostico,
+                                      sizeof(diagnostico));
+                    pm_destruir(m);
                 }
             }
         }
