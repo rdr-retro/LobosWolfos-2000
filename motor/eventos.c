@@ -66,6 +66,7 @@ static const char *tipo_texto(int tipo) {
     case EVENTO_CADA: return "cada";
     case EVENTO_CLONAR: return "clonar";
     case EVENTO_ESCENA: return "escena";
+    case EVENTO_ESCENA_SALIR: return "escena_salir";
     default: return "?";
     }
 }
@@ -239,6 +240,29 @@ void eventos_escena_iniciar(Eventos *ev, LoboEstado *estado) {
         lobo_maquina_reiniciar(&s->maquina);
         s->contador = s->cada;
         s->cooldown = 0;
+    }
+}
+
+static int lanzar(Eventos *ev, LoboEstado *estado, int indice, int ent,
+                  int repetir, const char *nota);
+
+/* Dispara los scripts de salida antes de que el huesped destruya las
+ * entidades de la escena. No reinicia maquinas ni limpia la cola: eso lo
+ * hace eventos_escena_iniciar al entrar en la escena nueva. */
+void eventos_escena_salir(Eventos *ev, LoboEstado *estado,
+                          int fotograma, int escena) {
+    int i;
+    if (!ev || !estado) return;
+    ev->fotograma = fotograma;
+    for (i = 0; i < ev->num_scripts; i++) {
+        EventoScript *s = &ev->scripts[i];
+        int ent;
+        if (s->tipo != EVENTO_ESCENA_SALIR || s->escena != escena)
+            continue;
+        ent = entidad_de_objeto(s->objeto, escena);
+        if (ent <= 0) continue;
+        if (!lanzar(ev, estado, i, ent, 0, "")) break;
+        if (ev->detener_todo || ev->cerrar) break;
     }
 }
 

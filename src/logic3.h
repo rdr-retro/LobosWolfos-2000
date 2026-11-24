@@ -66,7 +66,8 @@ enum {
     L3_EVENTO_CADA,
     L3_EVENTO_CLONAR,
     L3_EVENTO_ESCENA,
-    L3_EVENTO_LLAMADA
+    L3_EVENTO_LLAMADA,   /* 9: no se mueve */
+    L3_EVENTO_ESCENA_SALIR /* 10 */
 };
 
 /* Flanco de un evento de tecla. */

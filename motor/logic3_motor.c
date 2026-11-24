@@ -198,6 +198,7 @@ static int tipo_evento(const char *nombre) {
     if (strcmp(nombre, "clonar") == 0) return 7;
     if (strcmp(nombre, "escena") == 0) return 8;
     if (strcmp(nombre, "llamada") == 0) return 9;
+    if (strcmp(nombre, "escena_salir") == 0) return 10;
     return 0;
 }
 
@@ -1220,7 +1221,7 @@ int motor_l3_cargar(const char *ruta, MotorL3 *p, char *error, int tam_error) {
                                               salida, tokens, 4);
                 } else if (e->tipo == 6) {
                     if (nt >= 4) e->cada = entero(salida, tokens, 3);
-                } else if (e->tipo == 8) {
+                } else if (e->tipo == 8 || e->tipo == 10) {
                     if (nt >= 4) e->escena = entero(salida, tokens, 3);
                 }
             }

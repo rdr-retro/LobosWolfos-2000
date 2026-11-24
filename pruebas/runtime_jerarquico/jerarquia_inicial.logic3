@@ -1,0 +1,68 @@
+LOGIC3
+version 3
+proyecto "Runtime jerarquico" 320 200 1 60 3 00112233
+carpetas "tiles" "maps" "trajes" "sonidos"
+escena 1 "Nivel 1" "" 320 200 00112233
+escena 20 "Nivel 2" "" 320 200 22334455
+objeto 21 "Hijo" escena 1 x 5 y 7 w 16 h 16 visible 1 capa 1 padre 20
+  traje 0 "" 0 0 0 0
+objeto 20 "Padre" escena 1 x 100 y 50 w 32 h 32 visible 1 capa 0 padre 100002
+  traje 0 "" 0 0 0 0
+objeto 100002 "Jugador" escena 1 x 16 y 16 w 24 h 24 visible 1 capa 0
+  traje 0 "" 0 0 0 0
+  evento 1 escena 1
+  evento 2 escena_salir 1
+  evento 3 inicio
+objeto 22 "EnNivel2" escena 20 x 16 y 16 w 16 h 16 visible 1 capa 0
+  traje 0 "" 0 0 0 0
+  evento 4 escena 20
+bloque 1 evento 1 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "x = 111\ny = 112"
+bloque 2 evento 2 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "x = 121\ny = 122"
+bloque 3 evento 3 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "x = 131\ny = 132"
+bloque 4 evento 4 padre 0 orden 0 tipo "codigo.lobo"
+  campo "codigo" "x = 141\ny = 142"
+bloque 5 evento 1 padre 0 orden 0 tipo "sistema.opciones"
+  campo "programa" "1"
+  campo "jugador_implicito" "0"
+  campo "auto_compilar" "1"
+bloque 6 evento 1 padre 0 orden 1 tipo "sistema.pieza"
+  campo "ui" "1"
+  campo "pieza" "sistema.escena"
+  campo "id" "1"
+  campo "xy" "160,80"
+  campo "nombre" "Escenario"
+  campo "enlace" "0"
+  campo "valor" ""
+  campo "valor2" ""
+bloque 7 evento 1 padre 0 orden 2 tipo "sistema.pieza"
+  campo "ui" "1"
+  campo "pieza" "sistema.actor"
+  campo "id" "2"
+  campo "xy" "360,80"
+  campo "nombre" "Jugador"
+  campo "enlace" "3"
+  campo "valor" "Jugador"
+  campo "valor2" "lobo"
+bloque 8 evento 1 padre 0 orden 3 tipo "sistema.pieza"
+  campo "ui" "1"
+  campo "pieza" "sistema.teclado"
+  campo "id" "3"
+  campo "xy" "360,190"
+  campo "nombre" "Teclado"
+  campo "enlace" "4"
+  campo "valor" "1"
+  campo "valor2" "teclado"
+bloque 9 evento 1 padre 0 orden 4 tipo "sistema.pieza"
+  campo "ui" "1"
+  campo "pieza" "sistema.accion.movimiento"
+  campo "id" "4"
+  campo "xy" "360,300"
+  campo "nombre" "Movimiento"
+  campo "enlace" "3"
+  campo "valor" "mover"
+  campo "valor2" "mantener"
+FIN
+CRC32 84EF23C1

@@ -51,7 +51,8 @@ typedef struct PerfilScript {
  * este modulo siga siendo C puro. */
 typedef unsigned long (*EventosReloj)(void *ctx);
 
-/* Tipos de evento: los mismos valores que LOGIC3. */
+/* Tipos de evento: los mismos valores que LOGIC3. `llamada` no se despacha,
+ * pero conserva su hueco para que `escena_salir` siga siendo el id 10. */
 enum {
     EVENTO_INICIO = 1,
     EVENTO_FOTOGRAMA,
@@ -60,7 +61,9 @@ enum {
     EVENTO_TOCAR,
     EVENTO_CADA,
     EVENTO_CLONAR,
-    EVENTO_ESCENA
+    EVENTO_ESCENA,
+    EVENTO_LLAMADA,
+    EVENTO_ESCENA_SALIR
 };
 
 /* Un script vivo: metadatos del evento, programa compilado y maquina. */
@@ -137,6 +140,11 @@ void eventos_liberar(Eventos *ev);
 /* Arranca (o reinicia) la escena: maquinas a cero, contadores a su valor y
  * eventos inicio/escena de la escena actual. */
 void eventos_escena_iniciar(Eventos *ev, LoboEstado *estado);
+
+/* Dispara escena_salir de la escena indicada con las entidades todavia
+ * vivas. Debe llamarse antes de vaciar la escena. */
+void eventos_escena_salir(Eventos *ev, LoboEstado *estado,
+                          int fotograma, int escena);
 
 /* Despacha un fotograma completo. `entrada` son los bits actuales y
  * `anterior` los del fotograma previo (para los flancos). */

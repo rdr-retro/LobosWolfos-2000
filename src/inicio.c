@@ -252,7 +252,8 @@ static int inicio_entero_exacto(const char *texto, int *salida) {
  * nombres nuevos: un evento no soportado no llegaria al runtime. */
 static const char *const g_inicio_eventos[] = {
     "fotograma", "inicio", "tecla", "recibir", "tocar", "cada", "clonar",
-    "escena", "escena_entrar", "tecla_pulsar", "soltar_tecla"
+    "escena", "escena_entrar", "tecla_pulsar", "soltar_tecla",
+    "escena_salir"
 };
 
 static int inicio_evento_valido(const char *evento) {

@@ -1969,7 +1969,9 @@ void juego_ventana_pausar(void);
 void juego_ventana_reanudar(void);
 void juego_ventana_detener(void);
 void juego_ventana_terminar(void);
-int  juego_ventana_capturar(const char *ruta, int fotogramas);
+int  juego_ventana_capturar(const char *ruta, int fotogramas,
+                            int runtime_activo, const char *traza_runtime,
+                            const char *volcar_runtime);
 
 /* Botones play/pausa/stop de la barra de menus (ui.c): zona 0 = play,
  * 1 = pausa y 2 = stop. */

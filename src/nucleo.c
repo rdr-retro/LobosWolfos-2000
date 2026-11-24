@@ -2829,6 +2829,9 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
             if (juego_arg) {
                 char juego_ruta[MAX_PATH];
                 char *fotos_arg = arg_valor(cmd, "--fotogramas");
+                char *rt_traza = arg_valor(cmd, "--captura-juego-traza");
+                char *rt_volcar = arg_valor(cmd, "--captura-juego-volcar");
+                int rt_activo = arg_presente(cmd, "--runtime-jerarquico");
                 int jn = 0, fotos = 60;
                 while (juego_arg[jn] && juego_arg[jn] != ' ' &&
                        juego_arg[jn] != '\t' && jn < MAX_PATH - 1) {
@@ -2837,7 +2840,9 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 }
                 juego_ruta[jn] = 0;
                 if (fotos_arg) fotos = atoi(fotos_arg);
-                if (juego_ruta[0]) juego_ventana_capturar(juego_ruta, fotos);
+                if (juego_ruta[0])
+                    juego_ventana_capturar(juego_ruta, fotos, rt_activo,
+                                           rt_traza, rt_volcar);
             }
         }
         /* Posicion final del raton: actualiza tambien el hover, como un

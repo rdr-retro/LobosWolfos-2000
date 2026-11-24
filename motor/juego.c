@@ -34,6 +34,9 @@
  *   --volcar-saves ruta  volca el estado final del guardado
  *   --escenas         activa escenas, transiciones, camara y efectos
  *   --volcar-escenas ruta  volca el estado final de escenas y efectos
+ *   --runtime-jerarquico  usa las reglas compartidas con la vista previa
+ *   --traza-runtime ruta  traza del runtime jerarquico compartido
+ *   --volcar-runtime ruta  volca la jerarquia final compartida
  *   --perfil          mide instrucciones, microsegundos y blits por script
  *   --presupuesto N   microsegundos por fotograma (16667 = 60 FPS); con
  *                     --perfil avisa y degrada si se pasa
@@ -58,6 +61,7 @@
 #include "audio.h"
 #include "save.h"
 #include "programa.h"
+#include "runtime_comun.h"
 
 #define VENTANA_ANCHO 640
 #define VENTANA_ALTO  480
@@ -332,6 +336,8 @@ static struct {
 static int g_num_scripts;
 
 static FILE *g_traza; /* --traza: una linea por fotograma */
+static FILE *g_traza_runtime; /* --traza-runtime: traza del runtime comun */
+static int g_runtime_jerarquico; /* --runtime-jerarquico: reglas compartidas */
 
 /* --- modo VM (fase 25): un programa y una maquina por script --- */
 static MotorL3 g_l3;
@@ -363,8 +369,6 @@ static int g_limites_override;
 #define PIXEL_SONDAS_MAX 16
 static int g_pixels[PIXEL_SONDAS_MAX][2];
 static int g_num_pixels;
-static char g_ent_nombres[LOBO_ENTIDAD_NOMBRES_MAX][LOBO_TEXTO_MAX];
-static int g_num_ent_nombres;
 
 /* Callback de choca() del lenguaje: la caja del sprite contra el
  * mapa solido. */
@@ -421,159 +425,20 @@ static void scripts_preparar(int con_ventana) {
 /* Entidades (fase 26)                                                */
 /* ------------------------------------------------------------------ */
 
-/* Slot global del nombre de una variable de entidad (lo crea si hace
- * falta). Todos los programas del proyecto comparten estos slots. */
-static int ent_nombre_slot(const char *nombre) {
-    int i;
-    if (!nombre) return -1;
-    for (i = 0; i < g_num_ent_nombres; i++)
-        if (strcmp(g_ent_nombres[i], nombre) == 0) return i;
-    if (g_num_ent_nombres >= LOBO_ENTIDAD_NOMBRES_MAX) {
-        entidades_aviso();
-        return -1;
-    }
-    copiar_texto(g_ent_nombres[g_num_ent_nombres], LOBO_TEXTO_MAX, nombre);
-    return g_num_ent_nombres++;
-}
+/* Los slots, callbacks de entidades y colisiones viven en runtime_comun.c,
+ * para que preview y game.exe ejecuten las mismas reglas. */
 
-/* Traduce un campo de lobo (LOBO_MI_*) al campo del modulo de entidades. */
-static int campo_entidad_lobo(int campo) {
-    switch (campo) {
-    case LOBO_MI_X: return ENTIDAD_CAMPO_X;
-    case LOBO_MI_Y: return ENTIDAD_CAMPO_Y;
-    case LOBO_MI_VIDA: return ENTIDAD_CAMPO_VIDA;
-    case LOBO_MI_VISIBLE: return ENTIDAD_CAMPO_VISIBLE;
-    case LOBO_MI_TRAJE: return ENTIDAD_CAMPO_TRAJE;
-    case LOBO_MI_ID: return ENTIDAD_CAMPO_ID;
-    case LOBO_MI_ESCENA: return ENTIDAD_CAMPO_ESCENA;
-    case LOBO_MI_ANCHO: return ENTIDAD_CAMPO_W;
-    case LOBO_MI_ALTO: return ENTIDAD_CAMPO_H;
-    case LOBO_MI_CAPA: return ENTIDAD_CAMPO_CAPA;
-    default: return -1;
-    }
-}
-
-static int ent_leer(void *ctx, int id, int campo) {
-    (void)ctx;
-    if (campo >= LOBO_MI_VARS)
-        return entidades_leer_var(id, campo - LOBO_MI_VARS);
-    campo = campo_entidad_lobo(campo);
-    return campo < 0 ? 0 : entidades_leer_campo(id, campo);
-}
-
-static int ent_escribir(void *ctx, int id, int campo, int valor) {
-    (void)ctx;
-    if (campo >= LOBO_MI_VARS)
-        return entidades_escribir_var(id, campo - LOBO_MI_VARS, valor);
-    campo = campo_entidad_lobo(campo);
-    if (campo < 0 || campo == ENTIDAD_CAMPO_ID ||
-        campo == ENTIDAD_CAMPO_TIPO)
-        return 0;
-    return entidades_escribir_campo(id, campo, valor);
-}
-
-static int ent_crear(void *ctx, const char *tag, int x, int y) {
-    int tipo;
-    (void)ctx;
-    tipo = entidades_tipo_por_tag(tag);
-    if (tipo < 0) {
-        /* Tag desconocido: se avisa y la llamada devuelve -1. */
-        entidades_aviso();
-        return -1;
-    }
-    return entidad_crear(tipo, x, y);
-}
-
-static int ent_borrar(void *ctx, int id) {
-    (void)ctx;
-    return entidad_borrar(id);
-}
-
-static int ent_clonar(void *ctx, int id) {
-    (void)ctx;
-    return entidades_clonar(id);
-}
-
-static int ent_mover(void *ctx, int id, int x, int y) {
-    (void)ctx;
-    return entidad_mover(id, x, y);
-}
-
-/* --- colisiones entidad-entidad (fase 29) --- */
-static int col_toca(void *ctx, int entidad, int id) {
-    (void)ctx;
-    return entidades_tocan(entidad, id);
-}
-
-static int col_toca_tag(void *ctx, int entidad, const char *tag) {
-    (void)ctx;
-    return entidades_toca_tag(entidad, tag);
-}
-
-static int col_distancia(void *ctx, int entidad, int id) {
-    (void)ctx;
-    return entidades_distancia(entidad, id);
-}
-
-static int col_caja_de(void *ctx, int entidad, int id, int indice) {
-    (void)ctx;
-    (void)entidad; /* la caja consultada es la del id, no la del emisor */
-    return entidades_caja(id, indice);
-}
-
-
-/* Instancia los objetos de una escena (arranque y reinicio de escena). */
+/* Instancia los objetos de una escena (arranque y reinicio de escena).
+ * La regla de niveles y la jerarquia global viven en runtime_comun.c. */
 static void instanciar_escena(int escena) {
-    int pasada, i;
-    /* Los objetos pueden aparecer en cualquier orden en LOGIC3. Se crean
-     * por niveles para que un hijo reciba la transformacion global de su
-     * padre aunque el archivo declare primero al hijo. */
-    for (pasada = 0; pasada <= g_l3.num_objetos; pasada++) {
-        int progreso = 0;
-        for (i = 0; i < g_l3.num_objetos; i++) {
-            MotorL3Objeto *o = &g_l3.objetos[i];
-            int tipo, padre = 0;
-            if (o->escena != escena ||
-                entidad_de_objeto_escena(o->id, escena) > 0)
-                continue;
-            if (o->padre > 0) {
-                padre = entidad_de_objeto_escena(o->padre, escena);
-                if (padre <= 0) continue;
-            }
-            tipo = entidades_tipo_por_objeto(o->id);
-            if (tipo >= 0 && entidad_crear_hijo(tipo, o->x, o->y, padre) > 0)
-                progreso = 1;
-        }
-        if (!progreso) break;
-    }
-    entidades_recalcular_jerarquia();
+    runtime_instanciar_escena(&g_l3, escena);
 }
 
 /* Registra tipos y variables del LOGIC3 e instancia los objetos de la
  * escena inicial. Los objetos creados al arrancar no gastan el cupo de
  * altas por fotograma. */
 static void entidades_preparar(void) {
-    int i, j;
-    entidades_reiniciar();
-    g_num_ent_nombres = 0;
-    memset(g_ent_nombres, 0, sizeof(g_ent_nombres));
-
-    for (i = 0; i < g_l3.num_objetos; i++) {
-        MotorL3Objeto *o = &g_l3.objetos[i];
-        int tipo = entidades_tipo_agregar(o->id, o->nombre, o->escena,
-                                          o->padre, o->x, o->y, o->w, o->h,
-                                          o->visible, o->capa);
-        if (tipo < 0) continue;
-        for (j = 0; j < o->num_variables; j++) {
-            int slot = ent_nombre_slot(o->variables[j].nombre);
-            if (slot >= 0)
-                entidades_tipo_var(tipo, slot, o->variables[j].nombre,
-                                   o->variables[j].valor);
-        }
-    }
-    instanciar_escena(g_l3.escena_inicial);
-    /* El cupo de altas por fotograma empieza limpio en el fotograma 1. */
-    entidades_fin_fotograma();
+    runtime_preparar_entidades(&g_l3, g_l3.escena_inicial);
 }
 
 /* Runtime del constructor visual: los controles explicitos se aplican
@@ -583,36 +448,6 @@ static void aplicar_controles_programa(void) {
     motor_programa_aplicar(&g_l3,
                            g_entrada_extactiva ? &g_entrada_ext : NULL,
                            juego.entrada, &juego.mapa, g_velocidad);
-}
-
-/* Remapea los indices locales de variables de entidad de un programa a
- * los slots globales del proyecto (los de @nombre y mi.variable). */
-static void lobo_remap_programa(LoboPrograma *p) {
-    int mapa[LOBO_ENTIDAD_NOMBRES_MAX];
-    int i;
-    for (i = 0; i < p->num_ent_nombres; i++)
-        mapa[i] = ent_nombre_slot(p->entidad_nombres[i]);
-    for (i = 0; i < p->largo; i++) {
-        LoboInst *in = &p->insts[i];
-        if (in->op == LOBO_CARGAR_ENTIDAD || in->op == LOBO_GUARDAR_ENTIDAD) {
-            if (in->valor >= 0 && in->valor < p->num_ent_nombres &&
-                mapa[in->valor] >= 0)
-                in->valor = mapa[in->valor];
-        } else if (in->op == LOBO_CARGAR_MI || in->op == LOBO_GUARDAR_MI) {
-            if (in->valor >= LOBO_MI_VARS) {
-                int slot = in->valor - LOBO_MI_VARS;
-                if (slot >= 0 && slot < p->num_ent_nombres &&
-                    mapa[slot] >= 0)
-                    in->valor = LOBO_MI_VARS + mapa[slot];
-            }
-        }
-    }
-}
-
-/* Envoltorio para eventos_cargar (que pasa un contexto opcional). */
-static void remapear_programa_cb(void *ctx, LoboPrograma *p) {
-    (void)ctx;
-    lobo_remap_programa(p);
 }
 
 /* --- fase 38: callbacks del HUD ------------------------------------ */
@@ -757,7 +592,7 @@ typedef struct EscenasRuntime {
     int actual;            /* id de la escena visible */
     int cambios;           /* cambios de escena aplicados */
     int reinicios;         /* reiniciar_escena() vistos */
-    int pendiente;         /* id pedido por cambiar_escena(), 0 = ninguno */
+    RuntimeColaEscenas cola; /* cambios pedidos por cambiar_escena() */
     char ruta[MAX_PATH];   /* .logic3 del que salen los mapas */
     int objetivo;          /* objetivo de camara anterior */
     int zoom;              /* zoom anterior */
@@ -809,6 +644,7 @@ static int g_perfil_limite_blits = RENDER_BLITS_MAX;
 static void perfil_iniciar(void);
 static void perfil_fin(void);
 static void perfil_cache_render(void);
+static void estado_preparar(LoboEstado *st);
 
 /* Devuelve el indice de la escena con ese id, o -1 si no existe. */
 static int escena_indice(int id) {
@@ -824,9 +660,22 @@ static int escena_indice(int id) {
  * La memoria de la VM (g_memoria) no se toca: el progreso se conserva. */
 static void aplicar_cambio_escena(int id) {
     int indice = escena_indice(id);
+    int anterior = g_eventos.escena;
     char ruta[MAX_PATH];
 
     if (indice < 0) return;
+
+    /* Salida: la escena antigua y sus entidades siguen vivas mientras se
+     * despacha escena_salir. Solo despues se vacia y se instancia la nueva. */
+    if (g_modo_vm && eventos_num(&g_eventos) > 0) {
+        LoboEstado st;
+        if (g_traza_runtime)
+            fprintf(g_traza_runtime, "runtime: salir %d\n", anterior);
+        estado_preparar(&st);
+        eventos_escena_salir(&g_eventos, &st, juego.fotograma, anterior);
+        entidades_fin_fotograma();
+    }
+
     g_eventos.escena = id;
     g_escenas.actual = id;
     g_escenas.cambios++;
@@ -843,10 +692,14 @@ static void aplicar_cambio_escena(int id) {
         juego.mapa_usado[0] = '\0';
     }
 
+    if (g_traza_runtime)
+        fprintf(g_traza_runtime, "runtime: vaciar %d\n", anterior);
     entidades_vaciar();
     instanciar_escena(id);
     entidades_fin_fotograma();
     eventos_escena_iniciar(&g_eventos, NULL);
+    if (g_traza_runtime)
+        fprintf(g_traza_runtime, "runtime: escena %d\n", id);
 
     /* Los efectos son de la escena que los pidio; la transicion sigue
      * activa para descubrir la nueva. */
@@ -859,13 +712,23 @@ static void aplicar_cambio_escena(int id) {
     g_escenas.cam_listo = 0;
 }
 
+/* Aplica solo los cambios que habia al empezar a drenar. Un escena_salir
+ * puede pedir otra escena; esa peticion queda para el siguiente fotograma
+ * y evita bucles dentro del mismo limite. */
+static void drenar_cola_escenas(void) {
+    int pendientes = runtime_cola_num(&g_escenas.cola);
+    while (pendientes-- > 0) {
+        int id = runtime_cola_sacar(&g_escenas.cola);
+        if (id) aplicar_cambio_escena(id);
+    }
+}
+
 /* Callbacks de LoboEstado. Sin --escenas quedan a NULL y la VM devuelve
  * valores neutros, igual que pasa con el audio o el guardado. */
 static int cb_cambiar_escena(void *ctx, int id) {
     (void)ctx;
     if (escena_indice(id) < 0) return 0;
-    g_escenas.pendiente = id;
-    return 1;
+    return runtime_cola_meter(&g_escenas.cola, id);
 }
 
 static int cb_escena_actual(void *ctx) {
@@ -955,6 +818,7 @@ static int cb_efecto(void *ctx, int campo, int a, int b, int c, int d) {
 /* Prepara el estado de escenas despues de cargar el LOGIC3 y la camara. */
 static void escenas_preparar(const MotorL3 *p, const char *ruta) {
     memset(&g_escenas, 0, sizeof(g_escenas));
+    runtime_cola_iniciar(&g_escenas.cola);
     g_escenas.activo = g_escenas_activo;
     g_escenas.inicial = p->escena_inicial;
     g_escenas.actual = p->escena_inicial;
@@ -971,16 +835,14 @@ static void escenas_preparar(const MotorL3 *p, const char *ruta) {
 /* Avanza transiciones y efectos y aplica el cambio de escena pendiente.
  * Con transicion el cambio ocurre a mitad de la cobertura. */
 static void escenas_fotograma(void) {
-    int mitad, id;
+    int mitad;
 
     if (g_escenas.temblor_restantes > 0) g_escenas.temblor_restantes--;
     if (g_escenas.flash_restantes > 0) g_escenas.flash_restantes--;
     if (g_escenas.fade_restantes > 0) g_escenas.fade_restantes--;
 
     if (!g_escenas.trans.activo) {
-        id = g_escenas.pendiente;
-        g_escenas.pendiente = 0;
-        if (id) aplicar_cambio_escena(id);
+        drenar_cola_escenas();
         return;
     }
     if (g_escenas.trans.duracion <= 0) {
@@ -991,10 +853,8 @@ static void escenas_fotograma(void) {
     mitad = (g_escenas.trans.duracion + 1) / 2;
     if (g_escenas.trans.fase == 1 &&
         g_escenas.trans.transcurrido >= mitad) {
-        id = g_escenas.pendiente;
-        g_escenas.pendiente = 0;
         g_escenas.trans.fase = 2;
-        if (id) aplicar_cambio_escena(id);
+        drenar_cola_escenas();
     }
     if (g_escenas.trans.transcurrido >= g_escenas.trans.duracion)
         g_escenas.trans.activo = 0;
@@ -1071,21 +931,10 @@ static void estado_preparar(LoboEstado *st) {
     st->memoria = &g_memoria;
     st->choca = lobo_choca;
     st->ctx = NULL;
-    st->entidad_crear = ent_crear;
-    st->entidad_borrar = ent_borrar;
-    st->entidad_clonar = ent_clonar;
-    st->entidad_mover = ent_mover;
-    st->entidad_leer = ent_leer;
-    st->entidad_escribir = ent_escribir;
-    st->ctx_entidades = NULL;
+    runtime_estado_entidades(st);
     st->enviar = eventos_enviar_cb;
     st->reiniciar_escena = eventos_reiniciar_cb;
     st->ctx_eventos = &g_eventos;
-    st->toca = col_toca;
-    st->toca_tag = col_toca_tag;
-    st->distancia = col_distancia;
-    st->caja_de = col_caja_de;
-    st->ctx_colisiones = NULL;
     st->vel_x = g_fisica.vel_x;
     st->vel_y = g_fisica.vel_y;
     st->gravedad = g_fisica.gravedad;
@@ -1162,42 +1011,8 @@ static void aplicar_fisica(LoboEstado *st) {
     }
 }
 
-/* Siembra la memoria de la VM con las variables y listas globales del
- * LOGIC3 (fase 28). Los indices son los de declaracion: la lista "inventario"
- * primera del archivo es la lista 0 que ve el script. Las variables de texto
- * se registran como textos runtime, detras de los textos del programa. */
-static void memoria_preparar_l3(void) {
-    int i, j;
-    memset(&g_memoria, 0, sizeof(g_memoria));
-    for (i = 0; i < g_l3.num_textos && i < LOBO_TEXTOS_RUNTIME_MAX; i++) {
-        strncpy(g_memoria.textos[i], g_l3.textos[i], LOBO_TEXTO_MAX - 1);
-        g_memoria.textos[i][LOBO_TEXTO_MAX - 1] = 0;
-    }
-    g_memoria.num_textos = g_l3.num_textos;
-    for (i = 0; i < g_l3.num_variables && i < LOBO_GLOBALES_MAX; i++) {
-        const MotorL3Variable *v = &g_l3.variables[i];
-        int valor = v->valor;
-        if (v->tipo == 2 && valor >= 0 && valor < g_l3.num_textos)
-            valor = (int)(LOBO_TEXTO_MARCA |
-                          (unsigned)(LOBO_TEXTOS_MAX + valor));
-        g_memoria.globales[i] = valor;
-    }
-    for (i = 0; i < g_l3.num_listas && i < LOBO_LISTAS_MAX; i++) {
-        const MotorL3Lista *li = &g_l3.listas[i];
-        LoboLista *dst = &g_memoria.listas[i];
-        int n = li->num_elementos;
-        if (n > li->capacidad) n = li->capacidad;
-        if (n > LOBO_LISTA_ELEMENTOS_MAX) n = LOBO_LISTA_ELEMENTOS_MAX;
-        for (j = 0; j < n; j++) {
-            int valor = li->elementos[j];
-            if (li->tipo == 2 && valor >= 0 && valor < g_l3.num_textos)
-                valor = (int)(LOBO_TEXTO_MARCA |
-                              (unsigned)(LOBO_TEXTOS_MAX + valor));
-            dst->elem[j] = valor;
-        }
-        dst->n = n;
-    }
-}
+/* La memoria de la VM la siembra runtime_memoria_preparar, compartida con
+ * la vista previa para que globales, listas y textos coincidan. */
 
 /* Compila todos los scripts del LOGIC3 en el planificador de eventos:
  * cada bloque codigo.lobo trae su propio texto y su propia maquina,
@@ -1206,10 +1021,13 @@ static void memoria_preparar_l3(void) {
 static void scripts_preparar_l3(int con_ventana) {
     int i, n;
 
-    memoria_preparar_l3();
-    eventos_iniciar(&g_eventos, g_traza, g_eventos_traza);
+    runtime_memoria_preparar(&g_memoria, &g_l3);
+    if (g_runtime_jerarquico && g_traza_runtime)
+        fprintf(g_traza_runtime, "runtime: activo 1\n");
+    eventos_iniciar(&g_eventos, g_traza_runtime ? g_traza_runtime : g_traza,
+                    g_eventos_traza);
     g_eventos.escena = g_l3.escena_inicial;
-    n = eventos_cargar(&g_eventos, &g_l3, remapear_programa_cb, NULL);
+    n = eventos_cargar(&g_eventos, &g_l3, runtime_remap_programa_cb, NULL);
     if (g_eventos.errores > 0 && con_ventana) {
         char msg[256];
         _snprintf(msg, sizeof(msg),
@@ -1285,11 +1103,22 @@ static void traza_fotograma(void) {
  * objetos de la escena y deja los scripts a cero. El proximo fotograma
  * vuelve a disparar inicio/escena. */
 static void reiniciar_escena_juego(LoboEstado *st) {
+    int escena = g_eventos.escena;
     g_eventos.reiniciar = 0;
+    if (st && eventos_num(&g_eventos) > 0) {
+        if (g_traza_runtime)
+            fprintf(g_traza_runtime, "runtime: salir %d\n", escena);
+        eventos_escena_salir(&g_eventos, st, juego.fotograma, escena);
+        entidades_fin_fotograma();
+    }
+    if (g_traza_runtime)
+        fprintf(g_traza_runtime, "runtime: vaciar %d\n", escena);
     entidades_vaciar();
-    instanciar_escena(g_eventos.escena);
+    instanciar_escena(escena);
     entidades_fin_fotograma();
     eventos_escena_iniciar(&g_eventos, st);
+    if (g_traza_runtime)
+        fprintf(g_traza_runtime, "runtime: escena %d\n", escena);
 }
 
 static void actualizar(void) {
@@ -1542,21 +1371,7 @@ static void dibujar_entidades(int cam_x, int cam_y, int zoom) {
 }
 
 static void centro_camara_programa(int *x, int *y) {
-    const MotorL3Control *c;
-    int ids[4];
-    int n;
-    Entidad *e;
-    if (!x || !y) return;
-    *x = g_ancho / 2;
-    *y = g_alto / 2;
-    c = motor_programa_control_principal(&g_l3);
-    if (!c || c->actor <= 0) return;
-    n = entidades_de_objeto(c->actor, ids, 4);
-    if (n < 1) return;
-    e = entidad_buscar(ids[0]);
-    if (!e) return;
-    *x = e->x + (e->w > 0 ? e->w / 2 : 8);
-    *y = e->y + (e->h > 0 ? e->h / 2 : 8);
+    runtime_camara_centro(&g_l3, g_ancho, g_alto, x, y);
 }
 
 static void renderizar(void) {
@@ -2421,6 +2236,8 @@ static int opcion(const char *nombre) {
             strcmp(nombre, "--saves") == 0 ||
             strcmp(nombre, "--volcar-saves") == 0 ||
              strcmp(nombre, "--volcar-escenas") == 0 ||
+             strcmp(nombre, "--traza-runtime") == 0 ||
+             strcmp(nombre, "--volcar-runtime") == 0 ||
              strcmp(nombre, "--presupuesto") == 0 ||
              strcmp(nombre, "--volcar-perfil") == 0 ||
              strcmp(nombre, "--estres") == 0;
@@ -2430,6 +2247,7 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     const char *ruta_logica = NULL, *ruta_mapa = NULL, *ruta_bmp = NULL;
     const char *ruta_logic3 = NULL, *ruta_vm_test = NULL;
     const char *ruta_traza = NULL, *ruta_volcar = NULL;
+    const char *ruta_traza_runtime = NULL, *ruta_volcar_runtime = NULL;
     const char *ruta_ordenes = NULL, *ruta_replay = NULL;
     int fotogramas = 60;
     unsigned tecla = 0;
@@ -2480,6 +2298,10 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
         }
         if (strcmp(__argv[i], "--escenas") == 0) {
             g_escenas_activo = 1;
+            continue;
+        }
+        if (strcmp(__argv[i], "--runtime-jerarquico") == 0) {
+            g_runtime_jerarquico = 1;
             continue;
         }
         if (strcmp(__argv[i], "--perfil") == 0) {
@@ -2599,6 +2421,10 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
                 g_ruta_volcar_saves = v;
             } else if (strcmp(__argv[i - 1], "--volcar-escenas") == 0) {
                 g_ruta_volcar_escenas = v;
+            } else if (strcmp(__argv[i - 1], "--traza-runtime") == 0) {
+                ruta_traza_runtime = v;
+            } else if (strcmp(__argv[i - 1], "--volcar-runtime") == 0) {
+                ruta_volcar_runtime = v;
             } else if (strcmp(__argv[i - 1], "--presupuesto") == 0) {
                 int us = atoi(v);
                 if (us > 0) g_presupuesto_us = (unsigned long)us;
@@ -2639,6 +2465,11 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     if (ruta_traza) {
         g_traza = fopen(ruta_traza, "wt"); /* si falla: sin traza */
     }
+    if (ruta_traza_runtime) {
+        g_traza_runtime = fopen(ruta_traza_runtime, "wt");
+        g_runtime_jerarquico = 1;
+    }
+    if (ruta_volcar_runtime) g_runtime_jerarquico = 1;
 
     /* Depurador: la grabacion y el replay activan el modo depuracion. */
     if (ruta_replay) {
@@ -2842,6 +2673,13 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     if (g_ruta_volcar_audio) motor_audio_volcar(g_ruta_volcar_audio);
     if (g_ruta_volcar_saves) motor_save_volcar(g_ruta_volcar_saves);
     if (g_ruta_volcar_escenas) escenas_volcar(g_ruta_volcar_escenas);
+    if (ruta_volcar_runtime && g_modo_vm) {
+        FILE *f = fopen(ruta_volcar_runtime, "wt");
+        if (f) {
+            runtime_volcar_jerarquia(f, &g_l3);
+            fclose(f);
+        }
+    }
     perfil_volcar(g_ruta_volcar_perfil);
     if (g_grabar_replay) depurador_guardar_replay(g_grabar_replay);
     if (g_ruta_debug) depurador_volcar(g_ruta_debug, &g_memoria, &g_l3, 1);
@@ -2852,6 +2690,10 @@ int WINAPI WinMain(HINSTANCE instancia, HINSTANCE prev, LPSTR cmdline, int show)
     if (g_traza) {
         fclose(g_traza);
         g_traza = NULL;
+    }
+    if (g_traza_runtime) {
+        fclose(g_traza_runtime);
+        g_traza_runtime = NULL;
     }
     depurador_terminar();
     render_terminar();

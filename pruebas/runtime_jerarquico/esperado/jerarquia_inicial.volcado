@@ -1,0 +1,4 @@
+runtime: jerarquia escena 1 entidades 3 descartados 0
+runtime: entidad 1 tipo 100002 nombre Jugador padre 0 local 16 16 global 16 16 capa 0 visible 1
+runtime: entidad 2 tipo 20 nombre Padre padre 1 local 100 50 global 116 66 capa 0 visible 1
+runtime: entidad 3 tipo 21 nombre Hijo padre 2 local 5 7 global 121 73 capa 1 visible 1

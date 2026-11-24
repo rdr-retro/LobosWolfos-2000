@@ -323,7 +323,8 @@ static int vm_serializar(Bloque *blob) {
             salida->parametro = ev->objeto;
         } else if (ev->tipo == L3_EVENTO_CADA) {
             salida->parametro = ev->cada;
-        } else if (ev->tipo == L3_EVENTO_ESCENA) {
+        } else if (ev->tipo == L3_EVENTO_ESCENA ||
+                   ev->tipo == L3_EVENTO_ESCENA_SALIR) {
             salida->parametro = ev->escena;
         }
     }

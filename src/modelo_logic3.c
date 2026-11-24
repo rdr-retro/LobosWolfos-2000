@@ -363,6 +363,11 @@ static int ml3_evento_desde_binding(const char *nombre, Evento3 *evento,
         evento->escena = escena;
         return 1;
     }
+    if (strcmp(nombre, "escena_salir") == 0) {
+        evento->tipo = L3_EVENTO_ESCENA_SALIR;
+        evento->escena = escena;
+        return 1;
+    }
     if (strcmp(nombre, "tecla_pulsar") == 0) {
         evento->tipo = L3_EVENTO_TECLA;
         evento->flanco = L3_FLANCO_PULSAR;

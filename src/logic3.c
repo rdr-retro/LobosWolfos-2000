@@ -263,6 +263,7 @@ const char *logic3_evento_texto(int tipo) {
         case L3_EVENTO_CLONAR:    return "clonar";
         case L3_EVENTO_ESCENA:    return "escena";
         case L3_EVENTO_LLAMADA:   return "llamada";
+        case L3_EVENTO_ESCENA_SALIR: return "escena_salir";
         default:                  return "desconocido";
     }
 }
@@ -278,6 +279,7 @@ int logic3_evento_desde_texto(const char *texto) {
     if (strcmp(texto, "clonar") == 0) return L3_EVENTO_CLONAR;
     if (strcmp(texto, "escena") == 0) return L3_EVENTO_ESCENA;
     if (strcmp(texto, "llamada") == 0) return L3_EVENTO_LLAMADA;
+    if (strcmp(texto, "escena_salir") == 0) return L3_EVENTO_ESCENA_SALIR;
     return 0;
 }
 
@@ -602,6 +604,7 @@ static int parsear_evento(Linea3 *l, int linea, Evento3 *ev, int max,
                 return fallo3(error, tam, linea, "fotogramas de cada invalidos");
             break;
         case L3_EVENTO_ESCENA:
+        case L3_EVENTO_ESCENA_SALIR:
             if (l->n < 4)
                 return fallo3(error, tam, linea, "evento escena sin id");
             if (!a_entero(l->tok[3], &ev->escena) || ev->escena <= 0)
@@ -1831,7 +1834,8 @@ int logic3_validar(const Proyecto3 *p, char *error, int tam_error) {
             const Evento3 *ev = &o->eventos[j];
             if (ev->id <= 0)
                 FALLO_VALIDAR(ev->linea, "id de evento invalido");
-            if (ev->tipo < L3_EVENTO_INICIO || ev->tipo > L3_EVENTO_LLAMADA)
+            if (ev->tipo < L3_EVENTO_INICIO ||
+                ev->tipo > L3_EVENTO_ESCENA_SALIR)
                 FALLO_VALIDAR(ev->linea, "tipo de evento invalido");
             if (ev->tipo == L3_EVENTO_LLAMADA)
                 FALLO_VALIDAR(ev->linea, "evento llamada fuera de una funcion");
@@ -1845,7 +1849,8 @@ int logic3_validar(const Proyecto3 *p, char *error, int tam_error) {
                               ev->objeto);
             if (ev->tipo == L3_EVENTO_CADA && ev->cada <= 0)
                 FALLO_VALIDAR(ev->linea, "evento cada invalido");
-            if (ev->tipo == L3_EVENTO_ESCENA &&
+            if ((ev->tipo == L3_EVENTO_ESCENA ||
+                 ev->tipo == L3_EVENTO_ESCENA_SALIR) &&
                 !buscar_escena(p, ev->escena))
                 FALLO_VALIDAR(ev->linea,
                               "evento escena referencia una escena inexistente: %d",
@@ -1971,6 +1976,7 @@ static void escribir_evento(Buffer3 *b, const Evento3 *ev) {
             buf_printf(b, " %d", ev->cada);
             break;
         case L3_EVENTO_ESCENA:
+        case L3_EVENTO_ESCENA_SALIR:
             buf_printf(b, " %d", ev->escena);
             break;
         default:

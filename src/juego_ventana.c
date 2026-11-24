@@ -20,6 +20,9 @@
 #include "../motor/logic3_motor.h"
 #include "../motor/programa.h"
 #include "../motor/entidades.h"
+#include "../motor/lobo.h"
+#include "../motor/eventos.h"
+#include "../motor/runtime_comun.h"
 
 #define JV_ANCHO      640
 #define JV_ALTO       480
@@ -42,6 +45,7 @@ static u32 *g_fb;              /* framebuffer del juego (DIB o malloc) */
 static int g_clase_lista;
 static int jv_ancho = JV_ANCHO;
 static int jv_alto = JV_ALTO;
+static u32 jv_fondo = 0x00000000u;
 static int jv_fps = JV_FPS;
 static int jv_limitar = 1;
 static int jv_velocidad = JV_SPRITE_VEL;
@@ -55,9 +59,20 @@ static int jv_programa_actor;
 static u32 g_sprite[JV_SPRITE_LADO * JV_SPRITE_LADO];
 static int g_x, g_y;           /* posicion del sprite en el mundo */
 static unsigned g_entrada;     /* bits MOTOR_ENT_* */
+static unsigned jv_entrada_anterior;
 static MotorEntrada g_entrada_ext; /* fase 37: 32 teclas, flancos y raton */
 static int g_rueda_acum;
 static int g_fotograma;
+
+/* Fase 7: runtime jerarquico compartido con game.exe. Solo se activa en
+ * capturas que piden --runtime-jerarquico, para no mover las capturas
+ * antiguas. Con el compartido, la vista previa usa el mismo planificador de
+ * eventos, la misma instanciacion por niveles y la misma camara. */
+static int jv_runtime_activo;
+static LoboMemoria jv_memoria;
+static Eventos jv_eventos;
+static RuntimeColaEscenas jv_cola;
+static FILE *jv_traza_runtime;
 
 /* ------------------------------------------------------------------ */
 /* Sprite del jugador: el mismo lobito azul de game.exe                */
@@ -136,7 +151,11 @@ static void jv_dibujar_id(int x, int y, int id) {
         jv_dibujar_digito(x + i * 8, y, num[n - 1 - i] - '0');
 }
 
-static void jv_dibujar_entidades(int cam_x, int cam_y) {
+/* Dibuja las entidades igual que game.exe cuando el proyecto no tiene
+ * trajes: el color, el borde y el id son los mismos, y el zoom entero
+ * escala la posicion y el tamano. Asi la captura de la vista previa y la
+ * del ejecutable se pueden comparar pixel a pixel. */
+static void jv_dibujar_entidades_zoom(int cam_x, int cam_y, int zoom) {
     static const u32 colores[8] = {
         0xFFC84A4Au, 0xFF4AA85Au, 0xFF4A72C8u, 0xFFC89A3Au,
         0xFF9A4AC8u, 0xFF3AA8A8u, 0xFFC85A9Au, 0xFF7A8A3Au
@@ -144,79 +163,51 @@ static void jv_dibujar_entidades(int cam_x, int cam_y) {
     int orden[ENTIDADES_MAX];
     int n = entidades_orden(orden, ENTIDADES_MAX);
     int i;
+    if (zoom < 1) zoom = 1;
     for (i = 0; i < n; i++) {
         Entidad *e = entidad_indice(orden[i]);
         int sx, sy, w, h;
         if (!e || !e->visible) continue;
-        sx = e->x - cam_x;
-        sy = e->y - cam_y;
-        w = e->w > 0 ? e->w : 16;
-        h = e->h > 0 ? e->h : 16;
+        sx = (e->x - cam_x) * zoom;
+        sy = (e->y - cam_y) * zoom;
+        w = (e->w > 0 ? e->w : 16) * zoom;
+        h = (e->h > 0 ? e->h : 16) * zoom;
         jv_rellenar_rect(sx, sy, w, h, colores[(e->id - 1) & 7]);
-        jv_rellenar_rect(sx, sy, w, 1, 0xFF101010u);
-        jv_rellenar_rect(sx, sy + h - 1, w, 1, 0xFF101010u);
-        jv_rellenar_rect(sx, sy, 1, h, 0xFF101010u);
-        jv_rellenar_rect(sx + w - 1, sy, 1, h, 0xFF101010u);
-        jv_dibujar_id(sx + 2, sy + 2, e->id);
+        jv_rellenar_rect(sx, sy, w, zoom, 0xFF101010u);
+        jv_rellenar_rect(sx, sy + h - zoom, w, zoom, 0xFF101010u);
+        jv_rellenar_rect(sx, sy, zoom, h, 0xFF101010u);
+        jv_rellenar_rect(sx + w - zoom, sy, zoom, h, 0xFF101010u);
+        jv_dibujar_id(sx + 2 * zoom, sy + 2 * zoom, e->id);
     }
 }
 
 /* Instancia la escena inicial exactamente como game.exe: sin este paso
  * motor_programa_aplicar no encontraria el actor del control. */
 static void jv_entidades_preparar(void) {
-    int i, j, pasada;
-    entidades_reiniciar();
-    for (i = 0; i < g_l3.num_objetos; i++) {
-        MotorL3Objeto *o = &g_l3.objetos[i];
-        int tipo = entidades_tipo_agregar(o->id, o->nombre, o->escena,
-                                          o->padre, o->x, o->y, o->w, o->h,
-                                          o->visible, o->capa);
-        if (tipo < 0) continue;
-        for (j = 0; j < o->num_variables; j++)
-            entidades_tipo_var(tipo, j, o->variables[j].nombre,
-                               o->variables[j].valor);
-    }
-    for (pasada = 0; pasada <= g_l3.num_objetos; pasada++) {
-        int progreso = 0;
-        for (i = 0; i < g_l3.num_objetos; i++) {
-            MotorL3Objeto *o = &g_l3.objetos[i];
-            int padre = 0, tipo;
-            if (o->escena != g_l3.escena_inicial ||
-                entidad_de_objeto_escena(o->id, g_l3.escena_inicial) > 0)
-                continue;
-            if (o->padre > 0) {
-                padre = entidad_de_objeto_escena(o->padre,
-                                                 g_l3.escena_inicial);
-                if (padre <= 0) continue;
-            }
-            tipo = entidades_tipo_por_objeto(o->id);
-            if (tipo >= 0 &&
-                entidad_crear_hijo(tipo, o->x, o->y, padre) > 0)
-                progreso = 1;
-        }
-        if (!progreso) break;
-    }
-    entidades_recalcular_jerarquia();
-    entidades_fin_fotograma();
+    runtime_preparar_entidades(&g_l3, g_l3.escena_inicial);
 }
+
+static int jv_camara_zoom(void);
 
 /* Camara del modo Programa: sigue al actor del primer control activo,
  * como render_camara_calcular de game.exe sin limites de escena. */
 static void jv_camara_programa(int *cam_x, int *cam_y) {
-    const MotorL3Control *c = motor_programa_control_principal(&g_l3);
-    int tx = jv_ancho / 2, ty = jv_alto / 2;
-    if (c && c->actor > 0) {
-        int ids[4], n = entidades_de_objeto(c->actor, ids, 4);
-        if (n > 0) {
-            Entidad *e = entidad_buscar(ids[0]);
-            if (e && e->visible) {
-                tx = e->x + (e->w > 0 ? e->w / 2 : 8);
-                ty = e->y + (e->h > 0 ? e->h / 2 : 8);
-            }
-        }
-    }
-    *cam_x = tx - jv_ancho / 2;
-    *cam_y = ty - jv_alto / 2;
+    int tx, ty, zoom = jv_camara_zoom();
+    int vista_ancho = jv_ancho / zoom;
+    int vista_alto = jv_alto / zoom;
+    runtime_camara_centro(&g_l3, jv_ancho, jv_alto, &tx, &ty);
+    if (vista_ancho < 1) vista_ancho = 1;
+    if (vista_alto < 1) vista_alto = 1;
+    *cam_x = tx - vista_ancho / 2;
+    *cam_y = ty - vista_alto / 2;
+}
+
+/* Zoom entero del proyecto, con el mismo rango que el motor. */
+static int jv_camara_zoom(void) {
+    int zoom = g_l3.camara.zoom;
+    if (zoom < 1) zoom = 1;
+    if (zoom > 4) zoom = 4;
+    return zoom;
 }
 
 /* ------------------------------------------------------------------ */
@@ -276,6 +267,110 @@ static int jv_lobo_choca(void *ctx, int x, int y) {
     return jv_choca_con_mapa(x, y);
 }
 
+/* ------------------------------------------------------------------ */
+/* Runtime jerarquico compartido (fase 7)                              */
+/* ------------------------------------------------------------------ */
+
+static int jv_cambiar_escena_cb(void *ctx, int id);
+static int jv_escena_actual_cb(void *ctx);
+
+static int jv_indice_escena(int id) {
+    int i;
+    for (i = 0; i < g_l3.num_escenas; i++)
+        if (g_l3.escenas[i].id == id) return i;
+    return -1;
+}
+
+static void jv_estado_preparar(LoboEstado *st) {
+    memset(st, 0, sizeof(*st));
+    st->x = g_x;
+    st->y = g_y;
+    st->vel = jv_velocidad;
+    st->fotograma = g_fotograma;
+    st->entrada = g_entrada;
+    st->entrada_ext = &g_entrada_ext;
+    st->memoria = &jv_memoria;
+    st->choca = jv_lobo_choca;
+    runtime_estado_entidades(st);
+    st->enviar = eventos_enviar_cb;
+    st->reiniciar_escena = eventos_reiniciar_cb;
+    st->ctx_eventos = &jv_eventos;
+    st->cambiar_escena = jv_cambiar_escena_cb;
+    st->escena_actual = jv_escena_actual_cb;
+    st->ctx_escenas = NULL;
+}
+
+static int jv_cambiar_escena_cb(void *ctx, int id) {
+    (void)ctx;
+    if (jv_indice_escena(id) < 0) return 0;
+    return runtime_cola_meter(&jv_cola, id);
+}
+
+static int jv_escena_actual_cb(void *ctx) {
+    (void)ctx;
+    return jv_eventos.escena;
+}
+
+static void jv_aplicar_cambio_escena(int id) {
+    int indice = jv_indice_escena(id);
+    int anterior = jv_eventos.escena;
+    if (indice < 0) return;
+
+    if (eventos_num(&jv_eventos) > 0) {
+        LoboEstado st;
+        if (jv_traza_runtime)
+            fprintf(jv_traza_runtime, "runtime: salir %d\n", anterior);
+        jv_estado_preparar(&st);
+        eventos_escena_salir(&jv_eventos, &st, g_fotograma, anterior);
+        entidades_fin_fotograma();
+    }
+
+    jv_eventos.escena = id;
+    jv_fondo = (u32)g_l3.escenas[indice].fondo;
+    motor_mapa_liberar(&g_mapa);
+    memset(&g_mapa, 0, sizeof(g_mapa));
+    g_mapa_usado[0] = '\0';
+    if (g_l3.escenas[indice].mapa[0] &&
+        activo_existe_virtual(g_l3.escenas[indice].mapa) &&
+        activo_cargar_mapa(g_l3.escenas[indice].mapa, &g_mapa))
+        recortar_texto(g_mapa_usado, g_l3.escenas[indice].mapa,
+                       sizeof(g_mapa_usado));
+
+    if (jv_traza_runtime)
+        fprintf(jv_traza_runtime, "runtime: vaciar %d\n", anterior);
+    entidades_vaciar();
+    runtime_instanciar_escena(&g_l3, id);
+    entidades_fin_fotograma();
+    eventos_escena_iniciar(&jv_eventos, NULL);
+    if (jv_traza_runtime)
+        fprintf(jv_traza_runtime, "runtime: escena %d\n", id);
+}
+
+static void jv_drenar_cola_escenas(void) {
+    int pendientes = runtime_cola_num(&jv_cola);
+    while (pendientes-- > 0) {
+        int id = runtime_cola_sacar(&jv_cola);
+        if (id) jv_aplicar_cambio_escena(id);
+    }
+}
+
+static void jv_runtime_iniciar(void) {
+    int n;
+    eventos_liberar(&jv_eventos);
+    /* Con traza se detallan los eventos, igual que el motor con --eventos,
+     * para que las dos trazas se puedan comparar linea a linea. */
+    eventos_iniciar(&jv_eventos, jv_traza_runtime,
+                    jv_traza_runtime ? 1 : 0);
+    jv_eventos.escena = g_l3.escena_inicial;
+    if (jv_traza_runtime) fprintf(jv_traza_runtime, "runtime: activo 1\n");
+    runtime_memoria_preparar(&jv_memoria, &g_l3);
+    n = eventos_cargar(&jv_eventos, &g_l3, runtime_remap_programa_cb, NULL);
+    runtime_cola_iniciar(&jv_cola);
+    jv_entrada_anterior = 0;
+    (void)n;
+    eventos_escena_iniciar(&jv_eventos, NULL);
+}
+
 /* Compila los scripts del proyecto y prepara una maquina por elemento.
  * Las funciones que no compilan se avisan (si `avisar`) y se saltan: el
  * resto del juego sigue corriendo. */
@@ -329,6 +424,43 @@ static int jv_actualizar(void) {
 
     /* Escape cierra siempre, alla donde se mueva el lobo. */
     if (e & MOTOR_ENT_CERRAR) return 0;
+
+    /* Runtime jerarquico compartido: el planificador de eventos de
+     * motor/eventos.c decide que scripts corren en este fotograma. */
+    if (jv_runtime_activo && eventos_num(&jv_eventos) > 0) {
+        LoboEstado st;
+        jv_estado_preparar(&st);
+        eventos_fotograma(&jv_eventos, &st, g_fotograma, g_entrada,
+                          jv_entrada_anterior);
+        jv_entrada_anterior = g_entrada;
+        if (jv_eventos.reiniciar) {
+            int escena = jv_eventos.escena;
+            jv_eventos.reiniciar = 0;
+            if (jv_traza_runtime)
+                fprintf(jv_traza_runtime, "runtime: salir %d\n", escena);
+            jv_estado_preparar(&st);
+            eventos_escena_salir(&jv_eventos, &st, g_fotograma, escena);
+            entidades_fin_fotograma();
+            if (jv_traza_runtime)
+                fprintf(jv_traza_runtime, "runtime: vaciar %d\n", escena);
+            entidades_vaciar();
+            runtime_instanciar_escena(&g_l3, escena);
+            entidades_fin_fotograma();
+            eventos_escena_iniciar(&jv_eventos, &st);
+            if (jv_traza_runtime)
+                fprintf(jv_traza_runtime, "runtime: escena %d\n", escena);
+        }
+        jv_drenar_cola_escenas();
+        if (eventos_cerrar(&jv_eventos)) return 0;
+        if (jv_programa_actor) {
+            motor_programa_aplicar(&g_l3, &g_entrada_ext, e,
+                                   g_mapa.celdas ? &g_mapa : NULL,
+                                   jv_velocidad);
+            entidades_recalcular_jerarquia();
+            entidades_fin_fotograma();
+        }
+        return 1;
+    }
 
     if (g_num_scripts > 0) {
         /* Modo scripts: el codigo lobo manda y el movimiento por defecto
@@ -399,25 +531,27 @@ static void jv_renderizar(void) {
     /* El modo Programa pinta las entidades del runtime, igual que game.exe.
      * La camara sigue al actor del control activo aunque no haya mapa. */
     if (jv_programa_actor) {
+        int zoom = jv_camara_zoom();
         jv_camara_programa(&cam_x, &cam_y);
         if (!g_mapa_usado[0]) {
-            motor_limpiar(g_fb, jv_ancho, jv_alto, g.ajustes.fondo);
-            jv_dibujar_entidades(cam_x, cam_y);
+            motor_limpiar(g_fb, jv_ancho, jv_alto, jv_fondo);
+            jv_dibujar_entidades_zoom(cam_x, cam_y, zoom);
             return;
         }
         motor_limpiar(g_fb, jv_ancho, jv_alto, 0x00101826u);
-        motor_mapa_render(g_fb, jv_ancho, jv_alto, cam_x, cam_y, m->lado,
+        motor_mapa_render(g_fb, jv_ancho, jv_alto, cam_x * zoom, cam_y * zoom,
+                          m->lado * zoom,
                           m->dibujo_celdas ? m->dibujo_celdas : m->celdas,
                           m->dibujo_celdas ? m->num_dibujo : m->num_celdas,
                           m->imagenes);
-        jv_dibujar_entidades(cam_x, cam_y);
+        jv_dibujar_entidades_zoom(cam_x, cam_y, zoom);
         return;
     }
 
     /* Sin mapa el proyecto corre igual, pero no se pinta nada: la
      * ventana queda con el color de fondo del proyecto (negro por defecto). */
     if (!g_mapa_usado[0]) {
-        motor_limpiar(g_fb, jv_ancho, jv_alto, g.ajustes.fondo);
+        motor_limpiar(g_fb, jv_ancho, jv_alto, jv_fondo);
         if (jv_sprite_clasico)
             motor_blit_alpha(g_fb, jv_ancho, jv_alto, g_x, g_y,
                              g_sprite, JV_SPRITE_LADO, JV_SPRITE_LADO);
@@ -530,6 +664,7 @@ static void jv_liberar(void) {
     g_fb = NULL;
     motor_mapa_liberar(&g_mapa);
     activo_virtuales_limpiar();
+    eventos_liberar(&jv_eventos);
     entidades_reiniciar();
     g_num_programas = 0;
     g_num_scripts = 0;
@@ -547,6 +682,7 @@ static int jv_cargar_proyecto(int avisar) {
      * velocidad base. Se copian al abrir la vista previa. */
     jv_ancho = limitar(g.ajustes.ancho, 320, 4096);
     jv_alto = limitar(g.ajustes.alto, 200, 4096);
+    jv_fondo = (u32)g.ajustes.fondo;
     jv_fps = limitar(g.ajustes.fps, 1, 1000);
     jv_limitar = g.ajustes.limitar_cuadros ? 1 : 0;
     jv_velocidad = limitar(g.ajustes.velocidad, 1, 10);
@@ -595,9 +731,17 @@ static int jv_cargar_proyecto(int avisar) {
         }
         jv_sprite_clasico =
             g_l3.sistema.opciones.jugador_implicito ? 1 : 0;
+        jv_fondo = (u32)g_l3.fondo;
         jv_programa_actor = !jv_sprite_clasico &&
                             motor_programa_control_principal(&g_l3) != NULL;
-        if (jv_programa_actor) jv_entidades_preparar();
+        if (jv_programa_actor) {
+            if (jv_runtime_activo) {
+                runtime_preparar_entidades(&g_l3, g_l3.escena_inicial);
+                jv_runtime_iniciar();
+            } else {
+                jv_entidades_preparar();
+            }
+        }
         if (g_l3.mapa[0]) {
             if (!activo_cargar_mapa(g_l3.mapa, &g_mapa)) {
                 if (avisar)
@@ -817,19 +961,39 @@ void juego_ventana_terminar(void) {
 
 /* Captura determinista sin ventana, para comparar la vista previa con el
  * game.exe compilado: actualiza N fotogramas y guarda el framebuffer. */
-int juego_ventana_capturar(const char *ruta, int fotogramas) {
+int juego_ventana_capturar(const char *ruta, int fotogramas,
+                           int runtime_activo, const char *traza_runtime,
+                           const char *volcar_runtime) {
     int i, ok;
 
     if (!ruta || !ruta[0]) return 0;
     if (fotogramas < 1) fotogramas = 1;
     if (fotogramas > 100000) fotogramas = 100000;
 
+    jv_runtime_activo = runtime_activo ? 1 : 0;
+    if (jv_traza_runtime) {
+        fclose(jv_traza_runtime);
+        jv_traza_runtime = NULL;
+    }
+    if (jv_runtime_activo && traza_runtime)
+        jv_traza_runtime = fopen(traza_runtime, "wt");
+
     if (g_estado != JUEGO_VENTANA_CERRADO) juego_ventana_detener();
-    if (!jv_cargar_proyecto(0)) return 0;
+    if (!jv_cargar_proyecto(0)) {
+        if (jv_traza_runtime) {
+            fclose(jv_traza_runtime);
+            jv_traza_runtime = NULL;
+        }
+        return 0;
+    }
 
     g_fb = (u32 *)malloc((size_t)jv_ancho * jv_alto * sizeof(u32));
     if (!g_fb) {
         jv_liberar();
+        if (jv_traza_runtime) {
+            fclose(jv_traza_runtime);
+            jv_traza_runtime = NULL;
+        }
         return 0;
     }
 
@@ -846,6 +1010,17 @@ int juego_ventana_capturar(const char *ruta, int fotogramas) {
         if (!sigue) break;
     }
     ok = activo_guardar_bmp(ruta, g_fb, jv_ancho, jv_alto);
+    if (jv_runtime_activo && volcar_runtime) {
+        FILE *f = fopen(volcar_runtime, "wt");
+        if (f) {
+            runtime_volcar_jerarquia(f, &g_l3);
+            fclose(f);
+        }
+    }
+    if (jv_traza_runtime) {
+        fclose(jv_traza_runtime);
+        jv_traza_runtime = NULL;
+    }
     free(g_fb);
     g_fb = NULL;
     jv_liberar();
