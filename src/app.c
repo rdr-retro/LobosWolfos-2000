@@ -66,10 +66,14 @@ static void guardar_mapa_actual(void) {
         return;
     }
     if (mapa_guardar(ruta)) {
+        char diagnostico[PM_ERROR_MAX];
         if (pide) {
             strncpy(g.mapa_ruta, ruta, MAX_PATH - 1);
             g.mapa_ruta[MAX_PATH - 1] = 0;
         }
+        diagnostico[0] = 0;
+        inicio_registrar_recurso(ruta, "mav", NULL, diagnostico,
+                                 sizeof(diagnostico));
         app_estado("Mapa guardado: %s", ruta);
     } else {
         dialogo_error("No se pudo guardar el mapa.");

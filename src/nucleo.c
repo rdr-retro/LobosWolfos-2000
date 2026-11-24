@@ -922,11 +922,38 @@ void app_abrir_imagen(const char *ruta) {
     app_estado("Imagen abierta: %dx%d", w, h);
 }
 
+/* Fase 8: cada guardado de recurso alimenta el registro del proyecto abierto.
+ * Las rutas absolutas se reducen a la carpeta del recurso para que la
+ * validacion de recursos siga funcionando con rutas relativas al proyecto. */
+static void registrar_recurso_guardado(const char *ruta, const char *tipo) {
+    char relativo[MAX_PATH];
+    char nombre[MAX_PATH];
+    char diagnostico[PM_ERROR_MAX];
+    if (!ruta || !ruta[0]) return;
+    recortar_texto(relativo, ruta, sizeof(relativo));
+    if (relativo[0] == '/' || relativo[0] == '\\' || relativo[1] == ':') {
+        const char *carpeta = "tiles";
+        ruta_nombre(nombre, sizeof(nombre), relativo);
+        if (strcmp(tipo, "wav") == 0) carpeta = "sonidos";
+        else if (strcmp(tipo, "mav") == 0) carpeta = "maps";
+        else if (strcmp(tipo, "wolfo") == 0) carpeta = "";
+        if (carpeta[0])
+            _snprintf(relativo, sizeof(relativo), "%s/%s", carpeta, nombre);
+        else
+            recortar_texto(relativo, nombre, sizeof(relativo));
+        relativo[sizeof(relativo) - 1] = 0;
+    }
+    diagnostico[0] = 0;
+    inicio_registrar_recurso(relativo, tipo, NULL, diagnostico,
+                             sizeof(diagnostico));
+}
+
 void app_guardar_imagen(const char *ruta, int png) {
     doc_componer_todo(&g.doc);
     if (png ? imagen_guardar_png(ruta, g.doc.compuesto, g.doc.ancho, g.doc.alto)
             : imagen_guardar_bmp(ruta, g.doc.compuesto, g.doc.ancho, g.doc.alto)) {
         pestanas_marcar_guardada(ruta);
+        registrar_recurso_guardado(ruta, png ? "png" : "bmp");
         app_estado("Guardado: %s", ruta);
     } else {
         dialogo_error("No se pudo guardar la imagen.");
@@ -2150,6 +2177,57 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 }
             }
         }
+        /* Fase 8: registro directo de recursos y arrastre desde el arbol de
+         * Inicio hasta un nodo. El arrastre usa los mismos eventos que el
+         * raton real, asi que la vista y el servicio comparten resultado. */
+        {
+            int reg_indice;
+            for (reg_indice = 0; reg_indice < 16; reg_indice++) {
+                char *reg_arg = arg_valor_n(cmd, "--registrar-recurso",
+                                            reg_indice);
+                char ruta[MAX_PATH];
+                char tipo[PM_NOMBRE_MAX];
+                char nombre[PM_NOMBRE_MAX];
+                char diagnostico[PM_ERROR_MAX];
+                const char *primero, *segundo;
+                size_t n;
+                if (!reg_arg) break;
+                primero = strchr(reg_arg, '|');
+                segundo = primero ? strchr(primero + 1, '|') : NULL;
+                ruta[0] = tipo[0] = nombre[0] = diagnostico[0] = 0;
+                if (primero) {
+                    n = (size_t)(primero - reg_arg);
+                    if (n >= sizeof(ruta)) n = sizeof(ruta) - 1;
+                    memcpy(ruta, reg_arg, n);
+                    ruta[n] = 0;
+                    primero++;
+                } else {
+                    recortar_texto(ruta, reg_arg, sizeof(ruta));
+                }
+                if (primero) {
+                    const char *fin = segundo ? segundo : primero + strlen(primero);
+                    n = (size_t)(fin - primero);
+                    if (n >= sizeof(tipo)) n = sizeof(tipo) - 1;
+                    memcpy(tipo, primero, n);
+                    tipo[n] = 0;
+                }
+                if (segundo) recortar_texto(nombre, segundo + 1, sizeof(nombre));
+                if (ruta[0] && tipo[0])
+                    inicio_registrar_recurso(ruta, tipo, nombre[0] ? nombre : NULL,
+                                             diagnostico, sizeof(diagnostico));
+            }
+        }
+        {
+            char *arr_arg = arg_valor(cmd, "--inicio-arrastrar");
+            if (arr_arg && g.vista == VISTA_INICIO) {
+                int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+                if (sscanf(arr_arg, "%d,%d;%d,%d", &x0, &y0, &x1, &y1) == 4) {
+                    app_pulsar(x0, y0, 0);
+                    app_mover(x1, y1, MK_LBUTTON);
+                    app_soltar(x1, y1, 0);
+                }
+            }
+        }
         /* Teclado del inspector de Inicio despues de los clics. Es una
          * variante aislada de --teclas para poder reproducir el gesto real:
          * seleccionar entidad, pulsar un campo, escribir y confirmar. */
@@ -2663,6 +2741,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 if (ruta[0] && mapa_guardar(ruta)) {
                     strncpy(g.mapa_ruta, ruta, MAX_PATH - 1);
                     g.mapa_ruta[MAX_PATH - 1] = 0;
+                    registrar_recurso_guardado(ruta, "mav");
                 }
             }
         }

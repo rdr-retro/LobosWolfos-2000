@@ -1,0 +1,13 @@
+inicio_vista=1
+inicio_ruta=escena.log
+inicio_sel=-1
+inicio_undo=0 redo=0 ultimo=cargado reparentar=-1
+inicio_filas=6
+inicio_editor=0 id=0 cursor=0 modificado=0 scroll=1
+inicio_asociar=-1,-1 evento=fotograma codigo_error=0:
+inicio_entidades=8 escenas=1 nodos=3 scripts=1 asociaciones=1 recursos=1
+inicio_utilidad=PINTAR arrastre=-1 confirmar_borrado=-1 raton=40,650
+inicio_registro=1 tipo=texture ruta=tiles/jugador.png nombre=Jugador
+inicio_nodo=11 escena=10 padre=0 nombre=Nivel 1 recurso=0
+inicio_nodo=12 escena=10 padre=11 nombre=Player recurso=1
+inicio_nodo=13 escena=10 padre=12 nombre=Camera2D recurso=0

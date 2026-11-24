@@ -21,13 +21,22 @@
 #define INICIO_BOTON_HUECO 4
 #define INICIO_BOTONES     7
 
+/* Fase 8: botones de utilidades al pie del arbol y arrastre de recursos. */
+#define INICIO_UTIL_ANCHO  84
+#define INICIO_UTIL_ALTO   22
+#define INICIO_UTIL_HUECO  4
+
 /* La vista usa el mismo Inicio del servicio CLI, asi que cada comando visual
  * comparte snapshots con --inicio. Estas dos funciones se definen mas abajo. */
 static void ultimo_fijar(Inicio *in, const char *texto);
 static void guardar_pasado(Inicio *in);
+static void copiar_seguro(char *dst, size_t tam, const char *src);
 static void inicio_accion_fallo(const char *texto);
 static void inicio_dibujar_rejilla(Zona z);
 static void inicio_dibujar_botones(Zona z);
+static void inicio_dibujar_utilidades(void);
+static Zona inicio_util_zona(int indice);
+static void inicio_utilidades_abrir(int indice);
 
 typedef struct InicioFila {
     int id;
@@ -60,6 +69,17 @@ static char g_inicio_codigo_error[PM_ERROR_MAX];
 static int g_inicio_asociar_origen = -1;
 static int g_inicio_asociar_destino = -1;
 static int g_inicio_evento_indice;
+
+/* Fase 8: estado propio de utilidades, arrastre y aviso de borrado. */
+static char g_inicio_utilidad_ultima[16];
+static int g_inicio_arrastre_recurso = -1;
+static int g_inicio_arrastre_x;
+static int g_inicio_arrastre_y;
+static int g_inicio_confirmar_borrado = -1;
+
+static const char *const g_inicio_utilidades[3] = {
+    "PINTAR", "TILES", "MAPAS"
+};
 
 #define INICIO_ACCION_ANCHO  92
 #define INICIO_ACCION_ALTO   22
@@ -298,6 +318,12 @@ static int inicio_valor_propiedad_valido(const EntidadModelo *e,
         if (valor[0] == '/' || valor[0] == '\\' || valor[1] == ':') return 0;
         return strstr(valor, "..") == NULL;
     }
+    if (strcmp(campo, "recurso") == 0) {
+        const EntidadModelo *recurso;
+        if (!inicio_entero_exacto(valor, &n) || n <= 0) return 0;
+        recurso = inicio_entidad(n);
+        return recurso && recurso->kind == PM_KIND_RECURSO;
+    }
     if (strcmp(campo, "x") == 0 || strcmp(campo, "y") == 0 ||
         strcmp(campo, "w") == 0 || strcmp(campo, "h") == 0 ||
         strcmp(campo, "visible") == 0 || strcmp(campo, "capa") == 0 ||
@@ -378,6 +404,23 @@ int inicio_modelo_editar(int id, const char *campo, const char *valor,
             inicio_diagnostico(diagnostico, longitud, "no se pudo actualizar el padre");
             return 0;
         }
+    } else if (e->kind == PM_KIND_NODO && strcmp(campo, "recurso") == 0) {
+        const EntidadModelo *recurso;
+        if (!inicio_entero_exacto(valor, &n)) {
+            inicio_diagnostico(diagnostico, longitud, "recurso no valido");
+            return 0;
+        }
+        recurso = pm_entidad_const(&nuevo, n);
+        if (!recurso || recurso->kind != PM_KIND_RECURSO) {
+            inicio_diagnostico(diagnostico, longitud, "el recurso no existe");
+            return 0;
+        }
+        if (!pm_propiedad(e, "recurso", valor, e->origen.linea) ||
+            !pm_referencia(e, "recurso", n, NULL, e->origen.linea)) {
+            inicio_diagnostico(diagnostico, longitud,
+                               "no se pudo asignar el recurso al nodo");
+            return 0;
+        }
     } else if (strcmp(campo, "escena") == 0 && e->kind == PM_KIND_NODO) {
         inicio_diagnostico(diagnostico, longitud,
                            "la escena de un nodo se cambia desde su montaje");
@@ -418,7 +461,42 @@ int inicio_modelo_editar(int id, const char *campo, const char *valor,
     inicio_filas_construir();
     app_invalidar();
     return 1;
-}static void inicio_escribir_valor(FILE *f, const char *clave, const char *valor) {
+}
+
+int inicio_registrar_recurso(const char *ruta, const char *tipo,
+                             const char *nombre, char *diagnostico,
+                             size_t longitud) {
+    Inicio *in = inicio_servicio();
+    ProjectModel copia;
+    char error[PM_ERROR_MAX];
+    int id;
+
+    if (!g_inicio_modelo) {
+        inicio_diagnostico(diagnostico, longitud, "no hay modelo cargado");
+        return 0;
+    }
+    guardar_pasado(in);
+    pm_copiar(g_inicio_modelo, &copia);
+    id = pm_registrar_recurso(&copia, ruta, tipo, nombre);
+    if (!id) {
+        copiar_seguro(error, sizeof(error), pm_error(&copia));
+        pm_copiar(&in->pasado[in->num_pasado - 1], &in->modelo);
+        in->num_pasado--;
+        in->num_futuro = 0;
+        inicio_diagnostico(diagnostico, longitud, error[0] ? error :
+                           "no se pudo registrar el recurso");
+        return 0;
+    }
+    pm_copiar(&copia, &in->modelo);
+    ultimo_fijar(in, "recurso registrado");
+    inicio_diagnostico(diagnostico, longitud, "sin errores");
+    g_inicio_seleccion = id;
+    inicio_filas_construir();
+    app_invalidar();
+    return id;
+}
+
+static void inicio_escribir_valor(FILE *f, const char *clave, const char *valor) {
     const char *p = valor ? valor : "";
     if (clave && clave[0]) fprintf(f, " %s \"", clave);
     else fputs(" \"", f);
@@ -855,11 +933,12 @@ static void inicio_dibujar_arbol(void) {
     dibujar_linea(p.x, p.y + 34, zona_derecha(p), p.y + 34, INICIO_LINEA);
     for (i = g_inicio_scroll; i < g_inicio_num_filas; i++) {
         y = p.y + 40 + (i - g_inicio_scroll) * INICIO_FILA_ALTO;
-        if (y + INICIO_FILA_ALTO > zona_abajo(p) - 10) break;
+        if (y + INICIO_FILA_ALTO > zona_abajo(p) - 48) break;
         inicio_dibujar_fila(p, i, y);
     }
     if (g_inicio_num_filas == 0)
         fuente_dibujar(p.x + INICIO_MARGEN, p.y + 54, "Sin escenas en el modelo", INICIO_MUTED);
+    inicio_dibujar_utilidades();
 }
 
 static void inicio_nodo_posicion(const EntidadModelo *e, Zona lienzo,
@@ -920,6 +999,60 @@ static int inicio_boton_en(int x, int y) {
     return -1;
 }
 
+static Zona inicio_util_zona(int indice) {
+    Zona arbol = inicio_arbol();
+    int x = arbol.x + 8 + indice * (INICIO_UTIL_ANCHO + INICIO_UTIL_HUECO);
+    int y = zona_abajo(arbol) - INICIO_UTIL_ALTO - 6;
+    return zona_hacer(x, y, INICIO_UTIL_ANCHO, INICIO_UTIL_ALTO);
+}
+
+static int inicio_util_en(int x, int y) {
+    int i;
+    for (i = 0; i < 3; i++)
+        if (zona_contiene(inicio_util_zona(i), x, y)) return i;
+    return -1;
+}
+
+static void inicio_dibujar_utilidades(void) {
+    Zona arbol = inicio_arbol();
+    int abajo = zona_abajo(arbol);
+    int i;
+    dibujar_rect(arbol.x, abajo - 46, arbol.ancho, 46, INICIO_PANEL_2);
+    dibujar_linea(arbol.x, abajo - 46, zona_derecha(arbol), abajo - 46,
+                  INICIO_LINEA);
+    fuente_dibujar(arbol.x + INICIO_MARGEN, abajo - 43, "UTILIDADES",
+                   INICIO_MUTED);
+    for (i = 0; i < 3; i++) {
+        Zona z = inicio_util_zona(i);
+        int sobre = zona_contiene(z, g.raton_x, g.raton_y);
+        int activo = strcmp(g_inicio_utilidad_ultima, g_inicio_utilidades[i]) == 0;
+        dibujar_rect_z(z, activo ? INICIO_SELECCION :
+                          sobre ? INICIO_NODO : INICIO_PANEL);
+        dibujar_marco_z(z, activo ? INICIO_ACCENTO : INICIO_LINEA);
+        fuente_dibujar(z.x + 6, z.y + 4, g_inicio_utilidades[i],
+                       activo || sobre ? TEXTO_CLARO : INICIO_TEXTO);
+    }
+}
+
+static void inicio_utilidades_abrir(int indice) {
+    if (indice < 0 || indice > 2) return;
+    if (indice == 0) {
+        if (g.modo_tiles) tiles_modo_salir();
+        g.patron_visible = 0;
+        app_cambiar_vista(VISTA_PINTAR);
+    } else if (indice == 1) {
+        if (g.vista != VISTA_PINTAR) app_cambiar_vista(VISTA_PINTAR);
+        if (!g.modo_tiles) tiles_modo_entrar();
+    } else {
+        if (g.modo_tiles) tiles_modo_salir();
+        app_cambiar_vista(VISTA_MAPA);
+    }
+    recortar_texto(g_inicio_utilidad_ultima, g_inicio_utilidades[indice],
+                   sizeof(g_inicio_utilidad_ultima));
+    app_estado("utilidad: %s", g_inicio_utilidades[indice]);
+    app_invalidar();
+}
+
 static void inicio_nombre_auto(char *dst, size_t tam, int kind) {
     const char *base = kind == PM_KIND_ESCENA ? "Escena" : "Nodo";
     int n;
@@ -976,12 +1109,25 @@ static int inicio_accion_crear(int kind) {
 static int inicio_accion_borrar(void) {
     Inicio *in = inicio_servicio();
     const EntidadModelo *e = inicio_entidad(g_inicio_seleccion);
+    char aviso[PM_ERROR_MAX];
     int id = g_inicio_seleccion;
+    int referencias;
 
     if (!e) {
         inicio_accion_fallo("selecciona una entidad para borrar");
         return 0;
     }
+    referencias = pm_referencias_entrantes(g_inicio_modelo, id);
+    if (referencias > 0 && g_inicio_confirmar_borrado != id) {
+        g_inicio_confirmar_borrado = id;
+        _snprintf(aviso, sizeof(aviso),
+                  "aviso: %d referencia(s) a #%d; pulsa BORRAR de nuevo",
+                  referencias, id);
+        aviso[sizeof(aviso) - 1] = 0;
+        inicio_accion_fallo(aviso);
+        return 0;
+    }
+    g_inicio_confirmar_borrado = -1;
     if (!inicio_borrar(in, id)) {
         inicio_accion_fallo(in->ultimo);
         return 0;
@@ -1421,7 +1567,7 @@ static void inicio_dibujar_inspector(void) {
     Zona p = inicio_inspector();
     const EntidadModelo *e = inicio_entidad(g_inicio_seleccion);
     int y = p.y + 52;
-    int i;
+    int i, referencias;
     char linea[PM_RUTA_MAX + PM_NOMBRE_MAX + 32];
     dibujar_rect_z(p, INICIO_PANEL);
     dibujar_rect(p.x, p.y, zona_derecha(p), p.y + 34, INICIO_PANEL_2);
@@ -1484,8 +1630,18 @@ static void inicio_dibujar_inspector(void) {
             y += 19;
         }
     }
+    referencias = pm_referencias_entrantes(g_inicio_modelo, e->id);
+    if (referencias > 0 && y < p.y + 314) {
+        _snprintf(linea, sizeof(linea), "referencias entrantes: %d", referencias);
+        linea[sizeof(linea) - 1] = 0;
+        fuente_dibujar(p.x + INICIO_MARGEN, y, linea, 0x00FFC864u);
+        y += 19;
+    }
     inicio_dibujar_asociaciones(&y);
     inicio_dibujar_acciones();
+    if (g_inicio_confirmar_borrado == e->id && y < zona_abajo(p) - 54)
+        fuente_dibujar(p.x + INICIO_MARGEN, zona_abajo(p) - 52,
+                       "CONFIRMAR BORRADO: pulsa BORRAR de nuevo", 0x00FF9A8Au);
     if (g_inicio_editando && y < zona_abajo(p) - 38) {
         fuente_dibujar(p.x + INICIO_MARGEN, zona_abajo(p) - 34,
                        "Enter guarda  Esc cancela", INICIO_MUTED);
@@ -1530,6 +1686,8 @@ void inicio_modelo_cargar(ProjectModel *modelo, const char *ruta) {
     g_inicio_asociar_origen = -1;
     g_inicio_asociar_destino = -1;
     g_inicio_evento_indice = 0;
+    g_inicio_arrastre_recurso = -1;
+    g_inicio_confirmar_borrado = -1;
     inicio_filas_construir();
 }
 
@@ -1559,6 +1717,8 @@ void inicio_modelo_limpiar(void) {
     g_inicio_asociar_origen = -1;
     g_inicio_asociar_destino = -1;
     g_inicio_evento_indice = 0;
+    g_inicio_arrastre_recurso = -1;
+    g_inicio_confirmar_borrado = -1;
 }
 
 void inicio_dibujar(void) {
@@ -1569,6 +1729,18 @@ void inicio_dibujar(void) {
     inicio_dibujar_arbol();
     inicio_dibujar_lienzo();
     inicio_dibujar_inspector();
+    if (g_inicio_arrastre_recurso > 0) {
+        const EntidadModelo *recurso = inicio_entidad(g_inicio_arrastre_recurso);
+        dibujar_rect(g_inicio_arrastre_x - 6, g_inicio_arrastre_y - 6,
+                     g_inicio_arrastre_x + 96, g_inicio_arrastre_y + 12,
+                     INICIO_SELECCION);
+        dibujar_marco(g_inicio_arrastre_x - 6, g_inicio_arrastre_y - 6,
+                      g_inicio_arrastre_x + 96, g_inicio_arrastre_y + 12,
+                      INICIO_ACCENTO);
+        inicio_texto_recortado(g_inicio_arrastre_x, g_inicio_arrastre_y - 4,
+                               recurso ? recurso->nombre : "recurso",
+                               TEXTO_CLARO, 88);
+    }
     _snprintf(resumen, sizeof(resumen), "Inicio  |  .log -> ProjectModel  |  %d entidades",
               g_inicio_modelo ? g_inicio_modelo->num_entidades : 0);
     resumen[sizeof(resumen) - 1] = 0;
@@ -1583,7 +1755,8 @@ static int inicio_fila_en(int x, int y) {
     i = g_inicio_scroll + (y - (p.y + 40)) / INICIO_FILA_ALTO;
     if (i < 0 || i >= g_inicio_num_filas) return -1;
     if (y < p.y + 40 || y >= p.y + 40 +
-        (g_inicio_num_filas - g_inicio_scroll) * INICIO_FILA_ALTO)
+        (g_inicio_num_filas - g_inicio_scroll) * INICIO_FILA_ALTO ||
+        y > zona_abajo(p) - 48)
         return -1;
     return i;
 }
@@ -1643,9 +1816,17 @@ static void inicio_editar_iniciar(int campo) {
 }
 
 void inicio_pulsar(int x, int y, int boton) {
-    int fila, id, campo, boton_barra, accion, asociacion;
+    int fila, id, campo, boton_barra, accion, asociacion, util;
+    const EntidadModelo *e;
     if (boton != 0) return;
     inicio_filas_construir();
+    if (g_inicio_arrastre_recurso > 0 && inicio_fila_en(x, y) < 0)
+        g_inicio_arrastre_recurso = -1;
+    util = inicio_util_en(x, y);
+    if (util >= 0) {
+        inicio_utilidades_abrir(util);
+        return;
+    }
     accion = inicio_accion_en(x, y);
     if (accion > 0) {
         inicio_accion_ejecutar(accion);
@@ -1711,6 +1892,21 @@ void inicio_pulsar(int x, int y, int boton) {
         return;
     }
     if (id > 0) {
+        e = inicio_entidad(id);
+        if (e && e->kind == PM_KIND_RECURSO) {
+            /* Fase 8: un recurso del arbol se arrastra hasta un nodo. No se
+             * crea nada al pulsar: solo se recuerda el ID y el puntero. */
+            g_inicio_arrastre_recurso = id;
+            g_inicio_arrastre_x = x;
+            g_inicio_arrastre_y = y;
+            g_inicio_confirmar_borrado = -1;
+            if (g_inicio_editor && id != g_inicio_editor_id) g_inicio_editor = 0;
+            g_inicio_seleccion = id;
+            app_estado("arrastrando recurso #%d hasta un nodo", id);
+            app_invalidar();
+            return;
+        }
+        g_inicio_arrastre_recurso = -1;
         if (g_inicio_editor && id != g_inicio_editor_id) g_inicio_editor = 0;
         g_inicio_seleccion = id;
         app_estado("entidad #%d seleccionada", id);
@@ -1718,8 +1914,40 @@ void inicio_pulsar(int x, int y, int boton) {
     }
 }
 
-void inicio_soltar(int x, int y, int boton) { (void)x; (void)y; (void)boton; }
-void inicio_mover(int x, int y, int botones) { (void)x; (void)y; (void)botones; }
+void inicio_soltar(int x, int y, int boton) {
+    char valor[PM_NOMBRE_MAX];
+    char diagnostico[PM_ERROR_MAX];
+    int recurso, destino;
+    (void)boton;
+    if (g_inicio_arrastre_recurso <= 0) return;
+    recurso = g_inicio_arrastre_recurso;
+    g_inicio_arrastre_recurso = -1;
+    g_inicio_arrastre_x = x;
+    g_inicio_arrastre_y = y;
+    destino = inicio_nodo_en(x, y);
+    if (destino > 0) {
+        _snprintf(valor, sizeof(valor), "%d", recurso);
+        diagnostico[0] = 0;
+        if (inicio_modelo_editar(destino, "recurso", valor, diagnostico,
+                                 sizeof(diagnostico))) {
+            g_inicio_seleccion = destino;
+            app_estado("recurso #%d asignado al nodo #%d", recurso, destino);
+        } else {
+            app_estado("no se pudo asignar: %s", diagnostico);
+        }
+    } else {
+        app_estado("arrastre del recurso #%d cancelado", recurso);
+    }
+    app_invalidar();
+}
+
+void inicio_mover(int x, int y, int botones) {
+    (void)botones;
+    if (g_inicio_arrastre_recurso <= 0) return;
+    g_inicio_arrastre_x = x;
+    g_inicio_arrastre_y = y;
+    app_invalidar();
+}
 
 void inicio_rueda(int x, int y, int delta, int ctrl) {
     Zona p = inicio_arbol();
@@ -1863,7 +2091,7 @@ void inicio_caracter(int ch) {
 void inicio_vista_volcar(const char *ruta) {
     Inicio *in = inicio_servicio();
     FILE *f;
-    int i, escenas = 0, nodos = 0, scripts = 0, asociaciones = 0;
+    int i, escenas = 0, nodos = 0, scripts = 0, asociaciones = 0, recursos = 0;
     const EntidadModelo *e;
     if (!ruta || !ruta[0]) return;
     f = fopen(ruta, "w");
@@ -1875,6 +2103,7 @@ void inicio_vista_volcar(const char *ruta) {
             if (e->kind == PM_KIND_NODO) nodos++;
             if (e->kind == PM_KIND_SCRIPT) scripts++;
             if (e->kind == PM_KIND_BINDING) asociaciones++;
+            if (e->kind == PM_KIND_RECURSO) recursos++;
         }
     }
     fprintf(f, "inicio_vista=1\n");
@@ -1891,12 +2120,17 @@ void inicio_vista_volcar(const char *ruta) {
             g_inicio_asociar_origen, g_inicio_asociar_destino,
             g_inicio_eventos[g_inicio_evento_indice],
             g_inicio_error_linea, g_inicio_codigo_error);
-    fprintf(f, "inicio_entidades=%d escenas=%d nodos=%d scripts=%d asociaciones=%d\n",
+    fprintf(f, "inicio_entidades=%d escenas=%d nodos=%d scripts=%d asociaciones=%d recursos=%d\n",
             g_inicio_modelo ? g_inicio_modelo->num_entidades : 0,
-            escenas, nodos, scripts, asociaciones);
+            escenas, nodos, scripts, asociaciones, recursos);
+    fprintf(f, "inicio_utilidad=%s arrastre=%d confirmar_borrado=%d raton=%d,%d\n",
+            g_inicio_utilidad_ultima, g_inicio_arrastre_recurso,
+            g_inicio_confirmar_borrado, g.raton_x, g.raton_y);
     if (g_inicio_modelo) {
         e = inicio_entidad(g_inicio_seleccion);
         if (e) fprintf(f, "inicio_seleccion=%s #%d\n", pm_kind_nombre(e->kind), e->id);
+        if (e) fprintf(f, "inicio_referencias_entrantes=%d\n",
+                       pm_referencias_entrantes(g_inicio_modelo, e->id));
         if (e && e->kind == PM_KIND_SCRIPT)
             fprintf(f, "inicio_script=%d ruta=%s\n", e->id, inicio_prop(e, "ruta"));
         if (e && e->kind == PM_KIND_BINDING)
@@ -1906,9 +2140,13 @@ void inicio_vista_volcar(const char *ruta) {
         for (i = 0; i < g_inicio_modelo->num_entidades; i++) {
             e = &g_inicio_modelo->entidades[i];
             if (e->kind == PM_KIND_NODO)
-                fprintf(f, "inicio_nodo=%d escena=%d padre=%d nombre=%s\n",
+                fprintf(f, "inicio_nodo=%d escena=%d padre=%d nombre=%s recurso=%d\n",
                         e->id, inicio_prop_int(e, "escena", inicio_ref(e, "escena")),
-                        inicio_nodo_padre(e), e->nombre);
+                        inicio_nodo_padre(e), e->nombre, inicio_ref(e, "recurso"));
+            if (e->kind == PM_KIND_RECURSO)
+                fprintf(f, "inicio_registro=%d tipo=%s ruta=%s nombre=%s\n",
+                        e->id, inicio_prop(e, "tipo"), inicio_prop(e, "ruta"),
+                        e->nombre);
         }
     }
     fclose(f);

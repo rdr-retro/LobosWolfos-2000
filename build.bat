@@ -85,7 +85,7 @@ echo Listo: "%SALIDA%"
 exit /b 0
 
 rem ------------------------------------------------------------------
-rem  Modo pruebas: build.bat prueba [conformidad^|logic3^|vm^|bios^|entidades^|eventos^|colisiones^|render^|estudio^|bloques^|compilador^|depurador^|datos^|productividad^|entrada^|hud^|audio^|save^|escenas^|runtime^|perfil^|plantillas^|regresion^|actualizar]
+rem  Modo pruebas: build.bat prueba [conformidad^|logic3^|vm^|bios^|entidades^|eventos^|colisiones^|render^|estudio^|bloques^|compilador^|depurador^|datos^|productividad^|entrada^|hud^|audio^|save^|escenas^|runtime^|utilidades^|perfil^|plantillas^|regresion^|actualizar]
 rem  Compila el editor con la configuracion normal y pasa las suites.
 rem ------------------------------------------------------------------
 :pruebas
@@ -115,6 +115,7 @@ if /i "%~2"=="audio" goto pruebas_audio
 if /i "%~2"=="save" goto pruebas_save
 if /i "%~2"=="escenas" goto pruebas_escenas
 if /i "%~2"=="runtime" goto pruebas_runtime
+if /i "%~2"=="utilidades" goto pruebas_utilidades
 if /i "%~2"=="perfil" goto pruebas_perfil
 if /i "%~2"=="plantillas" goto pruebas_plantillas
 if /i "%~2"=="exportacion" goto pruebas_exportacion
@@ -199,6 +200,10 @@ if errorlevel 1 exit /b 1
 echo.
 echo === Runtime jerarquico compartido (fase 7) ===
 %PS% "%AQUI%pruebas\runtime_jerarquico.ps1"
+if errorlevel 1 exit /b 1
+echo.
+echo === Utilidades y recursos conectados (fase 8) ===
+%PS% "%AQUI%pruebas\utilidades.ps1"
 if errorlevel 1 exit /b 1
 echo.
 echo === Perfilador, presupuestos y estres (fase 42) ===
@@ -301,6 +306,10 @@ exit /b %ERRORLEVEL%
 %PS% "%AQUI%pruebas\runtime_jerarquico.ps1"
 exit /b %ERRORLEVEL%
 
+:pruebas_utilidades
+%PS% "%AQUI%pruebas\utilidades.ps1"
+exit /b %ERRORLEVEL%
+
 :pruebas_perfil
 %PS% "%AQUI%pruebas\perfil.ps1"
 exit /b %ERRORLEVEL%
@@ -322,6 +331,7 @@ exit /b %ERRORLEVEL%
 exit /b %ERRORLEVEL%
 
 :pruebas_actualizar
+if /i "%~3"=="utilidades" goto pruebas_utilidades_actualizar
 %PS% "%AQUI%pruebas\ejecutar.ps1" -Actualizar
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\logic3.ps1" -Actualizar
@@ -362,6 +372,8 @@ if errorlevel 1 exit /b 1
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\runtime_jerarquico.ps1" -Actualizar
 if errorlevel 1 exit /b 1
+%PS% "%AQUI%pruebas\utilidades.ps1" -Actualizar
+if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\perfil.ps1" -Actualizar
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\plantillas.ps1" -Actualizar
@@ -371,6 +383,10 @@ if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\programa.ps1" -Actualizar
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\regresion.ps1" -Actualizar
+exit /b %ERRORLEVEL%
+
+:pruebas_utilidades_actualizar
+%PS% "%AQUI%pruebas\utilidades.ps1" -Actualizar
 exit /b %ERRORLEVEL%
 
 :error

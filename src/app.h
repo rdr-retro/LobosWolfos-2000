@@ -1496,6 +1496,9 @@ void titulo_accion(int boton);
 void ui_dibujar(void);
 void inicio_modelo_cargar(ProjectModel *modelo, const char *ruta);
 void inicio_modelo_limpiar(void);
+int  inicio_registrar_recurso(const char *ruta, const char *tipo,
+                              const char *nombre, char *diagnostico,
+                              size_t longitud);
 void inicio_dibujar(void);
 void inicio_pulsar(int x, int y, int boton);
 void inicio_soltar(int x, int y, int boton);

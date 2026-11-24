@@ -503,6 +503,13 @@ int datos_sonido_importar(const char *nombre, const char *ruta) {
     s->bits = bits;
     s->bytes = tam;
     s->valido = 1;
+    {
+        char diagnostico[PM_ERROR_MAX];
+        diagnostico[0] = 0;
+        /* Fase 8: el WAV importado entra en el mismo registro que el resto. */
+        inicio_registrar_recurso(relativo, "wav", NULL, diagnostico,
+                                 sizeof(diagnostico));
+    }
     seccion = 3;
     seleccion = num_sonidos - 1;
     foco = 0;

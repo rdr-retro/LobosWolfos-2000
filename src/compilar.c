@@ -735,6 +735,13 @@ int compilar_guardar_wolfo(const char *ruta, int incluir_logic3) {
                   "Fallo al escribir el proyecto %s.", ruta);
         return 0;
     }
+    {
+        char diagnostico[PM_ERROR_MAX];
+        diagnostico[0] = 0;
+        /* Fase 8: el paquete tambien queda visible en el registro. */
+        inicio_registrar_recurso(ruta, "wolfo", NULL, diagnostico,
+                                 sizeof(diagnostico));
+    }
     return 1;
 }
 

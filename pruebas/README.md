@@ -1,6 +1,6 @@
 # Pruebas de LobosWolfos 2000
 
-Veinticuatro suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
+Veintiséis suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
 (fase 24), la VM resumible y lobo 3 (fase 25), entidades, escenas y ciclo de
 vida (fase 26), eventos, planificador y mensajes (fase 27), variables, listas
 y funciones (fase 28), colisiones, flags y fisica (fase 29), render de
@@ -8,9 +8,10 @@ trajes, animacion, capas y camara (fase 30), la vista Estudio (fase 31), el
 lienzo de bloques (fase 32), el compilador bloques -> lobo (fase 33), el
 depurador y el replay (fase 34), la interfaz del editor (fase 23), datos,
 productividad, entrada, HUD, audio, guardado, escenas, perfil, plantillas y
-exportacion 2.0 (fases 35 a 45), el modelo de programa (fase 46) y su lienzo
-visible (fase 47). Congelan el comportamiento antes de cambiar el runtime en
-las fases siguientes. La suite 23 anade cinco casos propios; no toca los
+exportacion 2.0 (fases 35 a 45), el modelo de programa (fase 46), su lienzo
+visible (fase 47), el runtime jerarquico compartido (fase 7 del plan) y las
+utilidades conectadas al `ProjectModel` (fase 8 del plan). Congelan el
+comportamiento antes de cambiar el runtime en las fases siguientes. La suite 23 anade cinco casos propios; no toca los
 patrones de las 22 anteriores. La suite 24 anade cuatro casos:
 `opciones_nuevo`, `mapa_solo`, `legacy` y `ui_programa`. El ultimo actualiza los
 hashes de `regresion/gestor`, `regresion/ejemplo` y `plantillas/canonico` por
@@ -29,7 +30,7 @@ las pruebas no lo necesitan.
 ## Comandos
 
 ```bat
-build.bat prueba              compila y pasa las 24 suites
+build.bat prueba              compila y pasa las 26 suites
 build.bat prueba conformidad  solo la suite del lenguaje
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
@@ -49,6 +50,8 @@ build.bat prueba hud          solo HUD, texto, UI y dialogos
 build.bat prueba audio        solo sonido y musica simple
 build.bat prueba save         solo guardado y persistencia
 build.bat prueba escenas      solo escenas multiples y camara
+build.bat prueba runtime      solo el runtime jerarquico compartido
+build.bat prueba utilidades   solo utilidades y recursos conectados
 build.bat prueba perfil       solo perfilador y estres
 build.bat prueba plantillas   solo plantillas, ejemplos y tutorial
 build.bat prueba exportacion  solo paquetes, game.exe autonomo y BIOS/QEMU
@@ -56,6 +59,10 @@ build.bat prueba programa     solo el modelo y el lienzo de programa
 build.bat prueba regresion    solo la regresion del editor
 build.bat prueba actualizar   reescribe los patrones con el estado actual
 ```
+
+`build.bat prueba actualizar utilidades` reescribe solo los patrones de la
+fase 8. No hace falta ejecutar la actualizacion global: las demas suites
+conservan sus patrones y solo se revisa el diff de `pruebas\utilidades`.
 
 Tambien se pueden llamar por separado:
 
@@ -75,6 +82,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\compilador.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\depurador.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\exportacion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\programa.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\runtime_jerarquico.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\utilidades.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\regresion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\linea_base.ps1
 ```
@@ -166,6 +175,44 @@ son `ui_programa.logic3`, `ui_programa.volcar`, `ui_programa.volcar-programa`,
 `x,y=RRGGBB` de paleta, tarjetas, lienzo vacio, seleccion, insignia roja,
 puertos de entrada y salida, enlace y conmutador de la barra. Todos los
 patrones viven en `pruebas\programa\esperado`.
+
+## Runtime jerarquico (`runtime_jerarquico.ps1`)
+
+Dos casos comparan la vista previa del editor con `game.exe` sobre el mismo
+`LOGIC3`: `jerarquia_inicial` declara un hijo antes que su padre y comprueba
+que se instancia por niveles; `dos_escenas` ejecuta `escena_salir`, vacia la
+escena, entra en otra y cambia el fondo. El editor usa `--runtime-jerarquico`
+con `--captura-juego-volcar` y `--captura-juego-traza`; el motor usa
+`--volcar-runtime`, `--traza-runtime` y `--escenas`/`--eventos`. Cada caso
+congela `*.volcado`, una traza cuando procede y `*.bmp.sha256`, y además
+comprueba que los dos ejecutables producen exactamente el mismo texto y el
+mismo BMP. Los patrones viven en `pruebas\runtime_jerarquico\esperado`.
+
+## Utilidades y recursos (`utilidades.ps1`)
+
+Cuatro casos sobre `pruebas\modelo\escena_scripts.log`:
+
+- `utilidades_panel` captura el árbol de Inicio y pulsa `40,650`, `120,650` y
+  `200,650` para abrir `PINTAR`, `TILES` y `MAPAS`. Congela
+  `utilidades_panel.txt`, `utilidades_panel.pixeles` y los tres
+  `utilidades_*.txt`; las cinco sondas de píxel fijan el fondo de los botones,
+  la etiqueta gris y el borde del lienzo.
+- `registro_recursos` registra dos veces `tiles/nuevo.png|png|...` con
+  `--registrar-recurso`. El volcado debe reuse la entidad `16`, conservar dos
+  recursos en total y mostrar el último nombre `Renombrado`.
+- `arrastrar_recurso` registra `tiles/nuevo.png|png|Nuevo` y ejecuta
+  `--inicio-arrastrar "80,213;450,200"`. El nodo `Player` queda con
+  `recurso=16` y la selección pasa al nodo, sin crear actor, jugador ni
+  movimiento.
+- `borrar_con_referencias` pulsa una vez `BORRAR` sobre un recurso con una
+  referencia entrante y comprueba `confirmar_borrado=1` en `borrar_aviso.txt`;
+  un segundo clic borra la entidad y deja `confirmar_borrado=-1` en
+  `borrar_borrado.txt`.
+
+`--volcar-inicio` amplía sus volcados con `inicio_registro=`,
+`inicio_utilidad=`, `inicio_referencias_entrantes=` y `recurso=`. Los patrones
+viven en `pruebas\utilidades\esperado` y se regeneran solo con
+`build.bat prueba actualizar utilidades`.
 
 ## Conformidad del lenguaje (`ejecutar.ps1`)
 

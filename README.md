@@ -144,7 +144,7 @@ También se puede compilar desde PowerShell:
 
 ## Pruebas
 
-`build.bat prueba` compila el editor y pasa las 24 suites:
+`build.bat prueba` compila el editor y pasa las 26 suites:
 
 ```bat
 build.bat prueba              todas las suites, en orden
@@ -167,6 +167,8 @@ build.bat prueba hud          solo HUD, texto, UI y dialogos
 build.bat prueba audio        solo sonido y musica simple
 build.bat prueba save         solo guardado, records y persistencia
 build.bat prueba escenas      solo escenas multiples, camara y efectos
+build.bat prueba runtime      solo el runtime jerarquico compartido
+build.bat prueba utilidades   solo utilidades y recursos conectados
 build.bat prueba perfil       solo perfilador, presupuestos y estres
 build.bat prueba plantillas   solo plantillas, ejemplos y tutorial
 build.bat prueba exportacion  solo paquetes, game.exe autonomo y BIOS/QEMU
@@ -181,6 +183,23 @@ guardan imágenes en el repositorio. El caso `ui_programa` usa tres flags de
 prueba propios: `--programa` entra en la capa nueva, `--arrastre-programa`
 simula los gestos de paleta y enlace, y `--volcar-programa` describe las
 piezas sin alterar los volcados antiguos.
+
+El runtime jerarquico comparte `runtime_jerarquico.ps1` con dos casos:
+`--runtime-jerarquico` instancia el árbol por niveles y `--volcar-runtime`
+congela la jerarquía; `--captura-juego-traza` y `--captura-juego-volcar`
+comprueban que la vista previa y `game.exe` producen lo mismo.
+
+La fase 8 del plan añade el panel `UTILIDADES` al pie del árbol de Inicio, con
+`PINTAR`, `TILES` y `MAPAS`, sin desplazar los índices de menú. Cada guardado de
+PNG, BMP, tile, mapa `.mav`, WAV o paquete `.wolfo` actualiza el mismo registro
+de `ProjectModel`: se reutiliza la entidad de la ruta y se corrigen su tipo y
+nombre, sin copias invisibles. Para reproducirlo sin ventanas se usan
+`--registrar-recurso "ruta|tipo|nombre"` (repetible) y
+`--inicio-arrastrar "x1,y1;x2,y2"`: el gesto pulsar, mover y soltar un recurso
+sobre un nodo escribe su referencia sin crear actor, jugador ni movimiento.
+`--volcar-inicio` añade `inicio_registro=`, `inicio_utilidad=`,
+`inicio_referencias_entrantes=` y el campo `recurso=` de cada nodo. Borrar una
+entidad con referencias entrantes exige pulsar `BORRAR` dos veces.
 
 ## Motor egine (`motor/game.exe`)
 
@@ -1117,6 +1136,8 @@ procesado en `src\nucleo.c`.
 - `MANUAL_BLOQUES.md` — paleta, formas, atajos y los 27 bloques del lienzo.
 - `REFERENCIA_LENGUAJE.md` — gramatica lobo, tipos, built-ins y limites.
 - `pruebas/exportacion/esperado/` — patrones propios de la suite 23.
+- `pruebas/utilidades/esperado/` — patrones del panel, el registro de
+  recursos, el arrastre al árbol de Inicio y el aviso de borrado.
 
 ## Licencia
 

@@ -101,6 +101,16 @@ void pm_ui(EntidadModelo *e, int x, int y, int ancho, int alto, int grupo,
            unsigned int color, int plegado);
 int pm_conectar(ProjectModel *m, int origen, const char *puerto_origen,
                 int destino, const char *puerto_destino, int linea);
+/* Registro de recursos compartido por Pintar, Tiles, Mapas, Audio y paquetes.
+ * Si ya existe un recurso con la misma ruta, actualiza su tipo y nombre y
+ * devuelve su ID; si no, anade una entidad PM_KIND_RECURSO. No toca archivos
+ * ni cambia el formato de ningun .log. */
+int pm_registrar_recurso(ProjectModel *m, const char *ruta, const char *tipo,
+                         const char *nombre);
+/* Numero de entidades que referencian a `id`. Sirve para avisar antes de
+ * borrar una pieza usada por el arbol o por una asociacion. */
+int pm_referencias_entrantes(const ProjectModel *m, int id);
+
 /* Operaciones de la vista Inicio sobre el mismo grafo. Borrar quita la
  * entidad y las conexiones que la referencian; los hijos suben un nivel.
  * Reparentar usa la referencia "padre" y rechaza ciclos. Los IDs no se

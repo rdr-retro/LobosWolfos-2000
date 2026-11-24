@@ -757,6 +757,12 @@ Objetivo: ejecutar el mismo árbol que se edita.
 Criterio de salida: el juego carga una escena, ejecuta scripts, cambia a otra y
 conserva la misma jerarquía en preview y ejecutable.
 
+Estado: completada. Preview y `game.exe` comparten la instanciación del árbol,
+las transformaciones globales y la cola de escenas. La suite
+`runtime_jerarquico.ps1` congela la traza, el volcado y el BMP de dos escenas,
+con `jerarquia_inicial` y `dos_escenas`, y comprueba que ambos ejecutables
+producen exactamente el mismo resultado.
+
 ### Fase 8 — Utilidades y recursos conectados
 
 Objetivo: separar herramientas auxiliares sin aislarlas del proyecto.
@@ -769,6 +775,19 @@ Objetivo: separar herramientas auxiliares sin aislarlas del proyecto.
 
 Criterio de salida: todas las utilidades alimentan el mismo proyecto y no crean
 copias invisibles de recursos.
+
+Estado: completada. El árbol de Inicio lleva un panel `UTILIDADES` con
+`PINTAR`, `TILES` y `MAPAS`; abre cada herramienta sin desplazar los índices
+`ARCHIVO=1`, `MODO=2` y `AYUDA=9`. `ProjectModel` reutiliza la entidad de un
+recurso por su ruta y `inicio_registrar_recurso()` la conecta con el proyecto
+abierto al guardar PNG, BMP, tiles, `.mav`, WAV o `.wolfo`. Un clic sobre un
+recurso del árbol y un arrastre hasta un nodo escribe la referencia `recurso`
+sin crear personaje, jugador ni movimiento. El inspector muestra las
+referencias entrantes y el primer `BORRAR` avisa cuando existen: solo se
+confirma con un segundo clic. La suite `utilidades.ps1` congela cuatro casos
+(`utilidades_panel`, `registro_recursos`, `arrastrar_recurso` y
+`borrar_con_referencias`), incluidas cinco sondas de píxel del panel. Los
+formatos LOGIC1/LOGIC2/LOGIC3 y sus CRC no cambian.
 
 ### Fase 9 — Migración del gestor visual antiguo
 

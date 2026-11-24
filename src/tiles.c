@@ -138,6 +138,7 @@ static void siguiente_tile(char *dst, int tam) {
 int tiles_guardar_desde(const u32 *pix, int ancho, int alto, const char *nombre) {
     char carpeta[MAX_PATH];
     char ruta[MAX_PATH];
+    char diagnostico[PM_ERROR_MAX];
     int max_scroll;
     (void)nombre;
     if (!pix || ancho < 1 || alto < 1) return 0;
@@ -148,6 +149,10 @@ int tiles_guardar_desde(const u32 *pix, int ancho, int alto, const char *nombre)
         app_estado("No se pudo guardar el tile");
         return 0;
     }
+    /* Fase 8: el tile guardado pasa al registro del proyecto abierto. */
+    diagnostico[0] = 0;
+    inicio_registrar_recurso(ruta, "png", NULL, diagnostico,
+                             sizeof(diagnostico));
     /* Se recarga la carpeta y se reeordena. */
     tiles_cargar();
     max_scroll = g.num_tiles - TILES_SELECTOR_VISIBLES;
@@ -170,6 +175,7 @@ int tiles_guardar_como(const u32 *pix, int ancho, int alto, const char *nombre) 
     char carpeta[MAX_PATH];
     char ruta[MAX_PATH];
     char base[64];
+    char diagnostico[PM_ERROR_MAX];
     int i, j = 0;
     int max_scroll;
     if (!pix || ancho < 1 || alto < 1 || !nombre || !nombre[0]) return 0;
@@ -189,6 +195,9 @@ int tiles_guardar_como(const u32 *pix, int ancho, int alto, const char *nombre) 
         app_estado("No se pudo guardar el tile");
         return 0;
     }
+    diagnostico[0] = 0;
+    inicio_registrar_recurso(ruta, "png", NULL, diagnostico,
+                             sizeof(diagnostico));
     tiles_cargar();
     max_scroll = g.num_tiles - TILES_SELECTOR_VISIBLES;
     if (max_scroll < 0) max_scroll = 0;

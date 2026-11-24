@@ -53,6 +53,11 @@ int inicio_kind(const char *texto);
 
 void inicio_modelo_cargar(ProjectModel *modelo, const char *ruta);
 void inicio_modelo_limpiar(void);
+/* Registro de recursos de las utilidades sobre el modelo abierto en Inicio.
+ * Devuelve el ID del recurso, o 0 si no hay modelo o no cabe. */
+int inicio_registrar_recurso(const char *ruta, const char *tipo,
+                             const char *nombre, char *diagnostico,
+                             size_t longitud);
 int inicio_modelo_editar(int id, const char *campo, const char *valor,
                          char *diagnostico, size_t longitud);
 int inicio_modelo_guardar(const char *ruta, char *diagnostico, size_t longitud);

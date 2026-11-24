@@ -237,6 +237,69 @@ int pm_conectar(ProjectModel *m, int origen, const char *puerto_origen,
     return id;
 }
 
+static void nombre_de_ruta(char *dst, size_t tam, const char *ruta) {
+    const char *nombre = ruta;
+    const char *p;
+    if (!ruta || !ruta[0]) { copiar_seguro(dst, tam, "recurso"); return; }
+    for (p = ruta; *p; p++)
+        if (*p == '/' || *p == '\\') nombre = p + 1;
+    copiar_seguro(dst, tam, nombre);
+}
+
+int pm_registrar_recurso(ProjectModel *m, const char *ruta, const char *tipo,
+                         const char *nombre) {
+    const PropiedadModelo *p;
+    EntidadModelo *e;
+    char nombre_auto[PM_NOMBRE_MAX];
+    int i, id;
+
+    if (!m || !ruta || !ruta[0] || !tipo || !tipo[0]) {
+        error_fijar(m, "el registro necesita ruta y tipo");
+        return 0;
+    }
+    for (i = 0; i < m->num_entidades; i++) {
+        e = &m->entidades[i];
+        if (e->kind != PM_KIND_RECURSO) continue;
+        p = buscar_propiedad(e, "ruta");
+        if (!p || strcmp(p->valor, ruta) != 0) continue;
+        if (!pm_propiedad(e, "tipo", tipo, e->origen.linea)) {
+            error_fijar(m, "no caben mas propiedades en el recurso");
+            return 0;
+        }
+        if (nombre && nombre[0] && !pm_renombrar(e, nombre)) {
+            error_fijar(m, "no se pudo renombrar el recurso");
+            return 0;
+        }
+        return e->id;
+    }
+    if (!nombre || !nombre[0]) {
+        nombre_de_ruta(nombre_auto, sizeof(nombre_auto), ruta);
+        nombre = nombre_auto;
+    }
+    id = pm_anadir(m, PM_KIND_RECURSO, nombre);
+    if (!id) return 0;
+    e = pm_entidad(m, id);
+    pm_origen(e, "utilidades", 0);
+    if (!pm_propiedad(e, "tipo", tipo, 0) ||
+        !pm_propiedad(e, "ruta", ruta, 0)) {
+        error_fijar(m, "no caben mas propiedades en el recurso");
+        return 0;
+    }
+    return id;
+}
+
+int pm_referencias_entrantes(const ProjectModel *m, int id) {
+    const EntidadModelo *e;
+    int i, j, n = 0;
+    if (!m || id <= 0) return 0;
+    for (i = 0; i < m->num_entidades; i++) {
+        e = &m->entidades[i];
+        for (j = 0; j < e->num_referencias; j++)
+            if (e->referencias[j].id == id) n++;
+    }
+    return n;
+}
+
 const char *pm_kind_nombre(int kind) {
     switch (kind) {
     case PM_KIND_PROYECTO:  return "proyecto";
