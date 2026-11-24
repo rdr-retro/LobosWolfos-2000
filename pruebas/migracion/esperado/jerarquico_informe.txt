@@ -1,0 +1,5 @@
+migracion entrada=entrada.log salida=salida.log copia=entrada.log.bak
+origen=LOG2_jerarquico
+origen=LOG2_jerarquico conversion=ya_jerarquico
+resumen escenas=1 nodos=3 scripts=1 asociaciones=1 avisos=0
+resultado abierto en inicio entidades=8

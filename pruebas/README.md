@@ -1,6 +1,6 @@
 # Pruebas de LobosWolfos 2000
 
-Veintiséis suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
+Veintisiete suites: el lenguaje lobo y el motor (fase 23), el proyecto LOGIC3
 (fase 24), la VM resumible y lobo 3 (fase 25), entidades, escenas y ciclo de
 vida (fase 26), eventos, planificador y mensajes (fase 27), variables, listas
 y funciones (fase 28), colisiones, flags y fisica (fase 29), render de
@@ -10,7 +10,8 @@ depurador y el replay (fase 34), la interfaz del editor (fase 23), datos,
 productividad, entrada, HUD, audio, guardado, escenas, perfil, plantillas y
 exportacion 2.0 (fases 35 a 45), el modelo de programa (fase 46), su lienzo
 visible (fase 47), el runtime jerarquico compartido (fase 7 del plan) y las
-utilidades conectadas al `ProjectModel` (fase 8 del plan). Congelan el
+utilidades conectadas al `ProjectModel` (fase 8 del plan) y la migracion del
+gestor visual antiguo (fase 9 del plan). Congelan el
 comportamiento antes de cambiar el runtime en las fases siguientes. La suite 23 anade cinco casos propios; no toca los
 patrones de las 22 anteriores. La suite 24 anade cuatro casos:
 `opciones_nuevo`, `mapa_solo`, `legacy` y `ui_programa`. El ultimo actualiza los
@@ -30,7 +31,7 @@ las pruebas no lo necesitan.
 ## Comandos
 
 ```bat
-build.bat prueba              compila y pasa las 26 suites
+build.bat prueba              compila y pasa las 27 suites
 build.bat prueba conformidad  solo la suite del lenguaje
 build.bat prueba logic3       solo el proyecto LOGIC3
 build.bat prueba vm           solo la VM y lobo 3
@@ -52,6 +53,7 @@ build.bat prueba save         solo guardado y persistencia
 build.bat prueba escenas      solo escenas multiples y camara
 build.bat prueba runtime      solo el runtime jerarquico compartido
 build.bat prueba utilidades   solo utilidades y recursos conectados
+build.bat prueba migracion    solo la migracion del gestor visual
 build.bat prueba perfil       solo perfilador y estres
 build.bat prueba plantillas   solo plantillas, ejemplos y tutorial
 build.bat prueba exportacion  solo paquetes, game.exe autonomo y BIOS/QEMU
@@ -61,8 +63,9 @@ build.bat prueba actualizar   reescribe los patrones con el estado actual
 ```
 
 `build.bat prueba actualizar utilidades` reescribe solo los patrones de la
-fase 8. No hace falta ejecutar la actualizacion global: las demas suites
-conservan sus patrones y solo se revisa el diff de `pruebas\utilidades`.
+fase 8 y `build.bat prueba actualizar migracion` los de la fase 9. No hace
+falta ejecutar la actualizacion global: las demas suites conservan sus
+patrones y solo se revisa el diff de la carpeta correspondiente.
 
 Tambien se pueden llamar por separado:
 
@@ -84,6 +87,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\exportacion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\programa.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\runtime_jerarquico.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\utilidades.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\migracion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\regresion.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File pruebas\linea_base.ps1
 ```
@@ -213,6 +217,26 @@ Cuatro casos sobre `pruebas\modelo\escena_scripts.log`:
 `inicio_utilidad=`, `inicio_referencias_entrantes=` y `recurso=`. Los patrones
 viven en `pruebas\utilidades\esperado` y se regeneran solo con
 `build.bat prueba actualizar utilidades`.
+
+## Migracion del gestor visual (`migracion.ps1`)
+
+Tres casos en `pruebas\migracion` comprueban `--migrar-visual`:
+
+- `montaje_piezas` importa un `.log` con sección `montaje` y piezas
+  `sistema.*`. Congela el `LOG 2` generado, el informe, el volcado de Inicio,
+  el script `accion_5.lobo` y cinco sondas de píxel del panel.
+- `bloques_funciones` importa un LOGIC3 con `sistema.opciones`,
+  `sistema.control`, `sistema.accion` y una función. El informe avisa de que
+  el cuerpo de la función no se migra y el script generado se compila con la
+  VM del motor.
+- `log2_jerarquico` usa la copia por defecto `<entrada>.bak` y comprueba que
+  una entrada ya jerárquica no se convierte dos veces.
+
+Todos comparan la copia de seguridad por SHA-256 con el original, exigen
+`inicio_vista=1` y la ruta del resultado en `inicio_ruta=`, y comprueban el
+número de escenas, nodos, scripts, asociaciones y recursos. Los patrones viven
+en `pruebas\migracion\esperado` y se regeneran solo con
+`build.bat prueba actualizar migracion`.
 
 ## Conformidad del lenguaje (`ejecutar.ps1`)
 

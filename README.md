@@ -60,6 +60,15 @@ para cargar y guardar PNG.
   panel, debajo de la barra de menús, y queda visible desde el primer momento.
   El plan de trabajo se amplía poco a poco en `PLAN_GESTOR_LOGICA.md`, con
   entregas E0 a E12.
+- Migración del gestor visual (fase 9 del plan): `--migrar-visual
+  "entrada|salida|copia|informe"` importa un `.log` con `montaje`, un LOGIC3 con
+  piezas `sistema.*` o un `LOG 2` ya jerárquico y escribe un `LOG 2` con
+  escenas, nodos, scripts y asociaciones. `copia` e `informe` son opcionales; la
+  copia por defecto es `<entrada>.bak` y se conserva byte a byte. Las acciones
+  de movimiento se convierten en scripts con eventos de tecla y las funciones
+  en stubs, con aviso explícito cuando el cuerpo no se migra. El resultado se
+  abre en Inicio y el lector antiguo queda limitado a importar: no cambian el
+  formato ni el CRC de LOGIC1/LOGIC2/LOGIC3.
 - Vista Estudio (fase 31): entrada **MODO > Vista Estudio**, pestana «Estudio»
   y columnas de 200, 740 y 260 px a 1200 px de ancho. El panel izquierdo crea
   borra y selecciona escenas y objetos, el centro muestra el escenario con

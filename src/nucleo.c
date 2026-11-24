@@ -6,6 +6,7 @@
 #include "proyecto_modelo.h"
 #include "modelo_log.h"
 #include "modelo_logic3.h"
+#include "migracion.h"
 #include "inicio.h"
 
 App g;
@@ -3134,6 +3135,41 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int mostrar) {
                 }
                 g.vista = VISTA_MODULOS;
                 g.programa_modo = 1;
+            }
+        }
+        /* Fase 9: importa el gestor visual antiguo y abre el resultado en
+         * Inicio. --migrar-visual "entrada|salida|copia|informe" acepta los
+         * dos ultimos campos opcionales; la copia por defecto es .bak. */
+        {
+            char *mv = arg_valor(cmd, "--migrar-visual");
+            if (mv) {
+                char entrada[MAX_PATH];
+                char salida[MAX_PATH];
+                char copia[MAX_PATH];
+                char informe[MAX_PATH];
+                char diagnostico[PM_ERROR_MAX];
+                const char *p = mv;
+                FILE *df;
+
+                tramo_flag_modelo(entrada, (int)sizeof(entrada), &p);
+                tramo_flag_modelo(salida, (int)sizeof(salida), &p);
+                tramo_flag_modelo(copia, (int)sizeof(copia), &p);
+                tramo_flag_modelo(informe, (int)sizeof(informe), &p);
+                diagnostico[0] = '\0';
+                if (!copia[0]) _snprintf(copia, sizeof(copia), "%s.bak", entrada);
+                if (migrar_visual(entrada, salida, copia, informe,
+                                  diagnostico, sizeof(diagnostico))) {
+                    g.vista = VISTA_INICIO;
+                    g.programa_modo = 0;
+                    app_actualizar_titulo();
+                } else {
+                    df = fopen("migracion.diagnostico.txt", "w");
+                    if (df) {
+                        fputs(diagnostico, df);
+                        fputc('\n', df);
+                        fclose(df);
+                    }
+                }
             }
         }
         {

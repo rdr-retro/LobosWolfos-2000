@@ -1,0 +1,8 @@
+funcion saltar(a1,a2)
+  retornar 0
+fin
+
+# Migrado desde sistema.accion
+si tecla_derecha
+  x = x + 4
+fin

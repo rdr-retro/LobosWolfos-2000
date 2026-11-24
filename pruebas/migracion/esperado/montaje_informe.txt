@@ -1,0 +1,9 @@
+migracion entrada=entrada.log salida=salida.log copia=copia.bak
+origen=LOGIC3_bloques_sistema
+convertida escena=2 nombre=Escenario raiz=3
+convertido recurso=4 nombre=Textura pintada ruta=tiles/jugador.png
+convertido nodo=5 nombre=Jugador tipo=sistema.actor
+convertido nodo=6 nombre=Teclado tipo=sistema.teclado
+convertida accion=5 nombre=Mover script=7 nodo=6 evento=tecla
+resumen escenas=1 nodos=3 recursos=1 scripts=1 asociaciones=1 avisos=0
+resultado abierto en inicio entidades=8

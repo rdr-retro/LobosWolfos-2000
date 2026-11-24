@@ -1,0 +1,13 @@
+LOG 2
+
+proyecto nombre "Escena de prueba" ancho "640" alto "360" fps "60" fondo "#102030"
+
+recurso id 1 tipo "texture" nombre "Jugador" ruta "tiles/jugador.png" origen "pintado"
+script id 2 nombre "Player" ruta "Scripts/player.lobo"
+escena id 10 nombre "Nivel 1" inicial "1"
+
+nodo id 11 escena 10 padre 0 tipo "root" nombre "Nivel 1"
+nodo id 12 escena 10 padre 11 tipo "actor" nombre "Player" x "80" y "80" recurso 1
+nodo id 13 escena 10 padre 12 tipo "camera2d" nombre "Camera2D"
+asociar script 2 nodo 12 evento "fotograma"
+FIN

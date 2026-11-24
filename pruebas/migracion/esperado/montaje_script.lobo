@@ -1,0 +1,4 @@
+# Migrado desde sistema.accion.movimiento
+si tecla_derecha
+  x = x + 4
+fin

@@ -29,6 +29,7 @@ visual antiguo hasta que la migración y las pruebas correspondientes pasen.
 - [x] Verificar el flujo completo con `inicio_editar`: clic, teclado, guardado, LOGIC3 y runtime.
 - [x] Añadir comandos de creación, borrado y reparentado desde Inicio.
 - [x] Añadir transacciones de deshacer/rehacer para cambios del inspector.
+- [x] Migrar piezas `sistema.*`, acciones y funciones a escenas, nodos, scripts y asociaciones abiertas en Inicio, con copia de seguridad, informe de avisos y lector antiguo limitado a importar.
 - [ ] Retirada gradual de la UI visual antigua.
 
 ---
@@ -803,6 +804,17 @@ Objetivo: retirar programación visual sin romper proyectos existentes.
 
 Criterio de salida: los ejemplos actuales se abren como escenas y scripts y su
 comportamiento coincide con el original dentro de lo soportado.
+
+Estado: completada. La capa nueva `src/migracion.c` importa `.log` con
+`montaje`, LOGIC3 jerárquico y LOG 2 ya jerárquico sin tocar lectores ni
+escritores de LOGIC1/LOGIC2/LOGIC3. `--migrar-visual
+"entrada|salida|copia|informe"` conserva el original, escribe la copia por
+defecto `<entrada>.bak`, convierte escenas, recursos, nodos, acciones y
+funciones a un `LOG 2` jerárquico y abre el resultado en Inicio. Las acciones
+de movimiento generan scripts con eventos de tecla; las funciones se escriben
+como stubs y el informe avisa cuando el cuerpo original no se migra. La suite
+`migracion.ps1` congela tres casos, verifica la copia byte a byte, compila los
+scripts con la VM y comprueba las sondas de píxel del panel de Inicio.
 
 ### Fase 10 — Retirada de la UI visual
 

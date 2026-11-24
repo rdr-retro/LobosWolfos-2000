@@ -1,0 +1,13 @@
+LOG 2
+
+proyecto nombre "Juego IA" ancho "640" alto "360" capas "1" fps "60" modo "4" color "1E5A2E" migrado "1"
+
+recurso id 4 tipo "sistema.recurso.imagen" nombre "Textura pintada" ruta "tiles/jugador.png"
+script id 7 nombre "Mover" ruta "Scripts/accion_5.lobo"
+escena id 2 nombre "Escenario" inicial "1" ancho "640" alto "360" color ""
+
+nodo id 3 escena 2 padre 0 tipo "root" nombre "Raiz" visible "0" w "640" h "480"
+nodo id 5 escena 2 padre 3 tipo "sistema.actor" nombre "Jugador" x "0" y "0" entrada "Jugador" dispositivo "lobo" recurso 4
+nodo id 6 escena 2 padre 5 tipo "sistema.teclado" nombre "Teclado" x "0" y "0" entrada "1" dispositivo "teclado"
+asociar script 7 nodo 6 evento "tecla"
+FIN

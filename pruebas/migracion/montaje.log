@@ -1,0 +1,17 @@
+LOGIC3
+version 3
+proyecto "Juego IA" 640 360 1 60 4 001E5A2E
+carpetas "tiles" "maps" "trajes" "sonidos"
+
+montaje
+  nodo 1 tipo "sistema.escena" nombre "Escenario" x 160 y 80 enlace 0 valor "" valor2 ""
+  nodo 2 tipo "sistema.actor" nombre "Jugador" x 360 y 80 enlace 3 valor "Jugador" valor2 "lobo"
+  nodo 3 tipo "sistema.teclado" nombre "Teclado" x 360 y 190 enlace 4 valor "1" valor2 "teclado"
+  nodo 4 tipo "sistema.accion.movimiento" nombre "Mover" x 360 y 300 enlace 0 valor "derecha" valor2 "mantener"
+  nodo 5 tipo "sistema.recurso.imagen" nombre "Textura pintada" x 540 y 80 enlace 2 valor "jugador.png" valor2 "tiles"
+  conecta 2 -> 3
+  conecta 3 -> 4
+  conecta 5 -> 2
+fin_montaje
+
+FIN

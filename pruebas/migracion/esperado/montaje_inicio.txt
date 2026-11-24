@@ -1,0 +1,13 @@
+inicio_vista=1
+inicio_ruta=salida.log
+inicio_sel=-1
+inicio_undo=0 redo=0 ultimo=cargado reparentar=-1
+inicio_filas=6
+inicio_editor=0 id=0 cursor=0 modificado=0 scroll=1
+inicio_asociar=-1,-1 evento=fotograma codigo_error=0:
+inicio_entidades=8 escenas=1 nodos=3 scripts=1 asociaciones=1 recursos=1
+inicio_utilidad= arrastre=-1 confirmar_borrado=-1 raton=0,0
+inicio_registro=4 tipo=sistema.recurso.imagen ruta=tiles/jugador.png nombre=Textura pintada
+inicio_nodo=3 escena=2 padre=0 nombre=Raiz recurso=0
+inicio_nodo=5 escena=2 padre=3 nombre=Jugador recurso=4
+inicio_nodo=6 escena=2 padre=5 nombre=Teclado recurso=0

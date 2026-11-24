@@ -1,0 +1,24 @@
+LOGIC3
+version 3
+proyecto "Programa migrado" 320 200 1 60 3 00112233
+carpetas "tiles" "maps" "trajes" "sonidos"
+escena 1 "Nivel" "" 320 200 00112233
+objeto 10 "Heroe" escena 1 x 16 y 16 w 16 h 16 visible 1 capa 0
+  traje 0 "heroe.png" 0 0 0 0
+funcion 7 saltar 2 0
+bloque 1 evento 1 padre 0 orden 0 tipo "sistema.opciones"
+  campo "programa" "1"
+  campo "jugador_implicito" "0"
+  campo "auto_compilar" "1"
+bloque 20 evento 1 padre 0 orden 1 tipo "sistema.control"
+  campo "jugador" "1"
+  campo "actor" "10"
+  campo "dispositivo" "teclado"
+  campo "esquema" "plataformas"
+  campo "activo" "1"
+bloque 21 evento 1 padre 20 orden 0 tipo "sistema.accion"
+  campo "entrada" "derecha"
+  campo "flanco" "1"
+  campo "funcion" "saltar"
+  campo "argumentos" "3,4"
+FIN

@@ -62,14 +62,14 @@ echo Compilando recursos...
 if errorlevel 1 goto error_pop
 
 echo Compilando C...
-for %%F in (src\nucleo.c src\fuente.c src\documento.c src\imagen.c src\pintura.c src\texto.c src\ui.c src\tiles.c src\mapa.c src\tiles_modo.c src\pestanas.c src\app.c src\ajustes.c src\compilar.c src\juego_ventana.c src\ejemplo.c src\plantillas.c src\logic3.c src\estudio.c src\estudio_ui.c src\datos.c src\sonido.c src\productividad.c src\bloques.c src\bloques_ui.c src\compilador_bloques.c src\sistema.c src\programa.c src\proyecto_modelo.c src\modelo_log.c src\modelo_logic3.c src\inicio.c motor\lobo.c motor\entrada.c motor\activo.c motor\colisiones.c motor\entidades.c motor\hud.c motor\audio.c motor\save.c motor\logic3_motor.c motor\runtime_comun.c motor\eventos.c motor\depurador.c motor\programa_runtime.c motor\nucleo32.s) do (
+for %%F in (src\nucleo.c src\fuente.c src\documento.c src\imagen.c src\pintura.c src\texto.c src\ui.c src\tiles.c src\mapa.c src\tiles_modo.c src\pestanas.c src\app.c src\ajustes.c src\compilar.c src\juego_ventana.c src\ejemplo.c src\plantillas.c src\logic3.c src\estudio.c src\estudio_ui.c src\datos.c src\sonido.c src\productividad.c src\bloques.c src\bloques_ui.c src\compilador_bloques.c src\sistema.c src\programa.c src\proyecto_modelo.c src\modelo_log.c src\modelo_logic3.c src\migracion.c src\inicio.c motor\lobo.c motor\entrada.c motor\activo.c motor\colisiones.c motor\entidades.c motor\hud.c motor\audio.c motor\save.c motor\logic3_motor.c motor\runtime_comun.c motor\eventos.c motor\depurador.c motor\programa_runtime.c motor\nucleo32.s) do (
     echo   %%~nxF
     "%GCC%" %CFLAGS% -c "%%~F" -o "obj\%%~nF.o"
     if errorlevel 1 goto error_pop
 )
 
 echo Enlazando...
-"%GCC%" -m32 -o "LobosWolfos2000.exe" obj\nucleo.o obj\fuente.o obj\documento.o obj\imagen.o obj\pintura.o obj\texto.o obj\ui.o obj\tiles.o obj\mapa.o obj\tiles_modo.o obj\pestanas.o obj\app.o obj\ajustes.o obj\compilar.o obj\juego_ventana.o obj\ejemplo.o obj\plantillas.o obj\logic3.o obj\estudio.o obj\estudio_ui.o obj\datos.o obj\sonido.o obj\productividad.o obj\bloques.o obj\bloques_ui.o obj\compilador_bloques.o obj\sistema.o obj\programa.o obj\proyecto_modelo.o obj\modelo_log.o obj\modelo_logic3.o obj\inicio.o obj\lobo.o obj\entrada.o obj\activo.o obj\colisiones.o obj\entidades.o obj\hud.o obj\audio.o obj\logic3_motor.o obj\runtime_comun.o obj\eventos.o obj\depurador.o obj\programa_runtime.o obj\nucleo32.o obj\recurso.o %LIBS% -mwindows -static-libgcc
+"%GCC%" -m32 -o "LobosWolfos2000.exe" obj\nucleo.o obj\fuente.o obj\documento.o obj\imagen.o obj\pintura.o obj\texto.o obj\ui.o obj\tiles.o obj\mapa.o obj\tiles_modo.o obj\pestanas.o obj\app.o obj\ajustes.o obj\compilar.o obj\juego_ventana.o obj\ejemplo.o obj\plantillas.o obj\logic3.o obj\estudio.o obj\estudio_ui.o obj\datos.o obj\sonido.o obj\productividad.o obj\bloques.o obj\bloques_ui.o obj\compilador_bloques.o obj\sistema.o obj\programa.o obj\proyecto_modelo.o obj\modelo_log.o obj\modelo_logic3.o obj\migracion.o obj\inicio.o obj\lobo.o obj\entrada.o obj\activo.o obj\colisiones.o obj\entidades.o obj\hud.o obj\audio.o obj\logic3_motor.o obj\runtime_comun.o obj\eventos.o obj\depurador.o obj\programa_runtime.o obj\nucleo32.o obj\recurso.o %LIBS% -mwindows -static-libgcc
 if errorlevel 1 goto error_pop
 popd
 goto exito
@@ -85,7 +85,7 @@ echo Listo: "%SALIDA%"
 exit /b 0
 
 rem ------------------------------------------------------------------
-rem  Modo pruebas: build.bat prueba [conformidad^|logic3^|vm^|bios^|entidades^|eventos^|colisiones^|render^|estudio^|bloques^|compilador^|depurador^|datos^|productividad^|entrada^|hud^|audio^|save^|escenas^|runtime^|utilidades^|perfil^|plantillas^|regresion^|actualizar]
+rem  Modo pruebas: build.bat prueba [conformidad^|logic3^|vm^|bios^|entidades^|eventos^|colisiones^|render^|estudio^|bloques^|compilador^|depurador^|datos^|productividad^|entrada^|hud^|audio^|save^|escenas^|runtime^|utilidades^|migracion^|perfil^|plantillas^|regresion^|actualizar]
 rem  Compila el editor con la configuracion normal y pasa las suites.
 rem ------------------------------------------------------------------
 :pruebas
@@ -116,6 +116,7 @@ if /i "%~2"=="save" goto pruebas_save
 if /i "%~2"=="escenas" goto pruebas_escenas
 if /i "%~2"=="runtime" goto pruebas_runtime
 if /i "%~2"=="utilidades" goto pruebas_utilidades
+if /i "%~2"=="migracion" goto pruebas_migracion
 if /i "%~2"=="perfil" goto pruebas_perfil
 if /i "%~2"=="plantillas" goto pruebas_plantillas
 if /i "%~2"=="exportacion" goto pruebas_exportacion
@@ -204,6 +205,10 @@ if errorlevel 1 exit /b 1
 echo.
 echo === Utilidades y recursos conectados (fase 8) ===
 %PS% "%AQUI%pruebas\utilidades.ps1"
+if errorlevel 1 exit /b 1
+echo.
+echo === Migracion del gestor visual (fase 9) ===
+%PS% "%AQUI%pruebas\migracion.ps1"
 if errorlevel 1 exit /b 1
 echo.
 echo === Perfilador, presupuestos y estres (fase 42) ===
@@ -310,6 +315,10 @@ exit /b %ERRORLEVEL%
 %PS% "%AQUI%pruebas\utilidades.ps1"
 exit /b %ERRORLEVEL%
 
+:pruebas_migracion
+%PS% "%AQUI%pruebas\migracion.ps1"
+exit /b %ERRORLEVEL%
+
 :pruebas_perfil
 %PS% "%AQUI%pruebas\perfil.ps1"
 exit /b %ERRORLEVEL%
@@ -332,6 +341,7 @@ exit /b %ERRORLEVEL%
 
 :pruebas_actualizar
 if /i "%~3"=="utilidades" goto pruebas_utilidades_actualizar
+if /i "%~3"=="migracion" goto pruebas_migracion_actualizar
 %PS% "%AQUI%pruebas\ejecutar.ps1" -Actualizar
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\logic3.ps1" -Actualizar
@@ -374,6 +384,8 @@ if errorlevel 1 exit /b 1
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\utilidades.ps1" -Actualizar
 if errorlevel 1 exit /b 1
+%PS% "%AQUI%pruebas\migracion.ps1" -Actualizar
+if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\perfil.ps1" -Actualizar
 if errorlevel 1 exit /b 1
 %PS% "%AQUI%pruebas\plantillas.ps1" -Actualizar
@@ -387,6 +399,10 @@ exit /b %ERRORLEVEL%
 
 :pruebas_utilidades_actualizar
 %PS% "%AQUI%pruebas\utilidades.ps1" -Actualizar
+exit /b %ERRORLEVEL%
+
+:pruebas_migracion_actualizar
+%PS% "%AQUI%pruebas\migracion.ps1" -Actualizar
 exit /b %ERRORLEVEL%
 
 :error

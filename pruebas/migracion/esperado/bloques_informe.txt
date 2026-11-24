@@ -1,0 +1,11 @@
+migracion entrada=entrada.logic3 salida=salida.log copia=copia.bak
+aviso: funcion saltar: cuerpo original no migrado
+importada pieza=sistema.opciones sin equivalente directo
+origen=LOGIC3_bloques_sistema
+convertida escena=2 nombre=Nivel raiz=3
+convertido recurso=4 nombre=Traje_1 ruta=trajes/heroe.png
+convertido nodo=5 nombre=Heroe tipo=actor
+convertido nodo=6 nombre=Control_1 tipo=sistema.control
+convertida accion=21 nombre=Accion_21 script=7 nodo=6 evento=tecla_pulsar
+resumen escenas=1 nodos=3 recursos=1 scripts=1 asociaciones=1 avisos=1
+resultado abierto en inicio entidades=8
